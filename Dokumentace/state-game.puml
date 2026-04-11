@@ -1,0 +1,17 @@
+@startuml state-game
+title Stavy aplikace a hry (CP2)
+
+[*] --> MENU
+
+MENU --> SETUP : nová hra
+MENU --> CONNECTING : síť\n(opce)
+SETUP --> PLAY : potvrzení rozestavení
+PLAY --> PAUSED : pauza
+PAUSED --> PLAY : pokračovat
+PLAY --> GAME_OVER : konec partie
+GAME_OVER --> MENU : hlavní menu
+
+CONNECTING --> PLAY : připojeno\n(opce)
+CONNECTING --> MENU : zrušit\n(opce)
+
+@enduml

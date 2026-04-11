@@ -1,0 +1,40 @@
+@startuml class-model
+skinparam classAttributeIconSize 0
+title Doménový model (kostra)
+
+interface MoveValidator
+interface RuleEngine
+
+class Game {
+  - state : GameState
+  - board : Board
+  - sideToMove : PlayerSide
+  + applyMove(move : Move) : void
+}
+
+class Board
+class Piece
+class Position
+class Move
+class Step
+
+enum GameState
+enum PlayerSide
+enum PieceType
+
+Game *-- Board
+Game o-- GameState
+Game o-- PlayerSide
+Move *-- Step
+Step o-- Position
+Piece o-- PieceType
+Piece o-- PlayerSide
+Piece o-- Position
+
+MoveValidator ..> Game : validates
+MoveValidator ..> Move
+MoveValidator ..> Step
+RuleEngine ..> Game : applies
+RuleEngine ..> Move
+
+@enduml

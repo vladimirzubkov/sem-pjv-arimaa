@@ -1,0 +1,26 @@
+@startuml class-ui
+skinparam classAttributeIconSize 0
+title JavaFX a MVC (kostra)
+
+class JavafxApp {
+  + start(stage : Stage) : void
+}
+
+class MainController {
+  - gameController : GameController
+}
+
+class GameController {
+  - game : Game
+  + submitHumanMove(move : Move) : void
+}
+
+class Game
+class Move
+
+JavafxApp ..> MainController : creates\n(later)
+MainController o-- GameController
+GameController o-- Game
+GameController ..> Move
+
+@enduml

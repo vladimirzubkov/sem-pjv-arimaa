@@ -1,0 +1,22 @@
+@startuml package-structure
+skinparam packageStyle rectangle
+title Vrstvy balíčků (zjednodušeně)
+
+package cz.cvut.fel.pjv.arimaa {
+  package ui
+  package controller
+  package model
+  package persistence
+  package ai
+  package network
+  package util
+
+  ui ..> controller : uses
+  controller ..> model : uses
+  persistence ..> model : uses
+  ai ..> model : uses
+  network ..> model : optional\n(later)
+  util ..> model : uses
+}
+
+@enduml

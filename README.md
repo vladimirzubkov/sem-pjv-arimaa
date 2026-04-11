@@ -43,13 +43,24 @@ V CP2 jsou těla metod záměrně prázdná nebo vracejí neutrální hodnoty; n
 
 ![Doménový model](Dokumentace/out/class-model.png)
 
+**Doménový model – stručně k metodám (plán):**
+
+- **Game** – drží stav partie a hráče na tahu; `applyMove` zpracuje celý souhrnný tah (1–4 kroky), případně změní fázi hry.
+- **Board** – reprezentace desky 8×8; metody pro čtení/zápis obsazení pole, inicializaci a reset (rozestavění / nová hra).
+- **Piece**, **Position** – vlastnosti figury (typ, strana) a souřadnice pole; přístup pro vykreslení a pravidla.
+- **Move**, **Step** – `Move` je jeden tah hráče jako posloupnost až čtyř `Step`; každý `Step` popíše jeden atomický posun (včetně směrů push/pull až v implementaci).
+- **MoveValidator** – ověří, zda je krok nebo celý tah v aktuálním stavu legální (včetně počtu kroků v tahu).
+- **RuleEngine** – po platném tahu aktualizuje stav (odstranění v pasti, zmrazení, výměna strany, konec hry).
+
+Třídy **GameState**, **PlayerSide**, **PieceType** budou především výčty bez vlastní logiky.
+
 ### Diagram tříd – JavaFX a MVC
 
 ![UI a GameController](Dokumentace/out/class-ui.png)
 
 ### Stavový diagram
 
-Stavy zahrnují režim hry na jednom počítači. Stav **`CONNECTING`** je připraven pro budoucí síťovou hru (připojení na IP:port).
+Stavy zahrnují režim hry na jednom počítači. Na stavovém diagramu značí popisek **(opce)** u přechodů se stavem **`CONNECTING`** volitelné síťové připojení (IP:port).
 
 ![Stavy aplikace](Dokumentace/out/state-game.png)
 
@@ -75,4 +86,4 @@ Po dokončení základní lokální hry je plánována **jednoduchá komunikace 
 
 ## Starší odevzdání
 
-Soubory vize projektu (CP1) zůstávají v kořeni repozitáře (`Vize projektu hra Arimaa.pdf` apod.).
+Soubory vize projektu (CP1) a zadání kurzu jsou v adresáři [`zadani/`](zadani/).

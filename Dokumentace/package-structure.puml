@@ -2,7 +2,7 @@
 skinparam packageStyle rectangle
 title Vrstvy balíčků (zjednodušeně)
 
-package cz.cvut.fel.pjv.arimaa {
+package "cz.cvut.fel.pjv.arimaa" as root {
   package ui
   package controller
   package model

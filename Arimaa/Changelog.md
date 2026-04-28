@@ -6,3 +6,4 @@
 - `BoardConstants` (geometrie desky včetně pastí), `HomeTerritory` (domovské řady Gold / Silver, volitelné zrcadlení ranků).
 - Přípravná fáze v `Game`: `startNewGame()`, rezervy 16 figurek dle oficiálního multisetu, ruční výběr z rezervy, umístění na domovské pole, zrušení výběru, vrácení figury z desky do rezervy; oprava `setPiece(..., null)` na desce (odvázání pozice u figury).
 - Skripty `0_compile.bat`–`3_start.bat` pro Maven v adresáři modulu.
+- JUnit 5: `BoardTest`, `GameTest` (`mvn test`).

@@ -5,7 +5,8 @@ package cz.cvut.fel.pjv.arimaa.model;
  */
 public enum GameState {
     MENU,
-    SETUP,
+    SETUP_GOLD,
+    SETUP_SILVER,
     PLAY,
     PAUSED,
     GAME_OVER

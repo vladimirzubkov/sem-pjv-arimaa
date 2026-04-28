@@ -1,0 +1,1 @@
+mvn test > test.log 2>&1

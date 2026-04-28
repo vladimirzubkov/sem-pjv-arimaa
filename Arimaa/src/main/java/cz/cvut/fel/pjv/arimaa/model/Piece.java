@@ -9,6 +9,15 @@ public class Piece {
     private PlayerSide side;
     private Position position;
 
+    public Piece() {
+    }
+
+    public Piece(PieceType type, PlayerSide side) {
+        this.type = type;
+        this.side = side;
+        this.position = null;
+    }
+
     public PieceType getType() {
         return type;
     }

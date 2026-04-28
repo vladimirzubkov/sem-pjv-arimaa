@@ -16,6 +16,11 @@ public final class BoardConstants {
      * Trap squares as rank/file indices (0-based). Not used in CP2 logic.
      */
     public static Position[] trapSquares() {
-        return new Position[0];
+        return new Position[] {
+            Position.fromAlgebraic("c3"),
+            Position.fromAlgebraic("c6"),
+            Position.fromAlgebraic("f3"),
+            Position.fromAlgebraic("f6")
+        };
     }
 }

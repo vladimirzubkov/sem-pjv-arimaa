@@ -1,0 +1,27 @@
+package cz.cvut.fel.pjv.arimaa.util;
+
+import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
+import cz.cvut.fel.pjv.arimaa.model.Position;
+
+/**
+ * Arimaa setup: each side’s first two ranks in canonical model space (rank {@code '1'} → index {@code 0}).
+ */
+public final class HomeTerritory {
+
+    private HomeTerritory() {
+    }
+
+    /**
+     * @param ranksMirrored if {@code true}, rank index is mirrored before testing Gold/Silver bands
+     */
+    public static boolean contains(PlayerSide side, Position position, boolean ranksMirrored) {
+        int r = position.getRankIndex();
+        if (ranksMirrored) {
+            r = BoardConstants.BOARD_SIZE - 1 - r;
+        }
+        return switch (side) {
+            case GOLD -> r == 0 || r == 1;
+            case SILVER -> r == BoardConstants.BOARD_SIZE - 2 || r == BoardConstants.BOARD_SIZE - 1;
+        };
+    }
+}

@@ -26,6 +26,13 @@ public class Game {
     /** Piece taken from reserve, awaiting {@link #confirmSetupHandPlacement(Position)}. */
     private Piece setupHand;
 
+    /**
+     * @return the piece currently held for setup placement, or {@code null}
+     */
+    public Piece getSetupHand() {
+        return setupHand;
+    }
+
     private record Slot(Position position, PieceType type) {
     }
 

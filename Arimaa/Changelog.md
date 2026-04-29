@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- JavaFX rozhraní pro **rozestavení**: deska 8×8, rezerva s výběrem typu figury, umístění klikem na domovské pole, vrácení figury z desky do rezervy bez figury v ruce.
+- Tlačítka: náhodné doplnění zbytku (`placeRemainingPiecesRandomly`), šachová rozestavení (`applyChessMappedSetup`), dokončení rozestavení (`tryCompleteSetup`), zrušení výběru z ruky, nová hra.
+- `JavafxApp` spouští hru a propojí `Game` → `GameController` → `MainController`; drobná úprava popisu v `ArimaaApp`.
+- Model: `Game.getSetupHand()` pro zobrazení figury čekající na umístění.
+
 ## 0.1.1
 
 - Dokončení rozestavení: `tryCompleteSetup(PlayerSide)` — kontrola prázdné rezervy, přesně 16 vlastních figurek na domácím území, oficiální multiset a obsazení; přechody `SETUP_GOLD` → `SETUP_SILVER` → `PLAY` včetně nastavení `sideToMove`.

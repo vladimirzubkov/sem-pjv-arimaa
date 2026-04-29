@@ -12,9 +12,9 @@ public final class ArimaaApp {
     }
 
     /**
-     * Launches the JavaFX runtime. Game logic is not implemented in CP2.
+     * Launches the JavaFX runtime (rozestavení v UI; tahy ve fázi PLAY v modelu zatím ne).
      *
-     * @param args command-line arguments (unused in skeleton)
+     * @param args command-line arguments (unused)
      */
     public static void main(String[] args) {
         Application.launch(JavafxApp.class, args);

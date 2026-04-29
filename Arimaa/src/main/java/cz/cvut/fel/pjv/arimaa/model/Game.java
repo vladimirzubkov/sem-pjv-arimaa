@@ -275,6 +275,43 @@ public class Game {
     public void applyMove(Move move) {
     }
 
+    /**
+     * Captures full match state for undo/redo (Memento).
+     */
+    public GameMemento createMemento() {
+        return GameMemento.fromGame(this);
+    }
+
+    /**
+     * Restores board, both reserves, piece in hand, and lifecycle fields from a memento (new {@link Piece} instances).
+     */
+    public void restoreMemento(GameMemento m) {
+        Objects.requireNonNull(m, "memento");
+        board.clear();
+        goldReserve.clear();
+        silverReserve.clear();
+        for (GameMemento.CellSnap s : m.goldReserve()) {
+            goldReserve.add(new Piece(s.type(), s.side()));
+        }
+        for (GameMemento.CellSnap s : m.silverReserve()) {
+            silverReserve.add(new Piece(s.type(), s.side()));
+        }
+        GameMemento.CellSnap[][] grid = m.grid();
+        for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
+            for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
+                GameMemento.CellSnap snap = grid[r][f];
+                if (snap != null) {
+                    board.setPiece(Position.of(f, r), new Piece(snap.type(), snap.side()));
+                }
+            }
+        }
+        GameMemento.CellSnap hand = m.setupHand();
+        setupHand = hand == null ? null : new Piece(hand.type(), hand.side());
+        this.state = m.state();
+        this.sideToMove = m.sideToMove();
+        this.ranksMirroredForHomeCheck = m.ranksMirroredForHomeCheck();
+    }
+
     private static List<Slot> goldChessSlots() {
         List<Slot> slots = new ArrayList<>(16);
         PieceType[] back = {

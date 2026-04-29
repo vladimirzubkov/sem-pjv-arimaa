@@ -9,14 +9,23 @@ import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import cz.cvut.fel.pjv.arimaa.util.HomeTerritory;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundFill;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.CornerRadii;
 import javafx.scene.layout.GridPane;
@@ -29,6 +38,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import javafx.scene.shape.StrokeType;
 import javafx.scene.text.Font;
 import javafx.scene.transform.Scale;
 import javafx.stage.Stage;
@@ -68,6 +78,8 @@ public class MainController {
     private Button chessButton;
     private Button doneButton;
     private final Label handLabel = new Label();
+    private MenuItem undoMenuItem;
+    private MenuItem redoMenuItem;
 
     public GameController getGameController() {
         return gameController;
@@ -105,7 +117,11 @@ public class MainController {
         cancelHandButton.setOnAction(e -> {
             Game g = game();
             if (g != null) {
+                boolean changed = g.getSetupHand() != null;
                 g.cancelPendingSetupPlacement();
+                if (changed) {
+                    recordTimeline();
+                }
                 refreshAll();
             }
         });
@@ -120,6 +136,7 @@ public class MainController {
             PlayerSide side = g.getSideToMove();
             if (g.placeRemainingPiecesRandomly(side)) {
                 setStatus("Zbývající figury umístěny náhodně.");
+                recordTimeline();
             } else {
                 setStatus("Náhodné umístění se nepovedlo (musí sedět počet figurek a volných polí).");
             }
@@ -136,6 +153,7 @@ public class MainController {
             PlayerSide side = g.getSideToMove();
             if (g.applyChessMappedSetup(side)) {
                 setStatus("Použita pevná šachová rozestavení.");
+                recordTimeline();
             } else {
                 setStatus("Šachovou rozestavení nelze použít.");
             }
@@ -152,21 +170,11 @@ public class MainController {
             PlayerSide side = g.getSideToMove();
             if (g.tryCompleteSetup(side)) {
                 setStatus("Rozestavení dokončeno.");
+                recordTimeline();
             } else {
                 setStatus("Rozestavení nelze dokončit (rezerva, multiset, 16 figurek na domově…).");
             }
             refreshAll();
-        });
-
-        Button newGameButton = new Button("Nová hra");
-        newGameButton.setMaxWidth(Double.MAX_VALUE);
-        newGameButton.setOnAction(e -> {
-            Game g = game();
-            if (g != null) {
-                g.startNewGame();
-                setStatus("Nová hra — rozestavuje Gold.");
-                refreshAll();
-            }
         });
 
         handLabel.setWrapText(true);
@@ -185,8 +193,7 @@ public class MainController {
                 cancelHandButton,
                 randomButton,
                 chessButton,
-                doneButton,
-                newGameButton);
+                doneButton);
         sidePanel.setPadding(new Insets(12));
         sidePanel.setPrefWidth(260);
         sidePanel.setMaxHeight(Double.MAX_VALUE);
@@ -213,12 +220,50 @@ public class MainController {
         body.setAlignment(Pos.CENTER);
         body.getChildren().addAll(boardHost, scroll);
 
-        Scene scene = new Scene(body, 920, 640);
+        Menu menuHra = new Menu("Hra");
+        MenuItem novaHraItem = new MenuItem("Nová hra");
+        novaHraItem.setAccelerator(new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN));
+        novaHraItem.setOnAction(e -> startNewGameAction());
+        MenuItem ukoncitItem = new MenuItem("Ukončit");
+        ukoncitItem.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.SHORTCUT_DOWN));
+        ukoncitItem.setOnAction(e -> Platform.exit());
+        menuHra.getItems().addAll(novaHraItem, new SeparatorMenuItem(), ukoncitItem);
+
+        Menu menuTah = new Menu("Tah");
+        undoMenuItem = new MenuItem("Zpět");
+        undoMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN));
+        undoMenuItem.setOnAction(e -> {
+            if (gameController != null && gameController.undo()) {
+                setStatus("Zpět — vrácen předchozí stav.");
+                refreshAll();
+            }
+        });
+        redoMenuItem = new MenuItem("Vpřed");
+        redoMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.Y, KeyCombination.SHORTCUT_DOWN));
+        redoMenuItem.setOnAction(e -> {
+            if (gameController != null && gameController.redo()) {
+                setStatus("Vpřed — obnoven stav.");
+                refreshAll();
+            }
+        });
+        menuTah.getItems().addAll(undoMenuItem, redoMenuItem);
+
+        MenuBar menuBar = new MenuBar();
+        menuBar.getMenus().addAll(menuHra, menuTah);
+
+        BorderPane root = new BorderPane();
+        root.setTop(menuBar);
+        root.setCenter(body);
+
+        Scene scene = new Scene(root, 920, 640);
         scene.setFill(Color.rgb(236, 236, 238));
         primaryStage.setTitle("Arimaa – rozestavení");
         primaryStage.setScene(scene);
         primaryStage.show();
 
+        if (gameController != null) {
+            gameController.resetTimeline();
+        }
         refreshAll();
     }
 
@@ -338,7 +383,9 @@ public class MainController {
 
     private StackPane createCell(int fileIndex, int gridRow) {
         Rectangle bg = new Rectangle(CELL, CELL);
+        bg.setStrokeType(StrokeType.INSIDE);
         bg.setStroke(Color.gray(0.35));
+        bg.setStrokeWidth(1);
         int rankIndex = BoardConstants.BOARD_SIZE - 1 - gridRow;
         Position pos = Position.of(fileIndex, rankIndex);
         if (HomeTerritory.contains(PlayerSide.GOLD, pos, false)
@@ -347,8 +394,7 @@ public class MainController {
         } else {
             bg.setFill(gridRow % 2 == fileIndex % 2 ? Color.color(0.93, 0.88, 0.78) : Color.color(0.85, 0.78, 0.65));
         }
-        Game g0 = game();
-        if (g0 != null && g0.getBoard() != null && g0.getBoard().isTrapSquare(pos)) {
+        if (isStaticTrapSquare(pos)) {
             bg.setStroke(Color.DARKRED);
             bg.setStrokeWidth(2);
         }
@@ -378,12 +424,14 @@ public class MainController {
         if (hand != null) {
             if (g.confirmSetupHandPlacement(pos)) {
                 setStatus("Figura umístěna.");
+                recordTimeline();
             } else {
                 setStatus("Sem nelze umístit (domov, kapacita typu nebo obsazené pole).");
             }
         } else {
             if (g.returnPieceFromBoardToReserve(side, pos)) {
                 setStatus("Figura vrácena do rezervy.");
+                recordTimeline();
             } else {
                 setStatus("Vyberte figuru z rezervy nebo klikněte na svou figuru na domovském poli.");
             }
@@ -403,6 +451,7 @@ public class MainController {
         PlayerSide side = g.getSideToMove();
         if (g.beginPlacingPieceFromReserve(side, type)) {
             setStatus("Máte figuru v ruce — klikněte na volné domovské pole.");
+            recordTimeline();
         } else {
             setStatus("Tento typ v rezervě není nebo nejste ve fázi rozestavení.");
         }
@@ -419,6 +468,7 @@ public class MainController {
         refreshActionButtons(g);
         refreshHandLabel(g);
         updateWindowTitle(g);
+        refreshHistoryMenus();
     }
 
     private void paintBoard(Game g) {
@@ -491,6 +541,42 @@ public class MainController {
             default -> String.valueOf(g.getState());
         };
         stage.setTitle("Arimaa – " + phase + " | na tahu: " + sideName(g.getSideToMove()));
+    }
+
+    private void startNewGameAction() {
+        Game g = game();
+        if (g != null) {
+            g.startNewGame();
+            if (gameController != null) {
+                gameController.resetTimeline();
+            }
+            setStatus("Nová hra — rozestavuje Gold.");
+            refreshAll();
+        }
+    }
+
+    private void recordTimeline() {
+        if (gameController != null) {
+            gameController.recordAfterMutation();
+        }
+    }
+
+    private void refreshHistoryMenus() {
+        if (undoMenuItem != null) {
+            undoMenuItem.setDisable(gameController == null || !gameController.canUndo());
+        }
+        if (redoMenuItem != null) {
+            redoMenuItem.setDisable(gameController == null || !gameController.canRedo());
+        }
+    }
+
+    private static boolean isStaticTrapSquare(Position pos) {
+        for (Position trap : BoardConstants.trapSquares()) {
+            if (trap.equals(pos)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void setStatus(String text) {

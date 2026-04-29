@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2
+
+- **Memento + časová osa (Undo/Redo):** `GameMemento`, `GameTimeline` (caretaker), `Game.createMemento` / `restoreMemento`; `GameController` drží časovou osu, `resetTimeline`, `recordAfterMutation`, `undo` / `redo`. V UI po úspěšných změnách během rozestavení (rezerva, ruka, umístění, vrácení do rezervy, náhodné/šachové rozestavení, dokončení fáze, zrušení ruky) se stav zaznamenává; **Tah → Zpět / Vpřed** (Ctrl+Z / Ctrl+Y) a obnovení desky z mementa.
+- **Oprava undo u šachové rozestavení:** po úspěšném `applyChessMappedSetup` se v `MainController` volá `recordTimeline()` — *Zpět* vrátí stav před šachovým rozložením (dříve se nový stav na osu nezapsal).
+- **Pasti na desce:** obrys polí `StrokeType.INSIDE` a konzistentní šířka čáry; pasti podle `BoardConstants.trapSquares()` — rovnoměrné červené ohraničení při škálování.
+- **Hra → Ukončit** ukončí aplikaci (`Platform.exit()`), zkratka Ctrl+Q; oddělovač od položky Nová hra.
+
 ## 0.2.2
 
 - Deska v `MainController`: notace **a–h** a **1–8** po celém obvodu; jedna společná `GridPane` pro souřadnice i pole (bez vnořené mřížky), správný výpočet `perimeterSpanPixels()` odpovídající devíti mezerám `BOARD_GAP` na řádek/sloupec — symetrické rozložení a odsazení.

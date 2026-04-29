@@ -15,14 +15,22 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundFill;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.CornerRadii;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.RowConstraints;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
+import javafx.scene.transform.Scale;
 import javafx.stage.Stage;
 
 import java.util.EnumMap;
@@ -35,13 +43,24 @@ import java.util.Map;
 public class MainController {
 
     private static final int CELL = 52;
+    /** Gap between adjacent columns/rows on the unified board {@link GridPane}. */
+    private static final int BOARD_GAP = 1;
+    /** Coordinate strip width/height outside the 8×8 cells. */
+    private static final int COORD = 24;
+    /** Space between outer frame and coordinate grid. */
+    private static final int FRAME_INSET = 10;
     private static final Font CELL_FONT = Font.font(18);
+    private static final Font COORD_FONT = Font.font(12);
+
+    /** Equal inset from {@link BoardHostPane} edges to the scaled board block. */
+    private static final double BOARD_VIEW_MARGIN = 14;
 
     private GameController gameController;
 
     private Stage stage;
+    /** Pixel size of the framed board (coordinates + frame); used for scaling. */
+    private double framedOuterSize = 1.0;
     private final Label statusLabel = new Label();
-    private final GridPane boardGrid = new GridPane();
     private final StackPane[][] boardCells = new StackPane[BoardConstants.BOARD_SIZE][BoardConstants.BOARD_SIZE];
     private final Map<PieceType, Button> reserveButtons = new EnumMap<>(PieceType.class);
     private Button cancelHandButton;
@@ -63,15 +82,11 @@ public class MainController {
      */
     public void attachToStage(Stage primaryStage) {
         this.stage = primaryStage;
-        boardGrid.setHgap(1);
-        boardGrid.setVgap(1);
-        boardGrid.setPadding(new Insets(8));
 
         for (int row = 0; row < BoardConstants.BOARD_SIZE; row++) {
             for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
                 StackPane cell = createCell(col, row);
                 boardCells[row][col] = cell;
-                boardGrid.add(cell, col, row);
             }
         }
 
@@ -174,22 +189,151 @@ public class MainController {
                 newGameButton);
         sidePanel.setPadding(new Insets(12));
         sidePanel.setPrefWidth(260);
+        sidePanel.setMaxHeight(Double.MAX_VALUE);
+        sidePanel.setBackground(new Background(new BackgroundFill(
+                Color.rgb(250, 250, 252), CornerRadii.EMPTY, Insets.EMPTY)));
 
         ScrollPane scroll = new ScrollPane(sidePanel);
         scroll.setFitToWidth(true);
+        scroll.setFitToHeight(true);
         scroll.setMinViewportWidth(240);
+        scroll.setBackground(Background.EMPTY);
+        scroll.setStyle("-fx-background-color: transparent;");
 
-        BorderPane root = new BorderPane();
-        root.setCenter(boardGrid);
-        root.setRight(scroll);
-        BorderPane.setAlignment(boardGrid, Pos.CENTER);
+        StackPane framedBoard = buildFramedBoardWithPerimeterCoordinates();
+        BoardHostPane boardHost = new BoardHostPane(framedBoard, framedOuterSize);
+        boardHost.setMinWidth(0);
+        boardHost.setMinHeight(0);
+        boardHost.setMaxWidth(Double.MAX_VALUE);
+        boardHost.setMaxHeight(Double.MAX_VALUE);
+        HBox.setHgrow(boardHost, Priority.ALWAYS);
 
-        Scene scene = new Scene(root, 920, 640);
+        HBox body = new HBox();
+        body.setFillHeight(true);
+        body.setAlignment(Pos.CENTER);
+        body.getChildren().addAll(boardHost, scroll);
+
+        Scene scene = new Scene(body, 920, 640);
+        scene.setFill(Color.rgb(236, 236, 238));
         primaryStage.setTitle("Arimaa – rozestavení");
         primaryStage.setScene(scene);
         primaryStage.show();
 
         refreshAll();
+    }
+
+    /**
+     * Side length of the 8×8 playing area including gaps between the eight cells in a row/column.
+     */
+    private static int boardBlockPixels() {
+        return BoardConstants.BOARD_SIZE * CELL + (BoardConstants.BOARD_SIZE - 1) * BOARD_GAP;
+    }
+
+    /**
+     * Side length of the full 10×10 perimeter (coordinates + board): two rank strips, eight files, and
+     * {@code 9} horizontal (and vertical) {@link #BOARD_GAP}s — must match {@link GridPane} layout math.
+     */
+    private static int perimeterSpanPixels() {
+        return 2 * COORD + boardBlockPixels() + 2 * BOARD_GAP;
+    }
+
+    /**
+     * Single {@link GridPane} for coordinates and cells so gaps are not counted twice; light outline only.
+     */
+    private StackPane buildFramedBoardWithPerimeterCoordinates() {
+        int inner = perimeterSpanPixels();
+        int outer = inner + 2 * FRAME_INSET;
+
+        GridPane surface = new GridPane();
+        surface.setHgap(BOARD_GAP);
+        surface.setVgap(BOARD_GAP);
+        for (int i = 0; i < 10; i++) {
+            ColumnConstraints cc = new ColumnConstraints();
+            if (i == 0 || i == 9) {
+                cc.setPrefWidth(COORD);
+                cc.setMinWidth(COORD);
+                cc.setMaxWidth(COORD);
+            } else {
+                cc.setPrefWidth(CELL);
+                cc.setMinWidth(CELL);
+                cc.setMaxWidth(CELL);
+            }
+            cc.setHgrow(Priority.NEVER);
+            surface.getColumnConstraints().add(cc);
+        }
+        for (int i = 0; i < 10; i++) {
+            RowConstraints rc = new RowConstraints();
+            if (i == 0 || i == 9) {
+                rc.setPrefHeight(COORD);
+                rc.setMinHeight(COORD);
+                rc.setMaxHeight(COORD);
+            } else {
+                rc.setPrefHeight(CELL);
+                rc.setMinHeight(CELL);
+                rc.setMaxHeight(CELL);
+            }
+            rc.setVgrow(Priority.NEVER);
+            surface.getRowConstraints().add(rc);
+        }
+
+        for (int c : new int[] {0, 9}) {
+            for (int r : new int[] {0, 9}) {
+                surface.add(cornerSpacer(), c, r);
+            }
+        }
+        for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
+            surface.add(coordLabel(String.valueOf((char) ('a' + f)), CELL, COORD, true), f + 1, 0);
+            surface.add(coordLabel(String.valueOf((char) ('a' + f)), CELL, COORD, true), f + 1, 9);
+        }
+        for (int visualRow = 0; visualRow < BoardConstants.BOARD_SIZE; visualRow++) {
+            String rankText = Integer.toString(BoardConstants.BOARD_SIZE - visualRow);
+            int gridRow = visualRow + 1;
+            surface.add(coordLabel(rankText, COORD, CELL, false), 0, gridRow);
+            surface.add(coordLabel(rankText, COORD, CELL, false), 9, gridRow);
+        }
+        for (int row = 0; row < BoardConstants.BOARD_SIZE; row++) {
+            for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
+                surface.add(boardCells[row][col], col + 1, row + 1);
+            }
+        }
+
+        StackPane framed = new StackPane();
+        Rectangle frame = new Rectangle(outer, outer);
+        frame.setFill(Color.TRANSPARENT);
+        frame.setStroke(Color.rgb(160, 160, 168));
+        frame.setStrokeWidth(1);
+        frame.setArcWidth(6);
+        frame.setArcHeight(6);
+        framed.getChildren().addAll(frame, surface);
+        StackPane.setAlignment(surface, Pos.CENTER);
+        framed.setMinSize(outer, outer);
+        framed.setPrefSize(outer, outer);
+        framed.setMaxSize(outer, outer);
+        StackPane.setMargin(surface, new Insets(FRAME_INSET));
+        framedOuterSize = outer;
+        return framed;
+    }
+
+    private static Region cornerSpacer() {
+        Region r = new Region();
+        r.setPrefSize(COORD, COORD);
+        r.setMinSize(COORD, COORD);
+        return r;
+    }
+
+    private static Label coordLabel(String text, double prefW, double prefH, boolean fileRow) {
+        Label lab = new Label(text);
+        lab.setFont(COORD_FONT);
+        lab.setPrefSize(prefW, prefH);
+        lab.setMinSize(prefW, prefH);
+        lab.setMaxSize(prefW, prefH);
+        lab.setAlignment(Pos.CENTER);
+        if (fileRow) {
+            lab.setMaxWidth(prefW);
+        } else {
+            lab.setMaxHeight(prefH);
+        }
+        return lab;
     }
 
     private StackPane createCell(int fileIndex, int gridRow) {
@@ -395,5 +539,58 @@ public class MainController {
         Region r = new Region();
         r.setMinHeight(h);
         return r;
+    }
+
+    /**
+     * Centers the framed board and scales it uniformly: {@link Scale} with pivot (0,0) so layout matches
+     * painted pixels (unlike {@code setScaleX}, which uses the node centre as pivot and breaks {@code relocate}).
+     */
+    private static final class BoardHostPane extends Pane {
+
+        private final StackPane board;
+        private final double outer;
+        private final Scale scaleTf = new Scale(1, 1, 0, 0);
+
+        BoardHostPane(StackPane framedBoard, double outer) {
+            this.board = framedBoard;
+            this.outer = outer;
+            board.getTransforms().setAll(scaleTf);
+            getChildren().add(board);
+            setBackground(Background.EMPTY);
+            setMinSize(0, 0);
+            setMaxWidth(Double.MAX_VALUE);
+            setMaxHeight(Double.MAX_VALUE);
+        }
+
+        @Override
+        protected double computePrefWidth(double height) {
+            return 0;
+        }
+
+        @Override
+        protected double computePrefHeight(double width) {
+            return 0;
+        }
+
+        @Override
+        protected void layoutChildren() {
+            double w = getWidth();
+            double h = getHeight();
+            if (w <= 0 || h <= 0 || outer <= 0) {
+                return;
+            }
+            double avail = Math.max(0.0, Math.min(w, h) - 2.0 * BOARD_VIEW_MARGIN);
+            double scale = avail / outer;
+            if (!Double.isFinite(scale)) {
+                scale = 1.0;
+            }
+            scale = Math.clamp(scale, 0.08, 40.0);
+            scaleTf.setX(scale);
+            scaleTf.setY(scale);
+            double x = (w - avail) / 2.0;
+            double y = (h - avail) / 2.0;
+            board.resize(outer, outer);
+            board.relocate(snapPositionX(x), snapPositionY(y));
+        }
     }
 }

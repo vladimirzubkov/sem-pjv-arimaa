@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- Deska v `MainController`: notace **a–h** a **1–8** po celém obvodu; jedna společná `GridPane` pro souřadnice i pole (bez vnořené mřížky), správný výpočet `perimeterSpanPixels()` odpovídající devíti mezerám `BOARD_GAP` na řádek/sloupec — symetrické rozložení a odsazení.
+- Odebrána hnědá výplň rámečku; lehký obrys; kořen scény `HBox` (`Hgrow` pro oblast desky) místo `BorderPane` kvůli rovnoměrné šířce; `BoardHostPane` se škálováním přes `Scale` s pivotem (0,0) a středěním podle `min(šířka, výška)` okna.
+
 ## 0.2.1
 
 - JavaFX rozhraní pro **rozestavení**: deska 8×8, rezerva s výběrem typu figury, umístění klikem na domovské pole, vrácení figury z desky do rezervy bez figury v ruce.

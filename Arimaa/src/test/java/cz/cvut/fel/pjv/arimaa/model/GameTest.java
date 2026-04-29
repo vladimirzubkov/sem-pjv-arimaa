@@ -114,6 +114,90 @@ class GameTest {
         assertEquals(8L, rabbits);
     }
 
+    @Test
+    void placeRemainingPiecesRandomlyFillsFromFullReserve() {
+        Game game = new Game();
+        game.startNewGame();
+        assertTrue(game.placeRemainingPiecesRandomly(PlayerSide.GOLD));
+        assertEquals(0, game.getSetupReserveSnapshot(PlayerSide.GOLD).size());
+        assertEquals(16, countGoldPiecesOnHome(game));
+    }
+
+    @Test
+    void placeRemainingPiecesRandomlyAfterOneManualPlacement() {
+        Game game = new Game();
+        game.startNewGame();
+        assertTrue(game.beginPlacingPieceFromReserve(PlayerSide.GOLD, PieceType.RABBIT));
+        assertTrue(game.confirmSetupHandPlacement(Position.of(0, 0)));
+        assertTrue(game.placeRemainingPiecesRandomly(PlayerSide.GOLD));
+        assertEquals(0, game.getSetupReserveSnapshot(PlayerSide.GOLD).size());
+        assertEquals(16, countGoldPiecesOnHome(game));
+    }
+
+    @Test
+    void applyChessMappedSetupPlacesElephantOnE1() {
+        Game game = new Game();
+        game.startNewGame();
+        assertTrue(game.applyChessMappedSetup(PlayerSide.GOLD));
+        Piece e1 = game.getBoard().getPiece(Position.of(4, 0));
+        assertNotNull(e1);
+        assertEquals(PieceType.ELEPHANT, e1.getType());
+        assertEquals(PlayerSide.GOLD, e1.getSide());
+        assertEquals(0, game.getSetupReserveSnapshot(PlayerSide.GOLD).size());
+    }
+
+    @Test
+    void tryCompleteSetupAfterChessGoldAdvancesToSilverSetup() {
+        Game game = new Game();
+        game.startNewGame();
+        assertTrue(game.applyChessMappedSetup(PlayerSide.GOLD));
+        assertTrue(game.tryCompleteSetup(PlayerSide.GOLD));
+        assertEquals(GameState.SETUP_SILVER, game.getState());
+        assertEquals(PlayerSide.SILVER, game.getSideToMove());
+    }
+
+    @Test
+    void tryCompleteSetupFailsWhenReserveNotEmpty() {
+        Game game = new Game();
+        game.startNewGame();
+        assertFalse(game.tryCompleteSetup(PlayerSide.GOLD));
+    }
+
+    @Test
+    void tryCompleteSetupFailsWhenPieceHeldInHand() {
+        Game game = new Game();
+        game.startNewGame();
+        assertTrue(game.applyChessMappedSetup(PlayerSide.GOLD));
+        assertTrue(game.returnPieceFromBoardToReserve(PlayerSide.GOLD, Position.of(0, 1)));
+        assertTrue(game.beginPlacingPieceFromReserve(PlayerSide.GOLD, PieceType.RABBIT));
+        assertFalse(game.tryCompleteSetup(PlayerSide.GOLD));
+    }
+
+    @Test
+    void fullChessSetupBothSidesThenPlay() {
+        Game game = new Game();
+        game.startNewGame();
+        assertTrue(game.applyChessMappedSetup(PlayerSide.GOLD));
+        assertTrue(game.tryCompleteSetup(PlayerSide.GOLD));
+        assertTrue(game.applyChessMappedSetup(PlayerSide.SILVER));
+        assertTrue(game.tryCompleteSetup(PlayerSide.SILVER));
+        assertEquals(GameState.PLAY, game.getState());
+        assertEquals(PlayerSide.GOLD, game.getSideToMove());
+    }
+
+    private static int countGoldPiecesOnHome(Game game) {
+        int n = 0;
+        for (int r = 0; r < 2; r++) {
+            for (int f = 0; f < 8; f++) {
+                Piece p = game.getBoard().getPiece(Position.of(f, r));
+                if (p != null && p.getSide() == PlayerSide.GOLD) {
+                    n++;
+                }
+            }
+        }
+        return n;
+    }
+
     private static void assertReserveMultiset(List<Piece> reserve, PlayerSide expectedSide) {
         assertEquals(16, reserve.size());
         for (Piece p : reserve) {

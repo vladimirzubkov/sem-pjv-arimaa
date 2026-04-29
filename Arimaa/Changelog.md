@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1
+
+- Dokončení rozestavení: `tryCompleteSetup(PlayerSide)` — kontrola prázdné rezervy, přesně 16 vlastních figurek na domácím území, oficiální multiset a obsazení; přechody `SETUP_GOLD` → `SETUP_SILVER` → `PLAY` včetně nastavení `sideToMove`.
+- `placeRemainingPiecesRandomly(PlayerSide)` — náhodné doplnění zbývajících figurek z rezervy na volná pole domova (lze kdykoli během rozestavení).
+- `applyChessMappedSetup(PlayerSide)` — pevné „šachové“ rozložení (zadní řada podle mapování typů, přední řada osmi králíků; Gold řady 0–1, Silver 6–7).
+- Rozšířené testy v `GameTest` (náhodné doplnění, šachová rozestavení, přechody a negativní případy).
+
 ## 0.0.1
 
 - Základní doménový model: `Board`, `Position`, `Piece` (včetně konstruktoru pro typ a stranu).

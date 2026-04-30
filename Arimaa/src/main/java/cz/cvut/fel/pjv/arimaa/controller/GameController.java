@@ -55,8 +55,19 @@ public class GameController {
     }
 
     /**
-     * No-op until full move application exists.
+     * Applies a full play-phase turn via {@link Game#applyMove(Move)}.
+     *
+     * @return {@code true} if the move was legal and applied
      */
-    public void submitHumanMove(Move move) {
+    public boolean submitHumanMove(Move move) {
+        if (game == null || move == null) {
+            return false;
+        }
+        try {
+            game.applyMove(move);
+            return true;
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            return false;
+        }
     }
 }

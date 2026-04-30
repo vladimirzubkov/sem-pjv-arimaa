@@ -19,6 +19,8 @@ public class Game {
     private Board board;
     private PlayerSide sideToMove;
 
+    private final RuleEngine ruleEngine = new DefaultRuleEngine();
+
     private boolean ranksMirroredForHomeCheck;
     private final List<Piece> goldReserve = new ArrayList<>();
     private final List<Piece> silverReserve = new ArrayList<>();
@@ -307,9 +309,18 @@ public class Game {
     }
 
     /**
-     * Applies a full turn during {@link GameState#PLAY}; not implemented yet (use {@link Move#getSteps()} later).
+     * Applies a full turn during {@link GameState#PLAY}: 1–4 simple steps, trap resolution, then switches {@link #sideToMove}.
+     *
+     * @param move non-null turn with {@link Move#getSteps()} size 1–4
+     * @throws IllegalStateException if not in {@link GameState#PLAY}
+     * @throws IllegalArgumentException if the move is illegal
      */
     public void applyMove(Move move) {
+        Objects.requireNonNull(move, "move");
+        if (state != GameState.PLAY) {
+            throw new IllegalStateException("applyMove only in PLAY");
+        }
+        ruleEngine.applyMove(this, move);
     }
 
     /**

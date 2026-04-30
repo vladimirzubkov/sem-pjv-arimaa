@@ -210,6 +210,114 @@ class GameTest {
         assertEquals(PlayerSide.GOLD, game.getSideToMove());
     }
 
+    @Test
+    void applyMoveOneOrthogonalStepSwitchesSide() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.getBoard().setPiece(Position.of(0, 0), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        Move m = new Move();
+        Step s = new Step();
+        s.setFrom(Position.of(0, 0));
+        s.setTo(Position.of(0, 1));
+        m.getSteps().add(s);
+        g.applyMove(m);
+        assertEquals(PlayerSide.SILVER, g.getSideToMove());
+        assertNull(g.getBoard().getPiece(Position.of(0, 0)));
+        assertEquals(PieceType.RABBIT, g.getBoard().getPiece(Position.of(0, 1)).getType());
+    }
+
+    @Test
+    void applyMoveRejectsGoldRabbitBackward() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.getBoard().setPiece(Position.of(0, 3), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        Move m = new Move();
+        Step s = new Step();
+        s.setFrom(Position.of(0, 3));
+        s.setTo(Position.of(0, 2));
+        m.getSteps().add(s);
+        assertThrows(IllegalArgumentException.class, () -> g.applyMove(m));
+    }
+
+    @Test
+    void applyMoveRejectsDiagonalStep() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.getBoard().setPiece(Position.of(0, 0), new Piece(PieceType.CAT, PlayerSide.GOLD));
+        Move m = new Move();
+        Step s = new Step();
+        s.setFrom(Position.of(0, 0));
+        s.setTo(Position.of(1, 1));
+        m.getSteps().add(s);
+        assertThrows(IllegalArgumentException.class, () -> g.applyMove(m));
+    }
+
+    @Test
+    void applyMoveRejectsMoreThanFourSteps() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.getBoard().setPiece(Position.of(3, 3), new Piece(PieceType.ELEPHANT, PlayerSide.GOLD));
+        Move m = new Move();
+        for (int i = 0; i < 5; i++) {
+            Step s = new Step();
+            if (i % 2 == 0) {
+                s.setFrom(Position.of(3, 3));
+                s.setTo(Position.of(4, 3));
+            } else {
+                s.setFrom(Position.of(4, 3));
+                s.setTo(Position.of(3, 3));
+            }
+            m.getSteps().add(s);
+        }
+        assertThrows(IllegalArgumentException.class, () -> g.applyMove(m));
+    }
+
+    @Test
+    void applyMoveRejectsMovingOpponentPiece() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.getBoard().setPiece(Position.of(0, 0), new Piece(PieceType.RABBIT, PlayerSide.SILVER));
+        Move m = new Move();
+        Step s = new Step();
+        s.setFrom(Position.of(0, 0));
+        s.setTo(Position.of(0, 1));
+        m.getSteps().add(s);
+        assertThrows(IllegalArgumentException.class, () -> g.applyMove(m));
+    }
+
+    @Test
+    void trapRemovesGoldPieceOnC3WhenNoFriendlyNeighborAfterTurn() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        Position b3 = Position.fromAlgebraic("b3");
+        Position c3 = Position.fromAlgebraic("c3");
+        g.getBoard().setPiece(b3, new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        g.getBoard().setPiece(c3, new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        Move m = new Move();
+        Step s = new Step();
+        s.setFrom(b3);
+        s.setTo(Position.of(1, 3));
+        m.getSteps().add(s);
+        g.applyMove(m);
+        assertNull(g.getBoard().getPiece(c3));
+        assertEquals(PieceType.RABBIT, g.getBoard().getPiece(Position.of(1, 3)).getType());
+    }
+
+    @Test
+    void isValidPlayPrefixFalseForIllegalRabbitStep() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.getBoard().setPiece(Position.of(0, 3), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        Move m = new Move();
+        Step s = new Step();
+        s.setFrom(Position.of(0, 3));
+        s.setTo(Position.of(0, 2));
+        m.getSteps().add(s);
+        assertFalse(DefaultRuleEngine.isValidPlayPrefix(g, m));
+    }
+
+    private static Game playOnEmptyBoard(PlayerSide sideToMove) {
+        Game g = new Game();
+        g.startNewGame();
+        g.getBoard().clear();
+        g.setState(GameState.PLAY);
+        g.setSideToMove(sideToMove);
+        return g;
+    }
+
     private static int countGoldPiecesOnHome(Game game) {
         int n = 0;
         for (int r = 0; r < 2; r++) {

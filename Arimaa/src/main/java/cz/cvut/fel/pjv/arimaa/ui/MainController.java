@@ -1,12 +1,15 @@
 package cz.cvut.fel.pjv.arimaa.ui;
 
 import cz.cvut.fel.pjv.arimaa.controller.GameController;
+import cz.cvut.fel.pjv.arimaa.model.DefaultRuleEngine;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.GameState;
+import cz.cvut.fel.pjv.arimaa.model.Move;
 import cz.cvut.fel.pjv.arimaa.model.Piece;
 import cz.cvut.fel.pjv.arimaa.model.PieceType;
 import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
+import cz.cvut.fel.pjv.arimaa.model.Step;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import cz.cvut.fel.pjv.arimaa.util.HomeTerritory;
 import javafx.application.Platform;
@@ -26,6 +29,7 @@ import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.BorderPane;
@@ -49,8 +53,11 @@ import javafx.scene.transform.Scale;
 import javafx.stage.Stage;
 
 import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Primary window: board and setup controls (manual, random, chess layout, finish setup).
@@ -97,6 +104,12 @@ public class MainController {
     /** Home square currently hovered during setup (ghost placement); both null if none. */
     private Integer hoverFileIndex;
     private Integer hoverRankIndex;
+
+    /** In {@link GameState#PLAY}: steps not yet committed; origin for the next step. */
+    private final Move playPartialMove = new Move();
+    private Position playNextFrom;
+    private Button playEndTurnButton;
+    private Button playCancelTurnButton;
 
     private enum PieceSkin {
         /** Letter abbreviations only (no piece art). */
@@ -201,6 +214,20 @@ public class MainController {
             refreshAll();
         });
 
+        playEndTurnButton = new Button("Konec tahu");
+        playEndTurnButton.setMaxWidth(Double.MAX_VALUE);
+        playEndTurnButton.setOnAction(e -> tryEndPlayTurn());
+
+        playCancelTurnButton = new Button("Zrušit rozpracovaný tah");
+        playCancelTurnButton.setMaxWidth(Double.MAX_VALUE);
+        playCancelTurnButton.setOnAction(e -> {
+            if (!playPartialMove.getSteps().isEmpty() || playNextFrom != null) {
+                clearPlayTurnUi();
+                setStatus("Rozpracovaný tah zrušen.");
+                refreshAll();
+            }
+        });
+
         handLabel.setWrapText(true);
         handLabel.setMaxWidth(220);
         handPieceGraphic.setPreserveRatio(true);
@@ -219,7 +246,9 @@ public class MainController {
                 cancelHandButton,
                 randomButton,
                 chessButton,
-                doneButton);
+                doneButton,
+                playEndTurnButton,
+                playCancelTurnButton);
         sidePanel.setPadding(new Insets(12));
         sidePanel.setPrefWidth(260);
         sidePanel.setMaxHeight(Double.MAX_VALUE);
@@ -260,6 +289,7 @@ public class MainController {
         undoMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN));
         undoMenuItem.setOnAction(e -> {
             if (gameController != null && gameController.undo()) {
+                clearPlayTurnUi();
                 setStatus("Zpět — vrácen předchozí stav.");
                 refreshAll();
             }
@@ -268,6 +298,7 @@ public class MainController {
         redoMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.Y, KeyCombination.SHORTCUT_DOWN));
         redoMenuItem.setOnAction(e -> {
             if (gameController != null && gameController.redo()) {
+                clearPlayTurnUi();
                 setStatus("Vpřed — obnoven stav.");
                 refreshAll();
             }
@@ -303,6 +334,15 @@ public class MainController {
 
         Scene scene = new Scene(root, 920, 640);
         scene.setFill(Color.rgb(236, 236, 238));
+        scene.addEventHandler(KeyEvent.KEY_PRESSED, e -> {
+            if (e.getCode() == KeyCode.ENTER) {
+                Game g = game();
+                if (g != null && g.getState() == GameState.PLAY) {
+                    tryEndPlayTurn();
+                    e.consume();
+                }
+            }
+        });
         primaryStage.setTitle("Arimaa – rozestavení");
         primaryStage.setScene(scene);
         primaryStage.show();
@@ -430,20 +470,27 @@ public class MainController {
     private StackPane createCell(int fileIndex, int gridRow) {
         Rectangle bg = new Rectangle(CELL, CELL);
         bg.setStrokeType(StrokeType.INSIDE);
-        bg.setStroke(Color.gray(0.35));
-        bg.setStrokeWidth(1);
         int rankIndex = BoardConstants.BOARD_SIZE - 1 - gridRow;
         Position pos = Position.of(fileIndex, rankIndex);
+        Color baseFill;
         if (HomeTerritory.contains(PlayerSide.GOLD, pos, false)
                 || HomeTerritory.contains(PlayerSide.SILVER, pos, false)) {
-            bg.setFill(Color.color(0.75, 0.82, 0.95));
+            baseFill = Color.color(0.75, 0.82, 0.95);
         } else {
-            bg.setFill(gridRow % 2 == fileIndex % 2 ? Color.color(0.93, 0.88, 0.78) : Color.color(0.85, 0.78, 0.65));
+            baseFill = gridRow % 2 == fileIndex % 2 ? Color.color(0.93, 0.88, 0.78) : Color.color(0.85, 0.78, 0.65);
         }
+        Color baseStroke;
+        double baseStrokeWidth;
         if (isStaticTrapSquare(pos)) {
-            bg.setStroke(Color.DARKRED);
-            bg.setStrokeWidth(2);
+            baseStroke = Color.DARKRED;
+            baseStrokeWidth = 2;
+        } else {
+            baseStroke = Color.gray(0.35);
+            baseStrokeWidth = 1;
         }
+        bg.setFill(baseFill);
+        bg.setStroke(baseStroke);
+        bg.setStrokeWidth(baseStrokeWidth);
 
         ImageView pieceImg = new ImageView();
         pieceImg.setFitWidth(PIECE_IMAGE_MAX);
@@ -470,7 +517,8 @@ public class MainController {
         hoverLbl.setOpacity(0.5);
 
         StackPane cell = new StackPane(bg, pieceLbl, pieceImg, hoverImg, hoverLbl);
-        cell.setUserData(new CellData(fileIndex, rankIndex, pieceLbl, pieceImg, hoverImg, hoverLbl));
+        cell.setUserData(new CellData(fileIndex, rankIndex, bg, baseFill, baseStroke, baseStrokeWidth,
+                pieceLbl, pieceImg, hoverImg, hoverLbl));
 
         final int fi = fileIndex;
         final int ri = rankIndex;
@@ -558,6 +606,10 @@ public class MainController {
             return;
         }
         GameState st = g.getState();
+        if (st == GameState.PLAY) {
+            onBoardCellClickPlay(fileIndex, rankIndex);
+            return;
+        }
         if (st != GameState.SETUP_GOLD && st != GameState.SETUP_SILVER) {
             return;
         }
@@ -604,10 +656,14 @@ public class MainController {
 
     private void refreshAll() {
         Game g = game();
+        if (g != null && g.getState() != GameState.PLAY) {
+            clearPlayTurnUi();
+        }
         if (g == null || stage == null) {
             return;
         }
         paintBoard(g);
+        paintPlayHighlights(g);
         refreshReserveButtons(g);
         refreshActionButtons(g);
         refreshHandLabel(g);
@@ -616,13 +672,85 @@ public class MainController {
         paintHoverOverlay(g);
     }
 
+    /**
+     * Resets each cell’s background to its base style, then in {@link GameState#PLAY} highlights the
+     * selected origin square and legal step targets (orthogonal empty squares).
+     */
+    private void paintPlayHighlights(Game g) {
+        for (int row = 0; row < BoardConstants.BOARD_SIZE; row++) {
+            for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
+                StackPane cell = boardCells[row][col];
+                CellData data = (CellData) cell.getUserData();
+                Rectangle bg = data.background();
+                bg.setFill(data.baseFill());
+                bg.setStroke(data.baseStroke());
+                bg.setStrokeWidth(data.baseStrokeWidth());
+            }
+        }
+        if (g == null || g.getState() != GameState.PLAY || playNextFrom == null) {
+            return;
+        }
+        CellData selected = cellDataAt(playNextFrom);
+        Rectangle selBg = selected.background();
+        selBg.setFill(selected.baseFill().interpolate(Color.web("#ffec99"), 0.42));
+        selBg.setStroke(Color.web("#b8860b"));
+        selBg.setStrokeWidth(3);
+        if (playPartialMove.getSteps().size() >= 4) {
+            return;
+        }
+        Map<Position, Piece> occ = buildVirtualPlayOccupancy(g, playPartialMove);
+        for (Position to : computeLegalPlayTargetsForSelection(g, occ)) {
+            CellData tdata = cellDataAt(to);
+            Rectangle tbg = tdata.background();
+            tbg.setFill(tdata.baseFill().interpolate(Color.web("#a8f0c0"), 0.48));
+            tbg.setStroke(Color.web("#1e7a3a"));
+            tbg.setStrokeWidth(2.5);
+        }
+    }
+
+    private CellData cellDataAt(Position pos) {
+        int row = BoardConstants.BOARD_SIZE - 1 - pos.getRankIndex();
+        int col = pos.getFileIndex();
+        return (CellData) boardCells[row][col].getUserData();
+    }
+
+    private Set<Position> computeLegalPlayTargetsForSelection(Game g, Map<Position, Piece> occ) {
+        Set<Position> out = new HashSet<>();
+        if (playNextFrom == null) {
+            return out;
+        }
+        int f = playNextFrom.getFileIndex();
+        int r = playNextFrom.getRankIndex();
+        int[][] deltas = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (int[] d : deltas) {
+            int nf = f + d[0];
+            int nr = r + d[1];
+            if (nf < 0 || nf >= BoardConstants.BOARD_SIZE || nr < 0 || nr >= BoardConstants.BOARD_SIZE) {
+                continue;
+            }
+            Position to = Position.of(nf, nr);
+            if (occ.get(to) != null) {
+                continue;
+            }
+            Step step = new Step();
+            step.setFrom(playNextFrom);
+            step.setTo(to);
+            Move trial = copyMove(playPartialMove);
+            trial.getSteps().add(copyStep(step));
+            if (DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
+                out.add(to);
+            }
+        }
+        return out;
+    }
+
     private void paintBoard(Game g) {
         for (int row = 0; row < BoardConstants.BOARD_SIZE; row++) {
             for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
                 StackPane cell = boardCells[row][col];
                 CellData data = (CellData) cell.getUserData();
                 Position pos = Position.of(data.fileIndex(), data.rankIndex());
-                Piece p = g.getBoard().getPiece(pos);
+                Piece p = effectivePieceAt(g, pos);
                 if (pieceSkin == PieceSkin.NONE) {
                     data.pieceImage.setImage(null);
                     data.pieceImage.setVisible(false);
@@ -693,12 +821,20 @@ public class MainController {
 
     private void refreshActionButtons(Game g) {
         boolean setup = g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER;
+        boolean play = g.getState() == GameState.PLAY;
         PlayerSide side = g.getSideToMove();
         cancelHandButton.setDisable(!setup || g.getSetupHand() == null);
         chessButton.setDisable(!setup);
         doneButton.setDisable(!setup);
         boolean canRandom = setup && reserveSizesMatchEmptyHome(g, side);
         randomButton.setDisable(!setup || !canRandom);
+        if (playEndTurnButton != null) {
+            playEndTurnButton.setDisable(!play || playPartialMove.getSteps().isEmpty());
+        }
+        if (playCancelTurnButton != null) {
+            playCancelTurnButton.setDisable(!play
+                    || (playPartialMove.getSteps().isEmpty() && playNextFrom == null));
+        }
     }
 
     /**
@@ -719,6 +855,13 @@ public class MainController {
     }
 
     private void refreshHandLabel(Game g) {
+        if (g.getState() == GameState.PLAY) {
+            handLabel.setGraphic(null);
+            handLabel.setContentDisplay(ContentDisplay.LEFT);
+            int n = playPartialMove.getSteps().size();
+            handLabel.setText(n == 0 ? "Tah: žádné kroky (vyberte figuru)" : ("Tah: " + n + " krok(ů)"));
+            return;
+        }
         Piece h = g.getSetupHand();
         if (h == null) {
             handLabel.setGraphic(null);
@@ -748,7 +891,7 @@ public class MainController {
         String phase = switch (g.getState()) {
             case SETUP_GOLD -> "rozestavení Gold";
             case SETUP_SILVER -> "rozestavení Silver";
-            case PLAY -> "hra (tahy zatím v modelu)";
+            case PLAY -> "hra (jednoduché tahy)";
             default -> String.valueOf(g.getState());
         };
         stage.setTitle("Arimaa – " + phase + " | na tahu: " + sideName(g.getSideToMove()));
@@ -757,6 +900,7 @@ public class MainController {
     private void startNewGameAction() {
         Game g = game();
         if (g != null) {
+            clearPlayTurnUi();
             g.startNewGame();
             if (gameController != null) {
                 gameController.resetTimeline();
@@ -798,6 +942,114 @@ public class MainController {
         return gameController != null ? gameController.getGame() : null;
     }
 
+    private void clearPlayTurnUi() {
+        playPartialMove.getSteps().clear();
+        playNextFrom = null;
+    }
+
+    private static Map<Position, Piece> buildVirtualPlayOccupancy(Game g, Move partial) {
+        Map<Position, Piece> occ = new HashMap<>();
+        for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
+            for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
+                Position p = Position.of(f, r);
+                Piece pc = g.getBoard().getPiece(p);
+                if (pc != null) {
+                    occ.put(p, pc);
+                }
+            }
+        }
+        for (Step s : partial.getSteps()) {
+            Piece moved = occ.remove(s.getFrom());
+            if (moved != null) {
+                occ.put(s.getTo(), moved);
+            }
+        }
+        return occ;
+    }
+
+    private Piece effectivePieceAt(Game g, Position pos) {
+        if (g.getState() != GameState.PLAY || playPartialMove.getSteps().isEmpty()) {
+            return g.getBoard().getPiece(pos);
+        }
+        return buildVirtualPlayOccupancy(g, playPartialMove).get(pos);
+    }
+
+    private static Move copyMove(Move src) {
+        Move m = new Move();
+        for (Step s : src.getSteps()) {
+            m.getSteps().add(copyStep(s));
+        }
+        return m;
+    }
+
+    private static Step copyStep(Step s) {
+        Step t = new Step();
+        t.setFrom(s.getFrom());
+        t.setTo(s.getTo());
+        return t;
+    }
+
+    private void onBoardCellClickPlay(int fileIndex, int rankIndex) {
+        Game g = game();
+        if (g == null) {
+            return;
+        }
+        Position pos = Position.of(fileIndex, rankIndex);
+        PlayerSide side = g.getSideToMove();
+        Piece at = effectivePieceAt(g, pos);
+        if (at != null) {
+            if (at.getSide() == side) {
+                playNextFrom = pos;
+                setStatus("Vybrána figura — klikněte na sousední volné pole (nebo jinou svou figuru).");
+                refreshAll();
+                return;
+            }
+            setStatus("Toto není vaše figura.");
+            return;
+        }
+        if (playNextFrom == null) {
+            setStatus("Nejdřív vyberte svou figuru.");
+            return;
+        }
+        if (playPartialMove.getSteps().size() >= 4) {
+            setStatus("Maximálně 4 kroky — stiskněte Konec tahu.");
+            return;
+        }
+        Step step = new Step();
+        step.setFrom(playNextFrom);
+        step.setTo(pos);
+        Move trial = copyMove(playPartialMove);
+        trial.getSteps().add(copyStep(step));
+        if (!DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
+            setStatus("Neplatný krok.");
+            return;
+        }
+        playPartialMove.getSteps().add(copyStep(step));
+        playNextFrom = pos;
+        setStatus("Krok přidán (" + playPartialMove.getSteps().size() + "/4). Konec tahu nebo další krok.");
+        refreshAll();
+    }
+
+    private void tryEndPlayTurn() {
+        Game g = game();
+        if (g == null || g.getState() != GameState.PLAY || gameController == null) {
+            return;
+        }
+        if (playPartialMove.getSteps().isEmpty()) {
+            setStatus("Přidejte aspoň jeden krok.");
+            return;
+        }
+        Move submit = copyMove(playPartialMove);
+        if (!gameController.submitHumanMove(submit)) {
+            setStatus("Tah není platný.");
+            return;
+        }
+        clearPlayTurnUi();
+        setStatus("Tah proveden.");
+        recordTimeline();
+        refreshAll();
+    }
+
     private static Map<PieceType, Integer> countReserve(Game g, PlayerSide side) {
         Map<PieceType, Integer> m = new EnumMap<>(PieceType.class);
         for (Piece p : g.getSetupReserveSnapshot(side)) {
@@ -832,6 +1084,10 @@ public class MainController {
     private record CellData(
             int fileIndex,
             int rankIndex,
+            Rectangle background,
+            Color baseFill,
+            Color baseStroke,
+            double baseStrokeWidth,
             Label pieceLabel,
             ImageView pieceImage,
             ImageView hoverImage,

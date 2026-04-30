@@ -12,7 +12,7 @@ public final class ArimaaApp {
     }
 
     /**
-     * Launches the JavaFX runtime (rozestavení v UI; tahy ve fázi PLAY v modelu zatím ne).
+     * Launches the JavaFX runtime (rozestavení a tahy ve fázi PLAY v UI a modelu).
      *
      * @param args command-line arguments (unused)
      */

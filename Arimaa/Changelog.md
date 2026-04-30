@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.3
+
+- **Fáze PLAY — jednoduché tahy:** ortogonální krok na prázdné pole (bez push/pull a bez mražení), 1–4 kroky na tah, zákaz couvání králíků (Gold nahoru po ranku, Silver dolů), po tahu vyhodnocení **pastí** (`BoardConstants.trapSquares()` — figura bez ortogonálně sousední vlastní figury zmizí) a přepnutí `sideToMove`. `DefaultRuleEngine` + `Game.applyMove`.
+- **UI:** výběr figury, náhled rozpracovaného tahu, **Konec tahu** / **Zrušit rozpracovaný tah**, Enter; `GameController.submitHumanMove`; po platném tahu zápis na časovou osu (Undo/Redo); ve fázi PLAY **podsvícení** vybraného pole a legálních cílů dalšího kroku (`CellData` ukládá základní barvy pole).
+- Testy v `GameTest`: platný krok, neplatné tahy, past na c3, `DefaultRuleEngine.isValidPlayPrefix`. `ArimaaApp`: popis odpovídá PLAY v UI.
+
 ## 0.3.3
 
 - **Skin figurek (Gameplay → Skins):** `Default` / `None`; sada SVG v `images/figure_sets/default/` (Gold/Silver), rasterizace přes **Apache Batik** (`batik-transcoder` + `batik-codec`) do `javafx.scene.image.Image` ve třídě `FigureSvgRasterCache` (mezipaměť, super-sampling pro ostřejší zobrazení, PNG s alfou bez vynuceného bílého pozadí). Deska, rezerva a „V ruce“ zobrazují grafiku nebo písmena.

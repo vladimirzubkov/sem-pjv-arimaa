@@ -138,9 +138,46 @@ public class Game {
         if (countTypeOnHome(side, setupHand.getType()) >= maxPerType(setupHand.getType())) {
             return false;
         }
-        board.setPiece(position, setupHand);
+        Piece handPiece = setupHand;
+        board.setPiece(position, handPiece);
         setupHand = null;
+        beginAutoPickNextInHandAfterPlacement(handPiece.getSide(), handPiece.getType());
         return true;
+    }
+
+    /**
+     * Whether the current {@link #setupHand} could be legally placed on {@code position} (empty home square, quotas).
+     */
+    public boolean isLegalSetupHandPlacementTarget(Position position) {
+        if (setupHand == null || position == null || board == null) {
+            return false;
+        }
+        if (!isSetupPhaseForSide(setupHand.getSide())) {
+            return false;
+        }
+        PlayerSide side = setupHand.getSide();
+        if (!board.isEmpty(position) || !homeContains(side, position)) {
+            return false;
+        }
+        return countTypeOnHome(side, setupHand.getType()) < maxPerType(setupHand.getType());
+    }
+
+    /**
+     * After a successful placement: take another piece of the same type from the tray if any; otherwise the
+     * strongest available type (official order {@link PieceType} enum order). Does nothing if setup is not active.
+     */
+    private void beginAutoPickNextInHandAfterPlacement(PlayerSide side, PieceType placedType) {
+        if (!isSetupPhaseForSide(side)) {
+            return;
+        }
+        if (beginPlacingPieceFromReserve(side, placedType)) {
+            return;
+        }
+        for (PieceType t : PieceType.values()) {
+            if (beginPlacingPieceFromReserve(side, t)) {
+                return;
+            }
+        }
     }
 
     /** Returns {@link #setupHand} to the reserve without touching the board. */

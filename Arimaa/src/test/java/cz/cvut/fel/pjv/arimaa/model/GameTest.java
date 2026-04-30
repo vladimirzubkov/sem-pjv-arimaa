@@ -1,5 +1,6 @@
 package cz.cvut.fel.pjv.arimaa.model;
 
+import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -59,7 +60,11 @@ class GameTest {
         assertNotNull(onBoard);
         assertEquals(PieceType.RABBIT, onBoard.getType());
         assertEquals(PlayerSide.GOLD, onBoard.getSide());
-        assertEquals(reserveSize, game.getSetupReserveSnapshot(PlayerSide.GOLD).size() + 1);
+        assertEquals(reserveSize - 2, game.getSetupReserveSnapshot(PlayerSide.GOLD).size());
+        Piece nextHand = game.getSetupHand();
+        assertNotNull(nextHand);
+        assertEquals(PieceType.RABBIT, nextHand.getType());
+        assertEquals(PlayerSide.GOLD, nextHand.getSide());
     }
 
     @Test
@@ -99,8 +104,28 @@ class GameTest {
 
         assertTrue(game.returnPieceFromBoardToReserve(PlayerSide.GOLD, pos));
         assertTrue(game.getBoard().isEmpty(pos));
-        assertEquals(2L, game.getSetupReserveSnapshot(PlayerSide.GOLD).stream()
-                .filter(p -> p.getType() == PieceType.DOG).count());
+        long dogsInTray = game.getSetupReserveSnapshot(PlayerSide.GOLD).stream()
+                .filter(p -> p.getType() == PieceType.DOG).count();
+        assertEquals(1L, dogsInTray);
+        Piece hand = game.getSetupHand();
+        assertNotNull(hand);
+        assertEquals(PieceType.DOG, hand.getType());
+    }
+
+    @Test
+    void afterLastRabbitPlacedAutoSelectsStrongestInReserve() {
+        Game game = new Game();
+        game.startNewGame();
+        for (int i = 0; i < BoardConstants.BOARD_SIZE; i++) {
+            if (i == 0) {
+                assertTrue(game.beginPlacingPieceFromReserve(PlayerSide.GOLD, PieceType.RABBIT));
+            }
+            assertTrue(game.confirmSetupHandPlacement(Position.of(i, 0)));
+        }
+        Piece h = game.getSetupHand();
+        assertNotNull(h);
+        assertEquals(PieceType.ELEPHANT, h.getType());
+        assertEquals(PlayerSide.GOLD, h.getSide());
     }
 
     @Test

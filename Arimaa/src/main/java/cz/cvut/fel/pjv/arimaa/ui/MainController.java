@@ -14,12 +14,15 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
@@ -36,6 +39,8 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.RowConstraints;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.StrokeType;
@@ -61,6 +66,10 @@ public class MainController {
     private static final int FRAME_INSET = 10;
     private static final Font CELL_FONT = Font.font(18);
     private static final Font COORD_FONT = Font.font(12);
+    /** Max width/height for piece {@link ImageView} inside a cell ({@link #CELL} minus margin). */
+    private static final double PIECE_IMAGE_MAX = Math.max(16, CELL - 8);
+    private static final double RESERVE_ICON_MAX = 26;
+    private static final double HAND_ICON_MAX = 28;
 
     /** Equal inset from {@link BoardHostPane} edges to the scaled board block. */
     private static final double BOARD_VIEW_MARGIN = 14;
@@ -78,8 +87,23 @@ public class MainController {
     private Button chessButton;
     private Button doneButton;
     private final Label handLabel = new Label();
+    private final ImageView handPieceGraphic = new ImageView();
     private MenuItem undoMenuItem;
     private MenuItem redoMenuItem;
+
+    private final FigureSvgRasterCache figureRasterCache = new FigureSvgRasterCache();
+    private PieceSkin pieceSkin = PieceSkin.DEFAULT;
+
+    /** Home square currently hovered during setup (ghost placement); both null if none. */
+    private Integer hoverFileIndex;
+    private Integer hoverRankIndex;
+
+    private enum PieceSkin {
+        /** Letter abbreviations only (no piece art). */
+        NONE,
+        /** Rasterized SVGs from classpath {@code /images/figure_sets/default/}. */
+        DEFAULT
+    }
 
     public GameController getGameController() {
         return gameController;
@@ -179,6 +203,8 @@ public class MainController {
 
         handLabel.setWrapText(true);
         handLabel.setMaxWidth(220);
+        handPieceGraphic.setPreserveRatio(true);
+        handPieceGraphic.setSmooth(true);
 
         statusLabel.setWrapText(true);
         statusLabel.setMaxWidth(240);
@@ -248,8 +274,28 @@ public class MainController {
         });
         menuTah.getItems().addAll(undoMenuItem, redoMenuItem);
 
+        Menu menuGameplay = new Menu("Gameplay");
+        Menu menuSkins = new Menu("Skins");
+        ToggleGroup skinToggleGroup = new ToggleGroup();
+        RadioMenuItem skinDefaultItem = new RadioMenuItem("Default");
+        skinDefaultItem.setToggleGroup(skinToggleGroup);
+        skinDefaultItem.setUserData(PieceSkin.DEFAULT);
+        RadioMenuItem skinNoneItem = new RadioMenuItem("None");
+        skinNoneItem.setToggleGroup(skinToggleGroup);
+        skinNoneItem.setUserData(PieceSkin.NONE);
+        skinDefaultItem.setSelected(true);
+        skinToggleGroup.selectedToggleProperty().addListener((obs, prev, toggled) -> {
+            if (toggled == null || !(toggled.getUserData() instanceof PieceSkin selected)) {
+                return;
+            }
+            pieceSkin = selected;
+            refreshAll();
+        });
+        menuSkins.getItems().addAll(skinDefaultItem, skinNoneItem);
+        menuGameplay.getItems().add(menuSkins);
+
         MenuBar menuBar = new MenuBar();
-        menuBar.getMenus().addAll(menuHra, menuTah);
+        menuBar.getMenus().addAll(menuHra, menuTah, menuGameplay);
 
         BorderPane root = new BorderPane();
         root.setTop(menuBar);
@@ -399,13 +445,111 @@ public class MainController {
             bg.setStrokeWidth(2);
         }
 
+        ImageView pieceImg = new ImageView();
+        pieceImg.setFitWidth(PIECE_IMAGE_MAX);
+        pieceImg.setFitHeight(PIECE_IMAGE_MAX);
+        pieceImg.setPreserveRatio(true);
+        pieceImg.setSmooth(true);
+        pieceImg.setVisible(false);
+
         Label pieceLbl = new Label("");
         pieceLbl.setFont(CELL_FONT);
-        StackPane cell = new StackPane(bg, pieceLbl);
-        cell.setUserData(new CellData(fileIndex, rankIndex, pieceLbl));
+
+        ImageView hoverImg = new ImageView();
+        hoverImg.setFitWidth(PIECE_IMAGE_MAX);
+        hoverImg.setFitHeight(PIECE_IMAGE_MAX);
+        hoverImg.setPreserveRatio(true);
+        hoverImg.setSmooth(true);
+        hoverImg.setMouseTransparent(true);
+        hoverImg.setVisible(false);
+
+        Label hoverLbl = new Label("");
+        hoverLbl.setFont(CELL_FONT);
+        hoverLbl.setMouseTransparent(true);
+        hoverLbl.setVisible(false);
+        hoverLbl.setOpacity(0.5);
+
+        StackPane cell = new StackPane(bg, pieceLbl, pieceImg, hoverImg, hoverLbl);
+        cell.setUserData(new CellData(fileIndex, rankIndex, pieceLbl, pieceImg, hoverImg, hoverLbl));
+
+        final int fi = fileIndex;
+        final int ri = rankIndex;
+        cell.hoverProperty().addListener((obs, was, hovering) -> {
+            if (Boolean.TRUE.equals(hovering)) {
+                setHoverCell(fi, ri);
+            } else {
+                clearHoverCellIf(fi, ri);
+            }
+        });
 
         cell.setOnMouseClicked(e -> onBoardCellClick(fileIndex, rankIndex));
         return cell;
+    }
+
+    private void setHoverCell(int fileIndex, int rankIndex) {
+        hoverFileIndex = fileIndex;
+        hoverRankIndex = rankIndex;
+        paintHoverOverlay(game());
+    }
+
+    private void clearHoverCellIf(int fileIndex, int rankIndex) {
+        if (hoverFileIndex != null && hoverFileIndex == fileIndex && hoverRankIndex != null && hoverRankIndex == rankIndex) {
+            hoverFileIndex = null;
+            hoverRankIndex = null;
+            paintHoverOverlay(game());
+        }
+    }
+
+    /**
+     * Half-transparent ghost of the piece in hand on the hovered home square (setup only).
+     */
+    private void paintHoverOverlay(Game g) {
+        for (int row = 0; row < BoardConstants.BOARD_SIZE; row++) {
+            for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
+                StackPane cell = boardCells[row][col];
+                CellData data = (CellData) cell.getUserData();
+                ImageView hImg = data.hoverImage();
+                Label hLbl = data.hoverLabel();
+                hImg.setOpacity(0.5);
+                hLbl.setOpacity(0.5);
+                if (g == null || g.getBoard() == null) {
+                    hImg.setVisible(false);
+                    hLbl.setVisible(false);
+                    continue;
+                }
+                GameState st = g.getState();
+                boolean setup = st == GameState.SETUP_GOLD || st == GameState.SETUP_SILVER;
+                Piece hand = g.getSetupHand();
+                Position pos = Position.of(data.fileIndex(), data.rankIndex());
+                boolean overHere = setup && hand != null
+                        && hoverFileIndex != null && hoverRankIndex != null
+                        && data.fileIndex() == hoverFileIndex && data.rankIndex() == hoverRankIndex;
+                boolean show = overHere && g.isLegalSetupHandPlacementTarget(pos);
+                if (!show) {
+                    hImg.setVisible(false);
+                    hLbl.setVisible(false);
+                    continue;
+                }
+                if (pieceSkin == PieceSkin.DEFAULT) {
+                    Image im = figureRasterCache.getRasterized(hand.getSide(), hand.getType(), PIECE_IMAGE_MAX);
+                    hImg.setImage(im);
+                    hImg.setOpacity(0.5);
+                    hImg.setVisible(im != null);
+                    hLbl.setText(im == null ? abbrev(hand) : "");
+                    hLbl.setTextFill(hand.getSide() == PlayerSide.GOLD
+                            ? Color.color(0.55, 0.35, 0.05)
+                            : Color.color(0.25, 0.25, 0.35));
+                    hLbl.setVisible(im == null);
+                } else {
+                    hImg.setVisible(false);
+                    hLbl.setText(abbrev(hand));
+                    hLbl.setTextFill(hand.getSide() == PlayerSide.GOLD
+                            ? Color.color(0.55, 0.35, 0.05)
+                            : Color.color(0.25, 0.25, 0.35));
+                    hLbl.setVisible(true);
+                }
+            }
+        }
     }
 
     private void onBoardCellClick(int fileIndex, int rankIndex) {
@@ -469,6 +613,7 @@ public class MainController {
         refreshHandLabel(g);
         updateWindowTitle(g);
         refreshHistoryMenus();
+        paintHoverOverlay(g);
     }
 
     private void paintBoard(Game g) {
@@ -476,11 +621,42 @@ public class MainController {
             for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
                 StackPane cell = boardCells[row][col];
                 CellData data = (CellData) cell.getUserData();
-                Position pos = Position.of(data.fileIndex, data.rankIndex);
+                Position pos = Position.of(data.fileIndex(), data.rankIndex());
                 Piece p = g.getBoard().getPiece(pos);
-                data.pieceLabel.setText(p == null ? "" : abbrev(p));
-                data.pieceLabel.setTextFill(p == null ? Color.BLACK
-                        : (p.getSide() == PlayerSide.GOLD ? Color.color(0.55, 0.35, 0.05) : Color.color(0.25, 0.25, 0.35)));
+                if (pieceSkin == PieceSkin.NONE) {
+                    data.pieceImage.setImage(null);
+                    data.pieceImage.setVisible(false);
+                    data.pieceLabel.setVisible(true);
+                    data.pieceLabel.setMouseTransparent(false);
+                    data.pieceLabel.setText(p == null ? "" : abbrev(p));
+                    data.pieceLabel.setTextFill(p == null ? Color.BLACK
+                            : (p.getSide() == PlayerSide.GOLD ? Color.color(0.55, 0.35, 0.05) : Color.color(0.25, 0.25, 0.35)));
+                } else {
+                    if (p == null) {
+                        data.pieceImage.setImage(null);
+                        data.pieceImage.setVisible(false);
+                        data.pieceLabel.setText("");
+                        data.pieceLabel.setVisible(false);
+                        data.pieceLabel.setMouseTransparent(true);
+                    } else {
+                        Image img = figureRasterCache.getRasterized(p.getSide(), p.getType(), PIECE_IMAGE_MAX);
+                        data.pieceImage.setImage(img);
+                        boolean showImg = img != null;
+                        data.pieceImage.setVisible(showImg);
+                        if (showImg) {
+                            data.pieceLabel.setText("");
+                            data.pieceLabel.setVisible(false);
+                            data.pieceLabel.setMouseTransparent(true);
+                        } else {
+                            data.pieceLabel.setText(abbrev(p));
+                            data.pieceLabel.setVisible(true);
+                            data.pieceLabel.setMouseTransparent(false);
+                            data.pieceLabel.setTextFill(p.getSide() == PlayerSide.GOLD
+                                    ? Color.color(0.55, 0.35, 0.05)
+                                    : Color.color(0.25, 0.25, 0.35));
+                        }
+                    }
+                }
             }
         }
     }
@@ -494,6 +670,24 @@ public class MainController {
             int n = counts.getOrDefault(type, 0);
             b.setText(labelForReserveButton(type, n));
             b.setDisable(!setup || n == 0);
+            if (pieceSkin == PieceSkin.DEFAULT && setup && n > 0) {
+                Image icon = figureRasterCache.getRasterized(side, type, RESERVE_ICON_MAX);
+                if (icon != null) {
+                    ImageView iv = new ImageView(icon);
+                    iv.setFitWidth(RESERVE_ICON_MAX);
+                    iv.setFitHeight(RESERVE_ICON_MAX);
+                    iv.setPreserveRatio(true);
+                    iv.setSmooth(true);
+                    b.setGraphic(iv);
+                    b.setContentDisplay(ContentDisplay.LEFT);
+                } else {
+                    b.setGraphic(null);
+                    b.setContentDisplay(ContentDisplay.LEFT);
+                }
+            } else {
+                b.setGraphic(null);
+                b.setContentDisplay(ContentDisplay.LEFT);
+            }
         }
     }
 
@@ -527,10 +721,27 @@ public class MainController {
     private void refreshHandLabel(Game g) {
         Piece h = g.getSetupHand();
         if (h == null) {
+            handLabel.setGraphic(null);
+            handLabel.setContentDisplay(ContentDisplay.LEFT);
             handLabel.setText("V ruce: —");
-        } else {
-            handLabel.setText("V ruce: " + abbrev(h) + " (" + sideName(h.getSide()) + ")");
+            return;
         }
+        String text = "V ruce: " + abbrev(h) + " (" + sideName(h.getSide()) + ")";
+        if (pieceSkin == PieceSkin.DEFAULT) {
+            Image hi = figureRasterCache.getRasterized(h.getSide(), h.getType(), HAND_ICON_MAX);
+            if (hi != null) {
+                handPieceGraphic.setImage(hi);
+                handPieceGraphic.setFitWidth(HAND_ICON_MAX);
+                handPieceGraphic.setFitHeight(HAND_ICON_MAX);
+                handLabel.setGraphic(handPieceGraphic);
+                handLabel.setContentDisplay(ContentDisplay.LEFT);
+                handLabel.setText(text);
+                return;
+            }
+        }
+        handLabel.setGraphic(null);
+        handLabel.setContentDisplay(ContentDisplay.LEFT);
+        handLabel.setText(text);
     }
 
     private void updateWindowTitle(Game g) {
@@ -618,7 +829,13 @@ public class MainController {
         return s == PlayerSide.GOLD ? "Gold" : "Silver";
     }
 
-    private record CellData(int fileIndex, int rankIndex, Label pieceLabel) {
+    private record CellData(
+            int fileIndex,
+            int rankIndex,
+            Label pieceLabel,
+            ImageView pieceImage,
+            ImageView hoverImage,
+            Label hoverLabel) {
     }
 
     private static Region spacer(int h) {

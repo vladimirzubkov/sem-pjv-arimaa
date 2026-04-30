@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3
+
+- **Skin figurek (Gameplay → Skins):** `Default` / `None`; sada SVG v `images/figure_sets/default/` (Gold/Silver), rasterizace přes **Apache Batik** (`batik-transcoder` + `batik-codec`) do `javafx.scene.image.Image` ve třídě `FigureSvgRasterCache` (mezipaměť, super-sampling pro ostřejší zobrazení, PNG s alfou bez vynuceného bílého pozadí). Deska, rezerva a „V ruce“ zobrazují grafiku nebo písmena.
+- **Rozestavení — náhled:** při figuře v ruce poloprůhledný náhled (cca 50 %) na domovském poli pod kurzorem, pokud je umístění legální (`Game.isLegalSetupHandPlacementTarget`).
+- **Rozestavení — automatická ruka po umístění:** po `confirmSetupHandPlacement` se z rezervy bere další figura **stejného typu**, jinak první dostupný typ v pořadí síly **E, M, H, D, K, R** (`PieceType`). Ruční výběr z panelu rezervy zůstává.
+- Testy: `FigureSvgRasterCacheTest`, úpravy a doplnění `GameTest`.
+
 ## 0.3.2
 
 - **Memento + časová osa (Undo/Redo):** `GameMemento`, `GameTimeline` (caretaker), `Game.createMemento` / `restoreMemento`; `GameController` drží časovou osu, `resetTimeline`, `recordAfterMutation`, `undo` / `redo`. V UI po úspěšných změnách během rozestavení (rezerva, ruka, umístění, vrácení do rezervy, náhodné/šachové rozestavení, dokončení fáze, zrušení ruky) se stav zaznamenává; **Tah → Zpět / Vpřed** (Ctrl+Z / Ctrl+Y) a obnovení desky z mementa.

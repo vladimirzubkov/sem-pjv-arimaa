@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.4
+
+- **Logování (SLF4J + Logback):** výchozí úroveň **OFF** (`logback.xml`); balíček `logging` — třída `LoggingSupport` (`bootstrapFromArgs`, úprava root úrovně, volitelný souborový appender `ARO_FILE`, CLI `--log-level` / `--log-file`, JVM `cz.cvut.fel.pjv.arimaa.log.level` / `cz.cvut.fel.pjv.arimaa.log.file`, výchozí soubor `arimaa.log` v kořeni modulu Maven vedle `src/` nebo v `user.dir`).
+- Vstupní třída `ArimaaApp`: bootstrap logování před `Application.launch`; v `pom.xml` cíl `javafx:run` → `cz.cvut.fel.pjv.arimaa.ArimaaApp`.
+
 ## 0.4.3
 
 - **Fáze PLAY — jednoduché tahy:** ortogonální krok na prázdné pole (bez push/pull a bez mražení), 1–4 kroky na tah, zákaz couvání králíků (Gold nahoru po ranku, Silver dolů), po tahu vyhodnocení **pastí** (`BoardConstants.trapSquares()` — figura bez ortogonálně sousední vlastní figury zmizí) a přepnutí `sideToMove`. `DefaultRuleEngine` + `Game.applyMove`.

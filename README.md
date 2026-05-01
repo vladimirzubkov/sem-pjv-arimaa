@@ -7,9 +7,23 @@ Desktopová hra **Arimaa** v Javě. Tento repozitář obsahuje **kostru projektu
 Zdrojový kód je v adresáři [`Arimaa/`](Arimaa/).
 
 - **Kompilace:** `mvn -f Arimaa/pom.xml compile`
-- **Spuštění JavaFX (po doplnění UI):** `mvn -f Arimaa/pom.xml javafx:run`  
-  Hlavní třída aplikace: `cz.cvut.fel.pjv.arimaa.ui.JavafxApp`.  
-  Vstupní bod `cz.cvut.fel.pjv.arimaa.ArimaaApp` volá `Application.launch`.
+- **Spuštění JavaFX:** `mvn -f Arimaa/pom.xml javafx:run`  
+  Hlavní třída: `cz.cvut.fel.pjv.arimaa.ArimaaApp` (nastavení logování, poté `Application.launch(JavafxApp.class, args)`).
+
+### Logování
+
+- **Výchozí:** žádný výstup na konzoli (úroveň **OFF**).
+- **Při spuštění z příkazové řádky:** přidejte argument ve tvaru `--log-level=DEBUG` (hodnoty: `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`, `ALL`; lze použít i `NONE` místo `OFF`).
+- **Alternativa (JVM):** `-Dcz.cvut.fel.pjv.arimaa.log.level=INFO`
+- **Volitelný zápis do souboru** (vedle konzole, stejný formát jako STDOUT): argument `--log-file=CESTA` nebo JVM vlastnost `-Dcz.cvut.fel.pjv.arimaa.log.file=CESTA` zapne při startu druhý appender na root loggeru (`LoggingSupport`). Bez vlastní cesty lze cestu nastavit programově; výchozí soubor je **`arimaa.log` v kořeni modulu Maven** (vedle `src/`), pokud jde spustit z `target/classes` nebo z JARu v `target/`; jinak **`arimaa.log` v aktuálním pracovním adresáři** (`user.dir`). Používá se jednoduchý **FileAppender** (append), bez rotace. Úroveň logů je nezávislá; při **OFF** se do souboru ani na konzoli nic nevyšle. Ovládání úrovně a souboru z menu aplikace je ve verzi **0.5.4**.
+
+Při spuštění přes Maven lze použít JVM vlastnost (funguje i bez programových argumentů):
+
+```text
+mvn -f Arimaa/pom.xml javafx:run -Dcz.cvut.fel.pjv.arimaa.log.level=DEBUG
+```
+
+Spuštění z IDE: **Main class** `cz.cvut.fel.pjv.arimaa.ArimaaApp`, do **Program arguments** např. `--log-level=INFO` nebo `--log-file=C:/temp/arimaa.log`, nebo VM options `-Dcz.cvut.fel.pjv.arimaa.log.level=INFO` / `-Dcz.cvut.fel.pjv.arimaa.log.file=...`.
 
 ## Použité technologie
 
@@ -32,6 +46,7 @@ Aplikace je členěna do vrstev:
 - **`ai`** – generování tahů a náhodná AI (`MoveGenerator`, `RandomAiPlayer`).
 - **`network`** – rozhraní `GameMessage`, `NetworkClient`, `NetworkServer` **bez implementace**; TCP klient–server podle IP a portu bude doplněn později spolu s popisem protokolu pro finální dokumentaci.
 - **`util`** – např. konstanty desky (`BoardConstants`).
+- **`logging`** – nastavení úrovně Logbacku z CLI / JVM (`LoggingSupport`); nabídka Log v UI od verze **0.5.4**.
 
 V CP2 jsou těla metod záměrně prázdná nebo vracejí neutrální hodnoty; nejde o hratelnou hru.
 

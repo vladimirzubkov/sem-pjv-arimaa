@@ -11,6 +11,7 @@ import java.util.List;
 public record GameMemento(
         GameState state,
         PlayerSide sideToMove,
+        PlayerSide matchWinner,
         boolean ranksMirroredForHomeCheck,
         CellSnap[][] grid,
         List<CellSnap> goldReserve,
@@ -46,6 +47,7 @@ public record GameMemento(
         return new GameMemento(
                 game.getState(),
                 game.getSideToMove(),
+                game.getMatchWinner(),
                 game.isRanksMirroredForHomeCheck(),
                 grid,
                 List.copyOf(gold),

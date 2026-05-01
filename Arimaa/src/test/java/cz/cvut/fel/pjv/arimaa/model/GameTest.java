@@ -214,6 +214,7 @@ class GameTest {
     void applyMoveOneOrthogonalStepSwitchesSide() {
         Game g = playOnEmptyBoard(PlayerSide.GOLD);
         g.getBoard().setPiece(Position.of(0, 0), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        g.getBoard().setPiece(Position.of(3, 3), new Piece(PieceType.RABBIT, PlayerSide.SILVER));
         Move m = new Move();
         Step s = new Step();
         s.setFrom(Position.of(0, 0));
@@ -307,6 +308,182 @@ class GameTest {
         s.setTo(Position.of(0, 2));
         m.getSteps().add(s);
         assertFalse(DefaultRuleEngine.isValidPlayPrefix(g, m));
+    }
+
+    @Test
+    void simulatePlayPrefixRemovesTrapVictimAfterMidTurnStep() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        Position b3 = Position.fromAlgebraic("b3");
+        Position c3 = Position.fromAlgebraic("c3");
+        g.getBoard().setPiece(b3, new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        g.getBoard().setPiece(c3, new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        Move prefix = new Move();
+        Step s = new Step();
+        s.setKind(StepKind.SLIDE);
+        s.setFrom(b3);
+        s.setTo(Position.of(1, 3));
+        prefix.getSteps().add(s);
+        Map<Position, Piece> occ = DefaultRuleEngine.simulatePlayPrefix(g, prefix);
+        assertNull(occ.get(c3));
+        assertNotNull(occ.get(Position.of(1, 3)));
+        assertEquals(PieceType.RABBIT, occ.get(Position.of(1, 3)).getType());
+    }
+
+    @Test
+    void applyMovePushAdvancesStrongerOntoWeakerOrigin() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        Position cat = Position.of(4, 3);
+        Position rab = Position.of(4, 4);
+        Position dest = Position.of(4, 5);
+        g.getBoard().setPiece(cat, new Piece(PieceType.CAT, PlayerSide.GOLD));
+        g.getBoard().setPiece(rab, new Piece(PieceType.RABBIT, PlayerSide.SILVER));
+        Move m = new Move();
+        Step d = new Step();
+        d.setKind(StepKind.PUSH_DISPLACE_WEAKER);
+        d.setFrom(rab);
+        d.setTo(dest);
+        Step a = new Step();
+        a.setKind(StepKind.PUSH_ADVANCE_STRONGER);
+        a.setFrom(cat);
+        a.setTo(rab);
+        m.getSteps().add(d);
+        m.getSteps().add(a);
+        g.applyMove(m);
+        assertNull(g.getBoard().getPiece(cat));
+        Piece onWeakSquare = g.getBoard().getPiece(rab);
+        assertNotNull(onWeakSquare);
+        assertEquals(PieceType.CAT, onWeakSquare.getType());
+        assertEquals(PlayerSide.GOLD, onWeakSquare.getSide());
+        Piece pushed = g.getBoard().getPiece(dest);
+        assertNotNull(pushed);
+        assertEquals(PieceType.RABBIT, pushed.getType());
+        assertEquals(PlayerSide.SILVER, pushed.getSide());
+    }
+
+    @Test
+    void applyMovePullVacatesThenDragsWeaker() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        Position cat = Position.of(3, 3);
+        Position rab = Position.of(4, 3);
+        Position vac = Position.of(3, 2);
+        g.getBoard().setPiece(cat, new Piece(PieceType.CAT, PlayerSide.GOLD));
+        g.getBoard().setPiece(rab, new Piece(PieceType.RABBIT, PlayerSide.SILVER));
+        Move m = new Move();
+        Step v = new Step();
+        v.setKind(StepKind.PULL_VACATE_STRONGER);
+        v.setFrom(cat);
+        v.setTo(vac);
+        Step drag = new Step();
+        drag.setKind(StepKind.PULL_DRAG_WEAKER);
+        drag.setFrom(rab);
+        drag.setTo(cat);
+        m.getSteps().add(v);
+        m.getSteps().add(drag);
+        g.applyMove(m);
+        assertNull(g.getBoard().getPiece(rab));
+        assertEquals(PieceType.CAT, g.getBoard().getPiece(vac).getType());
+        Piece onOldCat = g.getBoard().getPiece(cat);
+        assertNotNull(onOldCat);
+        assertEquals(PieceType.RABBIT, onOldCat.getType());
+        assertEquals(PlayerSide.SILVER, onOldCat.getSide());
+    }
+
+    @Test
+    void frozenPieceCannotSlide() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        Position r = Position.of(2, 3);
+        g.getBoard().setPiece(r, new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        g.getBoard().setPiece(Position.of(2, 4), new Piece(PieceType.DOG, PlayerSide.SILVER));
+        Move m = new Move();
+        Step s = new Step();
+        s.setKind(StepKind.SLIDE);
+        s.setFrom(r);
+        s.setTo(Position.of(1, 3));
+        m.getSteps().add(s);
+        assertFalse(DefaultRuleEngine.isValidPlayPrefix(g, m));
+        assertTrue(DefaultRuleEngine.isFrozen(g.getBoard(), r));
+    }
+
+    @Test
+    void goldRabbitReachingGoalRankEndsGameWithGoldWinner() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.getBoard().setPiece(Position.of(0, 6), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        Move m = new Move();
+        Step s = new Step();
+        s.setKind(StepKind.SLIDE);
+        s.setFrom(Position.of(0, 6));
+        s.setTo(Position.of(0, 7));
+        m.getSteps().add(s);
+        g.applyMove(m);
+        assertEquals(GameState.GAME_OVER, g.getState());
+        assertEquals(PlayerSide.GOLD, g.getMatchWinner());
+    }
+
+    @Test
+    void sideWithoutRabbitsLosesWhenOpponentStillHasRabbit() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.getBoard().setPiece(Position.of(0, 0), new Piece(PieceType.CAT, PlayerSide.GOLD));
+        g.getBoard().setPiece(Position.of(7, 7), new Piece(PieceType.RABBIT, PlayerSide.SILVER));
+        Move m = new Move();
+        Step s = new Step();
+        s.setKind(StepKind.SLIDE);
+        s.setFrom(Position.of(0, 0));
+        s.setTo(Position.of(0, 1));
+        m.getSteps().add(s);
+        g.applyMove(m);
+        assertEquals(GameState.GAME_OVER, g.getState());
+        assertEquals(PlayerSide.SILVER, g.getMatchWinner());
+    }
+
+    /**
+     * Silver rabbits may sit on rank 8 (index 7) like in the opening; that must not end the game as a false
+     * „illegal on goal row“ win.
+     */
+    @Test
+    void goldMoveWithSilverRabbitOnBackRankDoesNotInstantlyEndGame() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.getBoard().setPiece(Position.of(0, 7), new Piece(PieceType.RABBIT, PlayerSide.SILVER));
+        g.getBoard().setPiece(Position.of(0, 6), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        Move m = new Move();
+        Step s = new Step();
+        s.setKind(StepKind.SLIDE);
+        s.setFrom(Position.of(0, 6));
+        s.setTo(Position.of(1, 6));
+        m.getSteps().add(s);
+        g.applyMove(m);
+        assertEquals(GameState.PLAY, g.getState());
+        assertEquals(PlayerSide.SILVER, g.getSideToMove());
+    }
+
+    @Test
+    void immobilizedSideToMoveLosesAfterOpponentTurn() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.getBoard().setPiece(Position.of(4, 4), new Piece(PieceType.RABBIT, PlayerSide.SILVER));
+        g.getBoard().setPiece(Position.of(4, 3), new Piece(PieceType.DOG, PlayerSide.GOLD));
+        g.getBoard().setPiece(Position.of(0, 0), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        assertTrue(DefaultRuleEngine.existsLegalTurn(g));
+        Move m = new Move();
+        Step s = new Step();
+        s.setKind(StepKind.SLIDE);
+        s.setFrom(Position.of(0, 0));
+        s.setTo(Position.of(0, 1));
+        m.getSteps().add(s);
+        g.applyMove(m);
+        assertEquals(GameState.GAME_OVER, g.getState());
+        assertEquals(PlayerSide.GOLD, g.getMatchWinner());
+    }
+
+    @Test
+    void applyMoveThrowsWhenGameAlreadyOver() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.setState(GameState.GAME_OVER);
+        g.setMatchWinner(PlayerSide.SILVER);
+        Move m = new Move();
+        Step s = new Step();
+        s.setFrom(Position.of(0, 0));
+        s.setTo(Position.of(0, 1));
+        m.getSteps().add(s);
+        assertThrows(IllegalStateException.class, () -> g.applyMove(m));
     }
 
     private static Game playOnEmptyBoard(PlayerSide sideToMove) {

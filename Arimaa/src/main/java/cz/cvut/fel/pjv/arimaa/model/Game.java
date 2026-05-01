@@ -10,14 +10,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Root aggregate for match state: board, side to move, lifecycle state, and setup flow.
  */
 public class Game {
 
+    private static final Logger log = LoggerFactory.getLogger(Game.class);
+
     private GameState state;
     private Board board;
     private PlayerSide sideToMove;
+    /** Non-null only when {@link #state} is {@link GameState#GAME_OVER}. */
+    private PlayerSide matchWinner;
 
     private final RuleEngine ruleEngine = new DefaultRuleEngine();
 
@@ -63,6 +70,17 @@ public class Game {
     }
 
     /**
+     * Winner once {@link GameState#GAME_OVER}; {@code null} while the match is ongoing.
+     */
+    public PlayerSide getMatchWinner() {
+        return matchWinner;
+    }
+
+    public void setMatchWinner(PlayerSide matchWinner) {
+        this.matchWinner = matchWinner;
+    }
+
+    /**
      * When {@code true}, {@link HomeTerritory#contains(PlayerSide, Position, boolean)} mirrors rank index first.
      */
     public boolean isRanksMirroredForHomeCheck() {
@@ -91,6 +109,7 @@ public class Game {
         Collections.shuffle(silverReserve);
         state = GameState.SETUP_GOLD;
         sideToMove = PlayerSide.GOLD;
+        matchWinner = null;
         ranksMirroredForHomeCheck = false;
     }
 
@@ -320,7 +339,11 @@ public class Game {
         if (state != GameState.PLAY) {
             throw new IllegalStateException("applyMove only in PLAY");
         }
+        log.debug("Game.applyMove: sideToMove={} stepCount={}", sideToMove, move.getSteps().size());
         ruleEngine.applyMove(this, move);
+        if (state == GameState.GAME_OVER) {
+            log.info("Game.applyMove finished: GAME_OVER matchWinner={}", matchWinner);
+        }
     }
 
     /**
@@ -357,6 +380,7 @@ public class Game {
         setupHand = hand == null ? null : new Piece(hand.type(), hand.side());
         this.state = m.state();
         this.sideToMove = m.sideToMove();
+        this.matchWinner = m.matchWinner();
         this.ranksMirroredForHomeCheck = m.ranksMirroredForHomeCheck();
     }
 

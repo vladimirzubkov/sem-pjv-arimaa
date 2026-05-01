@@ -4,10 +4,15 @@ import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.GameTimeline;
 import cz.cvut.fel.pjv.arimaa.model.Move;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Thin MVC layer between JavaFX views and the domain model.
  */
 public class GameController {
+
+    private static final Logger log = LoggerFactory.getLogger(GameController.class);
 
     private Game game;
     private final GameTimeline timeline = new GameTimeline();
@@ -65,8 +70,10 @@ public class GameController {
         }
         try {
             game.applyMove(move);
+            log.info("submitHumanMove: applied {} steps", move.getSteps().size());
             return true;
         } catch (IllegalArgumentException | IllegalStateException ex) {
+            log.debug("submitHumanMove failed: {}", ex.getMessage());
             return false;
         }
     }

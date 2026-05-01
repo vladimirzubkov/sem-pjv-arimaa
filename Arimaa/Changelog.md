@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.4
+
+- **Plná pravidla PLAY:** `DefaultRuleEngine` — tahy 1–4 kroků, `StepKind` (`SLIDE`, dvojice push/pull), **mražení** (`isFrozen` / `isFrozenOccupancy`), **pasti** po každém kroku, konec hry (králík v cíli, žádný králík, **imobilizace** po přepnutí strany); pravidlo „cizí králík v cílovém řádku“ z kódu odstraněno (způsobovalo předčasný konec kvůli legálnímu rozestavení Silver na horním řádku). `Game.matchWinner` + `GameMemento`.
+- **UI:** náhled rozpracovaného tahu přes `simulatePlayPrefix`, legální cíle včetně **push/pull**; menu **Log → Logback Level** a **Log → Zapisovat do souboru** (`LoggingSupport`); titulek okna po **GAME_OVER** bez zavádějícího „na tahu“ po imobilizaci.
+- **Model:** `StepKind`, `PieceStrength`, úpravy `Game`, `Step`, `GameMemento`, `GameTimeline`; logy v `DefaultRuleEngine`, `Game`, `GameController`, `GameTimeline` a vybrané akce v `MainController`.
+- Testy v `GameTest`: past uprostřed tahu (simulace), push/pull, mražení, výhra králíkem / bez králíků / imobilizace, tah Gold při Silver králíkovi na 8. řádku (hra pokračuje), zamítnutí tahu po skončení hry.
+
 ## 0.4.4
 
 - **Logování (SLF4J + Logback):** výchozí úroveň **OFF** (`logback.xml`); balíček `logging` — třída `LoggingSupport` (`bootstrapFromArgs`, úprava root úrovně, volitelný souborový appender `ARO_FILE`, CLI `--log-level` / `--log-file`, JVM `cz.cvut.fel.pjv.arimaa.log.level` / `cz.cvut.fel.pjv.arimaa.log.file`, výchozí soubor `arimaa.log` v kořeni modulu Maven vedle `src/` nebo v `user.dir`).

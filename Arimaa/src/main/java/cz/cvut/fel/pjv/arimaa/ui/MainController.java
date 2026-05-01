@@ -1,6 +1,7 @@
 package cz.cvut.fel.pjv.arimaa.ui;
 
 import cz.cvut.fel.pjv.arimaa.controller.GameController;
+import cz.cvut.fel.pjv.arimaa.logging.LoggingSupport;
 import cz.cvut.fel.pjv.arimaa.model.DefaultRuleEngine;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.GameState;
@@ -10,6 +11,7 @@ import cz.cvut.fel.pjv.arimaa.model.PieceType;
 import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.model.Step;
+import cz.cvut.fel.pjv.arimaa.model.StepKind;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import cz.cvut.fel.pjv.arimaa.util.HomeTerritory;
 import javafx.application.Platform;
@@ -17,6 +19,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
@@ -52,8 +55,12 @@ import javafx.scene.text.Font;
 import javafx.scene.transform.Scale;
 import javafx.stage.Stage;
 
+import ch.qos.logback.classic.Level;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +70,8 @@ import java.util.Set;
  * Primary window: board and setup controls (manual, random, chess layout, finish setup).
  */
 public class MainController {
+
+    private static final Logger log = LoggerFactory.getLogger(MainController.class);
 
     private static final int CELL = 52;
     /** Gap between adjacent columns/rows on the unified board {@link GridPane}. */
@@ -97,6 +106,14 @@ public class MainController {
     private final ImageView handPieceGraphic = new ImageView();
     private MenuItem undoMenuItem;
     private MenuItem redoMenuItem;
+
+    private ToggleGroup logLevelToggleGroup;
+    /** Avoid feedback when programmatically selecting the log-level radio matching {@link LoggingSupport#getCurrentLevel()}. */
+    private boolean suppressLogLevelSync;
+
+    private CheckMenuItem logToFileItem;
+    /** Avoid firing {@link #logToFileItem} action when syncing from {@link LoggingSupport#isFileLoggingEnabled()}. */
+    private boolean suppressFileLogSync;
 
     private final FigureSvgRasterCache figureRasterCache = new FigureSvgRasterCache();
     private PieceSkin pieceSkin = PieceSkin.DEFAULT;
@@ -325,8 +342,55 @@ public class MainController {
         menuSkins.getItems().addAll(skinDefaultItem, skinNoneItem);
         menuGameplay.getItems().add(menuSkins);
 
+        Menu menuLog = new Menu("Log");
+        Menu menuLogLevel = new Menu("Logback Level");
+        logLevelToggleGroup = new ToggleGroup();
+        for (Level lvl : List.of(Level.OFF, Level.ERROR, Level.WARN, Level.INFO, Level.DEBUG, Level.TRACE)) {
+            RadioMenuItem item = new RadioMenuItem(lvl.toString());
+            item.setToggleGroup(logLevelToggleGroup);
+            item.setUserData(lvl);
+            menuLogLevel.getItems().add(item);
+        }
+        logLevelToggleGroup.selectedToggleProperty().addListener((obs, prev, toggled) -> {
+            if (suppressLogLevelSync || toggled == null) {
+                return;
+            }
+            if (toggled instanceof RadioMenuItem r && r.getUserData() instanceof Level selected) {
+                LoggingSupport.setLevel(selected);
+            }
+        });
+        menuLog.getItems().add(menuLogLevel);
+
+        logToFileItem = new CheckMenuItem("Zapisovat do souboru");
+        logToFileItem.setOnAction(e -> {
+            if (suppressFileLogSync) {
+                return;
+            }
+            if (logToFileItem.isSelected()) {
+                if (!LoggingSupport.enableFileLogging(LoggingSupport.defaultLogFilePath())) {
+                    suppressFileLogSync = true;
+                    try {
+                        logToFileItem.setSelected(false);
+                    } finally {
+                        suppressFileLogSync = false;
+                    }
+                    setStatus("Log do souboru: zapnutí se nepodařilo (viz konzole).");
+                } else {
+                    setStatus("Log do souboru zapnut.");
+                }
+            } else {
+                LoggingSupport.disableFileLogging();
+                setStatus("Log do souboru vypnut.");
+            }
+        });
+        menuLog.getItems().add(logToFileItem);
+        menuLog.setOnShowing(e -> {
+            syncLogLevelMenuSelection();
+            syncLogToFileMenuSelection();
+        });
+
         MenuBar menuBar = new MenuBar();
-        menuBar.getMenus().addAll(menuHra, menuTah, menuGameplay);
+        menuBar.getMenus().addAll(menuHra, menuTah, menuGameplay, menuLog);
 
         BorderPane root = new BorderPane();
         root.setTop(menuBar);
@@ -351,6 +415,8 @@ public class MainController {
             gameController.resetTimeline();
         }
         refreshAll();
+        syncLogLevelMenuSelection();
+        syncLogToFileMenuSelection();
     }
 
     /**
@@ -672,6 +738,38 @@ public class MainController {
         paintHoverOverlay(g);
     }
 
+    private void syncLogLevelMenuSelection() {
+        if (logLevelToggleGroup == null) {
+            return;
+        }
+        Level current = LoggingSupport.getCurrentLevel();
+        suppressLogLevelSync = true;
+        try {
+            for (var t : logLevelToggleGroup.getToggles()) {
+                if (t instanceof RadioMenuItem r && r.getUserData() instanceof Level l) {
+                    if (l.toInt() == current.toInt()) {
+                        logLevelToggleGroup.selectToggle(r);
+                        return;
+                    }
+                }
+            }
+        } finally {
+            suppressLogLevelSync = false;
+        }
+    }
+
+    private void syncLogToFileMenuSelection() {
+        if (logToFileItem == null) {
+            return;
+        }
+        suppressFileLogSync = true;
+        try {
+            logToFileItem.setSelected(LoggingSupport.isFileLoggingEnabled());
+        } finally {
+            suppressFileLogSync = false;
+        }
+    }
+
     /**
      * Resets each cell’s background to its base style, then in {@link GameState#PLAY} highlights the
      * selected origin square and legal step targets (orthogonal empty squares).
@@ -698,8 +796,7 @@ public class MainController {
         if (playPartialMove.getSteps().size() >= 4) {
             return;
         }
-        Map<Position, Piece> occ = buildVirtualPlayOccupancy(g, playPartialMove);
-        for (Position to : computeLegalPlayTargetsForSelection(g, occ)) {
+        for (Position to : computeLegalPlayTargetsForSelection(g)) {
             CellData tdata = cellDataAt(to);
             Rectangle tbg = tdata.background();
             tbg.setFill(tdata.baseFill().interpolate(Color.web("#a8f0c0"), 0.48));
@@ -714,34 +811,89 @@ public class MainController {
         return (CellData) boardCells[row][col].getUserData();
     }
 
-    private Set<Position> computeLegalPlayTargetsForSelection(Game g, Map<Position, Piece> occ) {
+    private Set<Position> computeLegalPlayTargetsForSelection(Game g) {
         Set<Position> out = new HashSet<>();
         if (playNextFrom == null) {
             return out;
         }
-        int f = playNextFrom.getFileIndex();
-        int r = playNextFrom.getRankIndex();
-        int[][] deltas = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-        for (int[] d : deltas) {
-            int nf = f + d[0];
-            int nr = r + d[1];
-            if (nf < 0 || nf >= BoardConstants.BOARD_SIZE || nr < 0 || nr >= BoardConstants.BOARD_SIZE) {
-                continue;
+        int remaining = 4 - playPartialMove.getSteps().size();
+        if (remaining < 1) {
+            return out;
+        }
+        Map<Position, Piece> occ;
+        try {
+            occ = DefaultRuleEngine.simulatePlayPrefix(g, playPartialMove);
+        } catch (IllegalArgumentException ex) {
+            return out;
+        }
+        PlayerSide side = g.getSideToMove();
+        if (remaining >= 1) {
+            int f = playNextFrom.getFileIndex();
+            int r = playNextFrom.getRankIndex();
+            int[][] deltas = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+            for (int[] d : deltas) {
+                int nf = f + d[0];
+                int nr = r + d[1];
+                if (nf < 0 || nf >= BoardConstants.BOARD_SIZE || nr < 0 || nr >= BoardConstants.BOARD_SIZE) {
+                    continue;
+                }
+                Position to = Position.of(nf, nr);
+                if (occ.get(to) != null) {
+                    continue;
+                }
+                Step step = new Step();
+                step.setKind(StepKind.SLIDE);
+                step.setFrom(playNextFrom);
+                step.setTo(to);
+                Move trial = copyMove(playPartialMove);
+                trial.getSteps().add(copyStep(step));
+                if (DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
+                    out.add(to);
+                }
             }
-            Position to = Position.of(nf, nr);
-            if (occ.get(to) != null) {
-                continue;
-            }
-            Step step = new Step();
-            step.setFrom(playNextFrom);
-            step.setTo(to);
-            Move trial = copyMove(playPartialMove);
-            trial.getSteps().add(copyStep(step));
-            if (DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
-                out.add(to);
+        }
+        if (remaining >= 2) {
+            for (List<Step> bundle : DefaultRuleEngine.enumerateStepBundles(occ, side)) {
+                if (bundle.size() > remaining) {
+                    continue;
+                }
+                if (!bundleStartsFromPlayNext(bundle)) {
+                    continue;
+                }
+                Move trial = copyMove(playPartialMove);
+                for (Step st : bundle) {
+                    trial.getSteps().add(copyStep(st));
+                }
+                if (DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
+                    out.add(bundle.get(0).getTo());
+                }
             }
         }
         return out;
+    }
+
+    private boolean bundleStartsFromPlayNext(List<Step> bundle) {
+        Step s0 = bundle.get(0);
+        StepKind k = DefaultRuleEngine.kindOf(s0);
+        return switch (k) {
+            case SLIDE -> playNextFrom.equals(s0.getFrom());
+            case PUSH_DISPLACE_WEAKER ->
+                    bundle.size() >= 2 && playNextFrom.equals(bundle.get(1).getFrom());
+            case PULL_VACATE_STRONGER -> playNextFrom.equals(s0.getFrom());
+            default -> false;
+        };
+    }
+
+    private static Position endOwnSquareAfterBundle(List<Step> bundle) {
+        Step s0 = bundle.get(0);
+        StepKind k = DefaultRuleEngine.kindOf(s0);
+        if (bundle.size() == 2 && k == StepKind.PUSH_DISPLACE_WEAKER) {
+            return bundle.get(1).getTo();
+        }
+        if (bundle.size() == 2 && k == StepKind.PULL_VACATE_STRONGER) {
+            return bundle.get(0).getTo();
+        }
+        return bundle.get(0).getTo();
     }
 
     private void paintBoard(Game g) {
@@ -891,15 +1043,24 @@ public class MainController {
         String phase = switch (g.getState()) {
             case SETUP_GOLD -> "rozestavení Gold";
             case SETUP_SILVER -> "rozestavení Silver";
-            case PLAY -> "hra (jednoduché tahy)";
+            case PLAY -> "hra";
+            case GAME_OVER -> {
+                PlayerSide w = g.getMatchWinner();
+                yield w == null ? "konec hry" : ("výhra " + sideName(w));
+            }
             default -> String.valueOf(g.getState());
         };
-        stage.setTitle("Arimaa – " + phase + " | na tahu: " + sideName(g.getSideToMove()));
+        if (g.getState() == GameState.GAME_OVER) {
+            stage.setTitle("Arimaa – " + phase);
+        } else {
+            stage.setTitle("Arimaa – " + phase + " | na tahu: " + sideName(g.getSideToMove()));
+        }
     }
 
     private void startNewGameAction() {
         Game g = game();
         if (g != null) {
+            log.info("user action: new game");
             clearPlayTurnUi();
             g.startNewGame();
             if (gameController != null) {
@@ -947,31 +1108,16 @@ public class MainController {
         playNextFrom = null;
     }
 
-    private static Map<Position, Piece> buildVirtualPlayOccupancy(Game g, Move partial) {
-        Map<Position, Piece> occ = new HashMap<>();
-        for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
-            for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
-                Position p = Position.of(f, r);
-                Piece pc = g.getBoard().getPiece(p);
-                if (pc != null) {
-                    occ.put(p, pc);
-                }
-            }
-        }
-        for (Step s : partial.getSteps()) {
-            Piece moved = occ.remove(s.getFrom());
-            if (moved != null) {
-                occ.put(s.getTo(), moved);
-            }
-        }
-        return occ;
-    }
-
     private Piece effectivePieceAt(Game g, Position pos) {
         if (g.getState() != GameState.PLAY || playPartialMove.getSteps().isEmpty()) {
             return g.getBoard().getPiece(pos);
         }
-        return buildVirtualPlayOccupancy(g, playPartialMove).get(pos);
+        try {
+            Map<Position, Piece> occ = DefaultRuleEngine.simulatePlayPrefix(g, playPartialMove);
+            return occ.get(pos);
+        } catch (IllegalArgumentException ex) {
+            return g.getBoard().getPiece(pos);
+        }
     }
 
     private static Move copyMove(Move src) {
@@ -986,6 +1132,7 @@ public class MainController {
         Step t = new Step();
         t.setFrom(s.getFrom());
         t.setTo(s.getTo());
+        t.setKind(s.getKind());
         return t;
     }
 
@@ -1015,19 +1162,57 @@ public class MainController {
             setStatus("Maximálně 4 kroky — stiskněte Konec tahu.");
             return;
         }
-        Step step = new Step();
-        step.setFrom(playNextFrom);
-        step.setTo(pos);
-        Move trial = copyMove(playPartialMove);
-        trial.getSteps().add(copyStep(step));
-        if (!DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
-            setStatus("Neplatný krok.");
-            return;
+        int remaining = 4 - playPartialMove.getSteps().size();
+        if (remaining >= 1) {
+            Step slide = new Step();
+            slide.setKind(StepKind.SLIDE);
+            slide.setFrom(playNextFrom);
+            slide.setTo(pos);
+            Move trialSlide = copyMove(playPartialMove);
+            trialSlide.getSteps().add(copyStep(slide));
+            if (DefaultRuleEngine.isValidPlayPrefix(g, trialSlide)) {
+                playPartialMove.getSteps().add(copyStep(slide));
+                playNextFrom = pos;
+                setStatus("Krok přidán (" + playPartialMove.getSteps().size() + "/4). Konec tahu nebo další krok.");
+                refreshAll();
+                return;
+            }
         }
-        playPartialMove.getSteps().add(copyStep(step));
-        playNextFrom = pos;
-        setStatus("Krok přidán (" + playPartialMove.getSteps().size() + "/4). Konec tahu nebo další krok.");
-        refreshAll();
+        if (remaining >= 2) {
+            Map<Position, Piece> occ;
+            try {
+                occ = DefaultRuleEngine.simulatePlayPrefix(g, playPartialMove);
+            } catch (IllegalArgumentException ex) {
+                setStatus("Neplatný krok.");
+                return;
+            }
+            for (List<Step> bundle : DefaultRuleEngine.enumerateStepBundles(occ, side)) {
+                if (bundle.size() > remaining) {
+                    continue;
+                }
+                if (!bundleStartsFromPlayNext(bundle)) {
+                    continue;
+                }
+                if (!bundle.get(0).getTo().equals(pos)) {
+                    continue;
+                }
+                Move trial = copyMove(playPartialMove);
+                for (Step st : bundle) {
+                    trial.getSteps().add(copyStep(st));
+                }
+                if (!DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
+                    continue;
+                }
+                for (Step st : bundle) {
+                    playPartialMove.getSteps().add(copyStep(st));
+                }
+                playNextFrom = endOwnSquareAfterBundle(bundle);
+                setStatus("Krok přidán (" + playPartialMove.getSteps().size() + "/4). Konec tahu nebo další krok.");
+                refreshAll();
+                return;
+            }
+        }
+        setStatus("Neplatný krok.");
     }
 
     private void tryEndPlayTurn() {
@@ -1040,12 +1225,21 @@ public class MainController {
             return;
         }
         Move submit = copyMove(playPartialMove);
+        log.debug("submitting play turn: {} steps", submit.getSteps().size());
         if (!gameController.submitHumanMove(submit)) {
+            log.info("submitHumanMove rejected (illegal or invalid state)");
             setStatus("Tah není platný.");
             return;
         }
         clearPlayTurnUi();
-        setStatus("Tah proveden.");
+        if (g.getState() == GameState.GAME_OVER) {
+            PlayerSide w = g.getMatchWinner();
+            log.info("play turn ended: GAME_OVER winner={}", w);
+            setStatus(w == null ? "Konec hry." : ("Konec hry — vyhrál " + sideName(w) + "."));
+        } else {
+            log.info("play turn ended: state={} sideToMove={}", g.getState(), g.getSideToMove());
+            setStatus("Tah proveden.");
+        }
         recordTimeline();
         refreshAll();
     }

@@ -15,7 +15,8 @@ Zdrojový kód je v adresáři [`Arimaa/`](Arimaa/).
 - **Výchozí:** žádný výstup na konzoli (úroveň **OFF**).
 - **Při spuštění z příkazové řádky:** přidejte argument ve tvaru `--log-level=DEBUG` (hodnoty: `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`, `ALL`; lze použít i `NONE` místo `OFF`).
 - **Alternativa (JVM):** `-Dcz.cvut.fel.pjv.arimaa.log.level=INFO`
-- **Volitelný zápis do souboru** (vedle konzole, stejný formát jako STDOUT): argument `--log-file=CESTA` nebo JVM vlastnost `-Dcz.cvut.fel.pjv.arimaa.log.file=CESTA` zapne při startu druhý appender na root loggeru (`LoggingSupport`). Bez vlastní cesty lze cestu nastavit programově; výchozí soubor je **`arimaa.log` v kořeni modulu Maven** (vedle `src/`), pokud jde spustit z `target/classes` nebo z JARu v `target/`; jinak **`arimaa.log` v aktuálním pracovním adresáři** (`user.dir`). Používá se jednoduchý **FileAppender** (append), bez rotace. Úroveň logů je nezávislá; při **OFF** se do souboru ani na konzoli nic nevyšle. Ovládání úrovně a souboru z menu aplikace je ve verzi **0.5.4**.
+- **V aplikaci:** menu **Log → Logback Level** — výběr úrovně za běhu (Logback root logger).
+- **Volitelný zápis do souboru** (vedle konzole, stejný formát jako STDOUT): argument `--log-file=CESTA` nebo JVM vlastnost `-Dcz.cvut.fel.pjv.arimaa.log.file=CESTA` zapne při startu druhý appender na root loggeru. V menu **Log → Zapisovat do souboru** lze zápis zapnout/vypnout za běhu; bez vlastní cesty se použije soubor **`arimaa.log` v kořeni modulu Maven** (vedle `src/`), pokud jde spustit z `target/classes` nebo z JARu v `target/`; jinak **`arimaa.log` v aktuálním pracovním adresáři** (`user.dir`). Používá se jednoduchý **FileAppender** (append), bez rotace — pro větší objemy logů zvolte cestu na disk s dostatečným místem. Úroveň logů je nezávislá; při **OFF** se do souboru ani na konzoli nic nevyšle.
 
 Při spuštění přes Maven lze použít JVM vlastnost (funguje i bez programových argumentů):
 
@@ -46,7 +47,7 @@ Aplikace je členěna do vrstev:
 - **`ai`** – generování tahů a náhodná AI (`MoveGenerator`, `RandomAiPlayer`).
 - **`network`** – rozhraní `GameMessage`, `NetworkClient`, `NetworkServer` **bez implementace**; TCP klient–server podle IP a portu bude doplněn později spolu s popisem protokolu pro finální dokumentaci.
 - **`util`** – např. konstanty desky (`BoardConstants`).
-- **`logging`** – nastavení úrovně Logbacku z CLI / JVM (`LoggingSupport`); nabídka Log v UI od verze **0.5.4**.
+- **`logging`** – nastavení úrovně Logbacku z CLI / JVM a z menu (`LoggingSupport`).
 
 V CP2 jsou těla metod záměrně prázdná nebo vracejí neutrální hodnoty; nejde o hratelnou hru.
 

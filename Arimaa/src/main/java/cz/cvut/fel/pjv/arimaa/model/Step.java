@@ -7,6 +7,8 @@ public class Step {
 
     private Position from;
     private Position to;
+    /** When {@code null}, treated as {@link StepKind#SLIDE} for backward compatibility. */
+    private StepKind kind;
 
     public Position getFrom() {
         return from;
@@ -22,5 +24,13 @@ public class Step {
 
     public void setTo(Position to) {
         this.to = to;
+    }
+
+    public StepKind getKind() {
+        return kind;
+    }
+
+    public void setKind(StepKind kind) {
+        this.kind = kind;
     }
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.6
+
+- **UI (PLAY / GAME_OVER):** skrytí bloku rezervy a tlačítek rozestavení; řádek „Tah (Gold/Silver): …“; postranní panel **Zajaté (Gold) / (Silver)** s ikonami zajatých typů (lovčky; **36 px**), včetně náhledu během rozpracovaného tahu.
+- **Model:** seznamy obětí pastí v `Game`, serializace v `GameMemento`; `Board.copy()`; `DefaultRuleEngine.applyMoveToBoard(Board, Move, Consumer)` a `trapCapturesIfPrefixApplied` pro náhled pastí bez mutace hry.
+- **Gameplay (menu):** volitelné zakázání **Zrušit rozpracovaný tah** poté, co náhled prefixu odstraní vlastní figuru pastí.
+- **Rozestavení:** tlačítko **Hotovo (ukončit rozestavení)** aktivní až když `Game.allSetupPiecesOnBoard` (prázdná rezerva, nic v ruce, 16 figurek na domově); plná legalita multisetu zůstává u `tryCompleteSetup`.
+
 ## 0.5.5
 
 - Balíček `cz.cvut.fel.pjv.arimaa.exception`: **`IllegalMoveException`** (rozšíření `IllegalArgumentException`) — porušení pravidel tahu v `DefaultRuleEngine` (slide, push/pull, počet kroků, …).

@@ -112,6 +112,24 @@ public class Board {
     }
 
     /**
+     * Deep copy of the grid (new {@link Piece} instances per occupied square).
+     * Used for rule previews without mutating match state.
+     */
+    public Board copy() {
+        Board b = new Board();
+        for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
+            for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
+                Position p = Position.of(f, r);
+                Piece piece = squares[r][f];
+                if (piece != null) {
+                    b.setPiece(p, new Piece(piece.getType(), piece.getSide()));
+                }
+            }
+        }
+        return b;
+    }
+
+    /**
      * Checks if the given rank and file indices are within the bounds of the board.
      * @param rankIndex the rank index to check
      * @param fileIndex the file index to check

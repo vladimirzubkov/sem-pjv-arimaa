@@ -38,6 +38,7 @@ import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.CornerRadii;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
@@ -60,6 +61,7 @@ import ch.qos.logback.classic.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
@@ -86,6 +88,7 @@ public class MainController {
     private static final double PIECE_IMAGE_MAX = Math.max(16, CELL - 8);
     private static final double RESERVE_ICON_MAX = 26;
     private static final double HAND_ICON_MAX = 28;
+    private static final double CAPTURE_ICON_MAX = 36;
 
     /** Equal inset from {@link BoardHostPane} edges to the scaled board block. */
     private static final double BOARD_VIEW_MARGIN = 14;
@@ -118,6 +121,9 @@ public class MainController {
     private final FigureSvgRasterCache figureRasterCache = new FigureSvgRasterCache();
     private PieceSkin pieceSkin = PieceSkin.DEFAULT;
 
+    /** When selected, „Zrušit rozpracovaný tah“ is disabled after the mover's own piece is trapped in the current prefix. */
+    private CheckMenuItem forbidCancelAfterOwnTrapItem;
+
     /** Home square currently hovered during setup (ghost placement); both null if none. */
     private Integer hoverFileIndex;
     private Integer hoverRankIndex;
@@ -127,6 +133,13 @@ public class MainController {
     private Position playNextFrom;
     private Button playEndTurnButton;
     private Button playCancelTurnButton;
+
+    /** Setup reserve tray + piece-type buttons; hidden during PLAY. */
+    private VBox reserveBox;
+    /** Trap captures display; visible in PLAY and GAME_OVER. */
+    private final VBox capturesBox = new VBox(6);
+    private final FlowPane goldCapturesPane = new FlowPane(4, 4);
+    private final FlowPane silverCapturesPane = new FlowPane(4, 4);
 
     private enum PieceSkin {
         /** Letter abbreviations only (no piece art). */
@@ -156,7 +169,7 @@ public class MainController {
             }
         }
 
-        VBox reserveBox = new VBox(6, new Label("Rezerva (klik = vzít figuru):"));
+        reserveBox = new VBox(6, new Label("Rezerva (klik = vzít figuru):"));
         reserveBox.setPadding(new Insets(0, 0, 8, 0));
         for (PieceType type : PieceType.values()) {
             Button b = new Button(labelForReserveButton(type, 0));
@@ -250,6 +263,14 @@ public class MainController {
         handPieceGraphic.setPreserveRatio(true);
         handPieceGraphic.setSmooth(true);
 
+        goldCapturesPane.setPrefWrapLength(220);
+        silverCapturesPane.setPrefWrapLength(220);
+        capturesBox.getChildren().addAll(
+                new Label("Zajaté (Gold):"),
+                goldCapturesPane,
+                new Label("Zajaté (Silver):"),
+                silverCapturesPane);
+
         statusLabel.setWrapText(true);
         statusLabel.setMaxWidth(240);
         setStatus("Rozestavte Gold; pak Hotovo. Silver totéž.");
@@ -259,6 +280,7 @@ public class MainController {
                 statusLabel,
                 handLabel,
                 spacer(8),
+                capturesBox,
                 reserveBox,
                 cancelHandButton,
                 randomButton,
@@ -341,6 +363,12 @@ public class MainController {
         });
         menuSkins.getItems().addAll(skinDefaultItem, skinNoneItem);
         menuGameplay.getItems().add(menuSkins);
+        menuGameplay.getItems().add(new SeparatorMenuItem());
+        forbidCancelAfterOwnTrapItem = new CheckMenuItem(
+                "Po pádu vlastní figury do pasti nelze zrušit rozpracovaný tah");
+        forbidCancelAfterOwnTrapItem.setSelected(false);
+        forbidCancelAfterOwnTrapItem.selectedProperty().addListener((obs, prev, now) -> refreshAll());
+        menuGameplay.getItems().add(forbidCancelAfterOwnTrapItem);
 
         Menu menuLog = new Menu("Log");
         Menu menuLogLevel = new Menu("Logback Level");
@@ -732,6 +760,8 @@ public class MainController {
         paintPlayHighlights(g);
         refreshReserveButtons(g);
         refreshActionButtons(g);
+        refreshSetupSectionVisibility(g);
+        refreshCapturedPanel(g);
         refreshHandLabel(g);
         updateWindowTitle(g);
         refreshHistoryMenus();
@@ -977,15 +1007,19 @@ public class MainController {
         PlayerSide side = g.getSideToMove();
         cancelHandButton.setDisable(!setup || g.getSetupHand() == null);
         chessButton.setDisable(!setup);
-        doneButton.setDisable(!setup);
+        doneButton.setDisable(!setup || !g.allSetupPiecesOnBoard(side));
         boolean canRandom = setup && reserveSizesMatchEmptyHome(g, side);
         randomButton.setDisable(!setup || !canRandom);
         if (playEndTurnButton != null) {
             playEndTurnButton.setDisable(!play || playPartialMove.getSteps().isEmpty());
         }
         if (playCancelTurnButton != null) {
-            playCancelTurnButton.setDisable(!play
-                    || (playPartialMove.getSteps().isEmpty() && playNextFrom == null));
+            boolean canCancelNormally = play
+                    && (!playPartialMove.getSteps().isEmpty() || playNextFrom != null);
+            boolean trapBlocksCancel = forbidCancelAfterOwnTrapItem != null
+                    && forbidCancelAfterOwnTrapItem.isSelected()
+                    && partialTurnOwnPieceTrapped(g);
+            playCancelTurnButton.setDisable(!canCancelNormally || trapBlocksCancel);
         }
     }
 
@@ -1006,12 +1040,89 @@ public class MainController {
         return !res.isEmpty() && res.size() == empty;
     }
 
+    private void refreshSetupSectionVisibility(Game g) {
+        boolean setup = g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER;
+        reserveBox.setVisible(setup);
+        reserveBox.setManaged(setup);
+        cancelHandButton.setVisible(setup);
+        cancelHandButton.setManaged(setup);
+        randomButton.setVisible(setup);
+        randomButton.setManaged(setup);
+        chessButton.setVisible(setup);
+        chessButton.setManaged(setup);
+        doneButton.setVisible(setup);
+        doneButton.setManaged(setup);
+    }
+
+    private void refreshCapturedPanel(Game g) {
+        boolean show = g.getState() == GameState.PLAY || g.getState() == GameState.GAME_OVER;
+        capturesBox.setVisible(show);
+        capturesBox.setManaged(show);
+        if (!show) {
+            return;
+        }
+        fillCaptureFlow(goldCapturesPane, g, PlayerSide.GOLD);
+        fillCaptureFlow(silverCapturesPane, g, PlayerSide.SILVER);
+    }
+
+    private void fillCaptureFlow(FlowPane pane, Game g, PlayerSide capturer) {
+        pane.getChildren().clear();
+        List<PieceType> types = effectiveTrapCapturesForDisplay(g, capturer);
+        if (types.isEmpty()) {
+            pane.getChildren().add(new Label("—"));
+            return;
+        }
+        PlayerSide victimSide = capturer == PlayerSide.GOLD ? PlayerSide.SILVER : PlayerSide.GOLD;
+        for (PieceType t : types) {
+            if (pieceSkin == PieceSkin.DEFAULT) {
+                Image img = figureRasterCache.getRasterized(victimSide, t, CAPTURE_ICON_MAX);
+                if (img != null) {
+                    ImageView iv = new ImageView(img);
+                    iv.setFitWidth(CAPTURE_ICON_MAX);
+                    iv.setFitHeight(CAPTURE_ICON_MAX);
+                    iv.setPreserveRatio(true);
+                    iv.setSmooth(true);
+                    pane.getChildren().add(iv);
+                } else {
+                    pane.getChildren().add(new Label(abbrevType(t)));
+                }
+            } else {
+                pane.getChildren().add(new Label(abbrevType(t)));
+            }
+        }
+    }
+
+    /**
+     * Whether the current partial move prefix removes at least one friendly piece via trap (preview on board copy).
+     */
+    private boolean partialTurnOwnPieceTrapped(Game g) {
+        if (g.getState() != GameState.PLAY || playPartialMove.getSteps().isEmpty()) {
+            return false;
+        }
+        DefaultRuleEngine.TrapCapturePreview p = DefaultRuleEngine.trapCapturesIfPrefixApplied(g, playPartialMove);
+        PlayerSide side = g.getSideToMove();
+        return side == PlayerSide.GOLD ? !p.bySilver().isEmpty() : !p.byGold().isEmpty();
+    }
+
+    /** Committed trap captures plus victims from the in-progress turn prefix (same ordering as events). */
+    private List<PieceType> effectiveTrapCapturesForDisplay(Game g, PlayerSide capturer) {
+        List<PieceType> out = new ArrayList<>(g.getTrapCapturesSnapshot(capturer));
+        if (g.getState() == GameState.PLAY && !playPartialMove.getSteps().isEmpty()) {
+            DefaultRuleEngine.TrapCapturePreview p = DefaultRuleEngine.trapCapturesIfPrefixApplied(g, playPartialMove);
+            out.addAll(capturer == PlayerSide.GOLD ? p.byGold() : p.bySilver());
+        }
+        return out;
+    }
+
     private void refreshHandLabel(Game g) {
         if (g.getState() == GameState.PLAY) {
             handLabel.setGraphic(null);
             handLabel.setContentDisplay(ContentDisplay.LEFT);
             int n = playPartialMove.getSteps().size();
-            handLabel.setText(n == 0 ? "Tah: žádné kroky (vyberte figuru)" : ("Tah: " + n + " krok(ů)"));
+            String mover = sideName(g.getSideToMove());
+            handLabel.setText(n == 0
+                    ? ("Tah (" + mover + "): žádné kroky (vyberte figuru)")
+                    : ("Tah (" + mover + "): " + n + " krok(ů)"));
             return;
         }
         Piece h = g.getSetupHand();

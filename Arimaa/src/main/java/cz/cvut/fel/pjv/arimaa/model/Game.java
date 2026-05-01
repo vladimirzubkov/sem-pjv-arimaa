@@ -38,6 +38,15 @@ public class Game {
     private Piece setupHand;
 
     /**
+     * Types of Silver pieces removed by traps (credited as captures for Gold).
+     */
+    private final List<PieceType> trapCapturesByGold = new ArrayList<>();
+    /**
+     * Types of Gold pieces removed by traps (credited as captures for Silver).
+     */
+    private final List<PieceType> trapCapturesBySilver = new ArrayList<>();
+
+    /**
      * @return the piece currently held for setup placement, or {@code null}
      */
     public Piece getSetupHand() {
@@ -113,6 +122,30 @@ public class Game {
         sideToMove = PlayerSide.GOLD;
         matchWinner = null;
         ranksMirroredForHomeCheck = false;
+        trapCapturesByGold.clear();
+        trapCapturesBySilver.clear();
+    }
+
+    /**
+     * Snapshot of piece types removed by traps and credited to {@code capturer} (opponent's types).
+     */
+    public List<PieceType> getTrapCapturesSnapshot(PlayerSide capturer) {
+        Objects.requireNonNull(capturer, "capturer");
+        List<PieceType> src = capturer == PlayerSide.GOLD ? trapCapturesByGold : trapCapturesBySilver;
+        return Collections.unmodifiableList(new ArrayList<>(src));
+    }
+
+    /**
+     * Records a trap removal before the piece is cleared from the board; credits the opponent of the victim.
+     */
+    void recordTrapRemoval(Piece victim) {
+        Objects.requireNonNull(victim, "victim");
+        PlayerSide capturer = victim.getSide() == PlayerSide.GOLD ? PlayerSide.SILVER : PlayerSide.GOLD;
+        if (capturer == PlayerSide.GOLD) {
+            trapCapturesByGold.add(victim.getType());
+        } else {
+            trapCapturesBySilver.add(victim.getType());
+        }
     }
 
     /**
@@ -296,6 +329,24 @@ public class Game {
     }
 
     /**
+     * Whether {@code side}'s tray is empty, no piece is held in hand for that side, and exactly 16 friendly pieces
+     * sit on home squares. Does not verify multiset legality — {@link #tryCompleteSetup(PlayerSide)} still applies
+     * the full rules.
+     */
+    public boolean allSetupPiecesOnBoard(PlayerSide side) {
+        if (side == null || board == null || !isSetupPhaseForSide(side)) {
+            return false;
+        }
+        if (setupHand != null && setupHand.getSide() == side) {
+            return false;
+        }
+        if (!reserveList(side).isEmpty()) {
+            return false;
+        }
+        return countPiecesOnHome(side) == 16;
+    }
+
+    /**
      * Validates that {@code side} has finished setup (sixteen pieces on home ranks, correct multiset, empty tray,
      * nothing in hand) and advances {@link GameState}: Gold → {@link GameState#SETUP_SILVER}, Silver → {@link GameState#PLAY}
      * with Gold to move first.
@@ -384,6 +435,10 @@ public class Game {
         this.sideToMove = m.sideToMove();
         this.matchWinner = m.matchWinner();
         this.ranksMirroredForHomeCheck = m.ranksMirroredForHomeCheck();
+        trapCapturesByGold.clear();
+        trapCapturesByGold.addAll(m.trapCapturesByGold());
+        trapCapturesBySilver.clear();
+        trapCapturesBySilver.addAll(m.trapCapturesBySilver());
     }
 
     private static List<Slot> goldChessSlots() {

@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,8 +33,8 @@ public final class DefaultRuleEngine implements RuleEngine {
         log.info("applyMove: mover={} stepCount={}", mover, move.getSteps().size());
         log.debug("applyMove detail: {}", describeMove(move));
         validateSequentialSteps(game, move, true, null);
+        applyMoveToBoard(game.getBoard(), move, game::recordTrapRemoval);
         Board board = game.getBoard();
-        applyMoveToBoard(board, move);
         log.debug(
                 "after applyMoveToBoard: goldRabbits={} silverRabbits={}",
                 countRabbits(board, PlayerSide.GOLD),
@@ -57,29 +58,60 @@ public final class DefaultRuleEngine implements RuleEngine {
 
     /**
      * Applies the move steps to {@code board} (mutation). Caller validates first.
+     *
+     * @param onTrapVictim invoked for each piece removed by a trap before the square is cleared; may be {@code null}
      */
-    static void applyMoveToBoard(Board board, Move move) {
+    static void applyMoveToBoard(Board board, Move move, Consumer<Piece> onTrapVictim) {
         List<Step> steps = move.getSteps();
         for (int i = 0; i < steps.size(); i++) {
             Step s = steps.get(i);
             StepKind k = kindOf(s);
             if (k == StepKind.SLIDE) {
                 applyOneStep(board, s);
-                resolveTraps(board);
+                resolveTraps(board, onTrapVictim);
             } else if (k == StepKind.PUSH_DISPLACE_WEAKER) {
                 applyOneStep(board, s);
-                resolveTraps(board);
+                resolveTraps(board, onTrapVictim);
                 i++;
                 applyOneStep(board, steps.get(i));
-                resolveTraps(board);
+                resolveTraps(board, onTrapVictim);
             } else if (k == StepKind.PULL_VACATE_STRONGER) {
                 applyOneStep(board, s);
-                resolveTraps(board);
+                resolveTraps(board, onTrapVictim);
                 i++;
                 applyOneStep(board, steps.get(i));
-                resolveTraps(board);
+                resolveTraps(board, onTrapVictim);
             }
         }
+    }
+
+    /**
+     * Trap victims from applying {@code prefix} on a copy of the current board (does not mutate {@link Game}).
+     * Empty or invalid prefix yields empty lists.
+     */
+    public record TrapCapturePreview(List<PieceType> byGold, List<PieceType> bySilver) {
+    }
+
+    public static TrapCapturePreview trapCapturesIfPrefixApplied(Game game, Move prefix) {
+        Objects.requireNonNull(game, "game");
+        Objects.requireNonNull(prefix, "prefix");
+        if (prefix.getSteps().isEmpty() || game.getState() != GameState.PLAY) {
+            return new TrapCapturePreview(List.of(), List.of());
+        }
+        if (!isValidPlayPrefix(game, prefix)) {
+            return new TrapCapturePreview(List.of(), List.of());
+        }
+        Board scratch = game.getBoard().copy();
+        List<PieceType> byGold = new ArrayList<>();
+        List<PieceType> bySilver = new ArrayList<>();
+        applyMoveToBoard(scratch, prefix, victim -> {
+            if (victim.getSide() == PlayerSide.SILVER) {
+                byGold.add(victim.getType());
+            } else {
+                bySilver.add(victim.getType());
+            }
+        });
+        return new TrapCapturePreview(List.copyOf(byGold), List.copyOf(bySilver));
     }
 
     public static boolean isValidPlayPrefix(Game game, Move move) {
@@ -580,13 +612,16 @@ public final class DefaultRuleEngine implements RuleEngine {
         return false;
     }
 
-    private static void resolveTraps(Board board) {
+    private static void resolveTraps(Board board, Consumer<Piece> onTrapVictim) {
         for (Position trap : BoardConstants.trapSquares()) {
             Piece victim = board.getPiece(trap);
             if (victim == null) {
                 continue;
             }
             if (!hasOrthogonalFriendly(board, victim.getSide(), trap)) {
+                if (onTrapVictim != null) {
+                    onTrapVictim.accept(victim);
+                }
                 board.setPiece(trap, null);
             }
         }

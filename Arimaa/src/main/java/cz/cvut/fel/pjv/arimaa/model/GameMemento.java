@@ -16,7 +16,9 @@ public record GameMemento(
         CellSnap[][] grid,
         List<CellSnap> goldReserve,
         List<CellSnap> silverReserve,
-        CellSnap setupHand) {
+        CellSnap setupHand,
+        List<PieceType> trapCapturesByGold,
+        List<PieceType> trapCapturesBySilver) {
 
     public record CellSnap(PieceType type, PlayerSide side) {
     }
@@ -52,6 +54,8 @@ public record GameMemento(
                 grid,
                 List.copyOf(gold),
                 List.copyOf(silver),
-                handSnap);
+                handSnap,
+                List.copyOf(game.getTrapCapturesSnapshot(PlayerSide.GOLD)),
+                List.copyOf(game.getTrapCapturesSnapshot(PlayerSide.SILVER)));
     }
 }

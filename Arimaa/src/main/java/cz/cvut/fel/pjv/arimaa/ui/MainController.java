@@ -12,6 +12,7 @@ import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.model.Step;
 import cz.cvut.fel.pjv.arimaa.model.StepKind;
+import cz.cvut.fel.pjv.arimaa.util.ArimaaNotation;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import cz.cvut.fel.pjv.arimaa.util.HomeTerritory;
 import javafx.application.Platform;
@@ -28,6 +29,7 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -138,8 +140,11 @@ public class MainController {
     private VBox reserveBox;
     /** Trap captures display; visible in PLAY and GAME_OVER. */
     private final VBox capturesBox = new VBox(6);
+    /** Move notation history; visible only after setup (PLAY / GAME_OVER). */
+    private final VBox notationBox = new VBox(6);
     private final FlowPane goldCapturesPane = new FlowPane(4, 4);
     private final FlowPane silverCapturesPane = new FlowPane(4, 4);
+    private final TextArea notationHistoryArea = new TextArea();
 
     private enum PieceSkin {
         /** Letter abbreviations only (no piece art). */
@@ -278,6 +283,17 @@ public class MainController {
                 new Label("Zajaté (Silver):"),
                 silverCapturesPane);
 
+        notationHistoryArea.setEditable(false);
+        notationHistoryArea.setWrapText(true);
+        notationHistoryArea.setFont(Font.font("Consolas", 11));
+        notationHistoryArea.setPrefRowCount(10);
+        notationHistoryArea.setMaxHeight(220);
+        notationHistoryArea.setMinHeight(72);
+
+        notationBox.getChildren().addAll(new Label("Notace tahů:"), notationHistoryArea);
+        notationBox.setVisible(false);
+        notationBox.setManaged(false);
+
         statusLabel.setWrapText(true);
         statusLabel.setMaxWidth(240);
         setStatus("Rozestavte Gold; pak Hotovo. Silver totéž.");
@@ -288,6 +304,7 @@ public class MainController {
                 handLabel,
                 spacer(8),
                 capturesBox,
+                notationBox,
                 reserveBox,
                 cancelHandButton,
                 randomButton,
@@ -761,6 +778,8 @@ public class MainController {
             clearPlayTurnUi();
         }
         if (g == null || stage == null) {
+            notationHistoryArea.setText("");
+            refreshNotationPanelVisibility(null);
             return;
         }
         paintBoard(g);
@@ -769,6 +788,8 @@ public class MainController {
         refreshActionButtons(g);
         refreshSetupSectionVisibility(g);
         refreshCapturedPanel(g);
+        refreshNotationPanelVisibility(g);
+        refreshNotationHistory();
         refreshHandLabel(g);
         updateWindowTitle(g);
         refreshHistoryMenus();
@@ -840,6 +861,12 @@ public class MainController {
             tbg.setStroke(Color.web("#1e7a3a"));
             tbg.setStrokeWidth(2.5);
         }
+        for (Position opp : computePullDragTargets(g)) {
+            CellData odata = cellDataAt(opp);
+            Rectangle obg = odata.background();
+            obg.setStroke(Color.web("#b030c0"));
+            obg.setStrokeWidth(3);
+        }
     }
 
     private CellData cellDataAt(Position pos) {
@@ -904,6 +931,44 @@ public class MainController {
                 if (DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
                     out.add(bundle.get(0).getTo());
                 }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Opponent squares whose piece may complete a pull-drag after the last step was a slide vacating
+     * {@link Step#getFrom()}.
+     */
+    private Set<Position> computePullDragTargets(Game g) {
+        Set<Position> out = new HashSet<>();
+        List<Step> steps = playPartialMove.getSteps();
+        if (steps.isEmpty() || steps.size() >= 4) {
+            return out;
+        }
+        Step last = steps.get(steps.size() - 1);
+        if (DefaultRuleEngine.kindOf(last) != StepKind.SLIDE) {
+            return out;
+        }
+        Position vacated = last.getFrom();
+        int vf = vacated.getFileIndex();
+        int vr = vacated.getRankIndex();
+        int[][] deltas = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+        for (int[] d : deltas) {
+            int nf = vf + d[0];
+            int nr = vr + d[1];
+            if (nf < 0 || nf >= BoardConstants.BOARD_SIZE || nr < 0 || nr >= BoardConstants.BOARD_SIZE) {
+                continue;
+            }
+            Position weakPos = Position.of(nf, nr);
+            Step drag = new Step();
+            drag.setKind(StepKind.PULL_DRAG_WEAKER);
+            drag.setFrom(weakPos);
+            drag.setTo(vacated);
+            Move trial = copyMove(playPartialMove);
+            trial.getSteps().add(copyStep(drag));
+            if (DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
+                out.add(weakPos);
             }
         }
         return out;
@@ -1076,6 +1141,27 @@ public class MainController {
         fillCaptureFlow(silverCapturesPane, g, PlayerSide.SILVER);
     }
 
+    private void refreshNotationPanelVisibility(Game g) {
+        boolean show = g != null && (g.getState() == GameState.PLAY || g.getState() == GameState.GAME_OVER);
+        notationBox.setVisible(show);
+        notationBox.setManaged(show);
+    }
+
+    private void refreshNotationHistory() {
+        if (gameController == null) {
+            notationHistoryArea.setText("");
+            return;
+        }
+        List<String> lines = new ArrayList<>(gameController.notationLinesVisible());
+        Game g = game();
+        if (g != null && g.getState() == GameState.PLAY && !playPartialMove.getSteps().isEmpty()) {
+            String prefix = gameController.nextPlayNotationPrefix();
+            String draft = ArimaaNotation.formatPartialTurnLine(g.getBoard(), playPartialMove, prefix);
+            lines.add(draft);
+        }
+        notationHistoryArea.setText(String.join("\n", lines));
+    }
+
     private void fillCaptureFlow(FlowPane pane, Game g, PlayerSide capturer) {
         pane.getChildren().clear();
         List<PieceType> types = effectiveTrapCapturesForDisplay(g, capturer);
@@ -1194,8 +1280,12 @@ public class MainController {
     }
 
     private void recordTimeline() {
+        recordTimeline(null);
+    }
+
+    private void recordTimeline(String playNotationLineOrNull) {
         if (gameController != null) {
-            gameController.recordAfterMutation();
+            gameController.recordAfterMutation(playNotationLineOrNull);
         }
     }
 
@@ -1269,11 +1359,30 @@ public class MainController {
         if (at != null) {
             if (at.getSide() == side) {
                 playNextFrom = pos;
-                setStatus("Vybrána figura — klikněte na sousední volné pole (nebo jinou svou figuru).");
+                setStatus("Vybrána figura — volné pole = krok; po uvolnění můžete kliknout na fialově označenou soupeřovu figuru (tahnutí).");
                 refreshAll();
                 return;
             }
-            setStatus("Toto není vaše figura.");
+            if (!playPartialMove.getSteps().isEmpty() && playPartialMove.getSteps().size() < 4) {
+                Step last = playPartialMove.getSteps().get(playPartialMove.getSteps().size() - 1);
+                if (DefaultRuleEngine.kindOf(last) == StepKind.SLIDE && computePullDragTargets(g).contains(pos)) {
+                    Position vacated = last.getFrom();
+                    Step drag = new Step();
+                    drag.setKind(StepKind.PULL_DRAG_WEAKER);
+                    drag.setFrom(pos);
+                    drag.setTo(vacated);
+                    Move trial = copyMove(playPartialMove);
+                    trial.getSteps().add(copyStep(drag));
+                    if (DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
+                        playPartialMove.getSteps().add(copyStep(drag));
+                        playNextFrom = last.getTo();
+                        setStatus("Tahnutí dokončeno (" + playPartialMove.getSteps().size() + "/4). Konec tahu nebo další krok.");
+                        refreshAll();
+                        return;
+                    }
+                }
+            }
+            setStatus("Tuto soupeřovu figuru teď táhnout nelze.");
             return;
         }
         if (playNextFrom == null) {
@@ -1346,7 +1455,10 @@ public class MainController {
             setStatus("Přidejte aspoň jeden krok.");
             return;
         }
+        String prefix = gameController.nextPlayNotationPrefix();
         Move submit = copyMove(playPartialMove);
+        // Board unchanged until submit; formatFullTurn copies internally via buildArimaaNotationBody.
+        String notationLine = ArimaaNotation.formatFullTurn(g.getBoard(), submit, prefix);
         log.debug("submitting play turn: {} steps", submit.getSteps().size());
         if (!gameController.submitHumanMove(submit)) {
             log.info("submitHumanMove rejected (illegal or invalid state)");
@@ -1362,7 +1474,7 @@ public class MainController {
             log.info("play turn ended: state={} sideToMove={}", g.getState(), g.getSideToMove());
             setStatus("Tah proveden.");
         }
-        recordTimeline();
+        recordTimeline(notationLine);
         refreshAll();
     }
 

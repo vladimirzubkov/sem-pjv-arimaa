@@ -112,6 +112,13 @@ public class Position {
     }
 
     /**
+     * Standard square text (e.g. {@code a1}, {@code h8}) matching {@link #fromAlgebraic(String)}.
+     */
+    public String toAlgebraic() {
+        return String.valueOf((char) ('a' + fileIndex)) + (char) ('1' + rankIndex);
+    }
+
+    /**
      * Updates the rank index; same contract as {@link #setFileIndex(int)}.
      *
      * @param rankIndex new rank index in {@code [0, {@link BoardConstants#BOARD_SIZE})}

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.7
+
+- **Notace tahů (Arimaa):** panel **Notace tahů** pod zajatými (viditelný až po rozestavení — PLAY / GAME_OVER); řádky ve stylu [arimaa.com notation](https://arimaa.com/arimaa/learn/notation.html) — `DefaultRuleEngine.buildArimaaNotationBody`, `Position.toAlgebraic`, `ArimaaNotation.formatFullTurn` s ` ... pass` při méně než 4 krocích; během rozpracovaného tahu náhled řádku (`formatPartialTurnLine`) bez `... pass`.
+- **Časová osa:** `GameTimeline` ukládá paralelní texty k mementům; `GameController.recordAfterMutation(String)`; předpona `Ng` / `Ns` z `nextPlayNotationPrefix()`; Undo/Redo zúží i historii.
+- **Úpravy:** výpočet plné řádky notace před `submitHumanMove` (deska před tahem); bez zdvojeného kopírování desky v UI (`buildArimaaNotationBody` kopíruje sám).
+- **Tahnutí (pull):** nejdřív krok vlastní figury na volné pole (slide), volitelně dokončení kliknutím na **fialově označenou** soupeřovu slabší figuru; engine přijímá pár `SLIDE` + `PULL_DRAG_WEAKER` (stejně jako dříve `PULL_VACATE` + `PULL_DRAG`); push zůstává dvojkrok v jednom kliknutí; `enumerateStepBundles` doplňuje jednokrokové pull-drag pro DFS; test `applyMoveSlideThenPullDragSameAsPullVacatePair`.
+- Testy: `ArimaaNotationTest`.
+
 ## 0.5.7
 
 - **Rozestavení:** pokud jsou všechny figury na domovských řadách, tlačítko **Náhodně doplnit zbytek** se změní na **Náhodně rozestavit** a náhodně přeřadí 16 figurek na domově (`Game.shuffleSetupPiecesOnHomeRandomly`); Undo/Redo přes memento jako dosud.

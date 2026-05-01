@@ -69,6 +69,11 @@ public final class DefaultRuleEngine implements RuleEngine {
             if (k == StepKind.SLIDE) {
                 applyOneStep(board, s);
                 resolveTraps(board, onTrapVictim);
+                if (i + 1 < steps.size() && kindOf(steps.get(i + 1)) == StepKind.PULL_DRAG_WEAKER) {
+                    i++;
+                    applyOneStep(board, steps.get(i));
+                    resolveTraps(board, onTrapVictim);
+                }
             } else if (k == StepKind.PUSH_DISPLACE_WEAKER) {
                 applyOneStep(board, s);
                 resolveTraps(board, onTrapVictim);
@@ -203,7 +208,7 @@ public final class DefaultRuleEngine implements RuleEngine {
     }
 
     /**
-     * Enumerates one-step or two-step bundles (push/pull) legal as the next extension from {@code occ}.
+     * Enumerates single-slide bundles, two-step push bundles, and single-step pull-drag continuations.
      */
     public static List<List<Step>> enumerateStepBundles(Map<Position, Piece> occ, PlayerSide side) {
         List<List<Step>> out = new ArrayList<>();
@@ -231,14 +236,56 @@ public final class DefaultRuleEngine implements RuleEngine {
                             // skip
                         }
                     }
-                    if (!isFrozenOccupancy(occ, from)) {
-                        addPullBundles(occ, side, from, p, out);
-                    }
                 }
                 addPushBundles(occ, side, from, p, out);
             }
         }
+        addPullDragBundles(occ, side, out);
         return out;
+    }
+
+    /**
+     * Single-step {@link StepKind#PULL_DRAG_WEAKER} continuations (after a prior slide vacated next to a weaker piece).
+     * Used by {@link #existsLegalTurn}; interactive pull completion uses the same validation.
+     */
+    private static void addPullDragBundles(Map<Position, Piece> occ, PlayerSide side, List<List<Step>> out) {
+        for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
+            for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
+                Position weakPos = Position.of(f, r);
+                Piece weak = occ.get(weakPos);
+                if (weak == null || weak.getSide() == side) {
+                    continue;
+                }
+                for (Position vacated : orthogonalNeighbors(weakPos)) {
+                    if (occ.get(vacated) != null) {
+                        continue;
+                    }
+                    Step drag = new Step();
+                    drag.setKind(StepKind.PULL_DRAG_WEAKER);
+                    drag.setFrom(weakPos);
+                    drag.setTo(vacated);
+                    for (Position strongNew : orthogonalNeighbors(weakPos)) {
+                        if (strongNew.equals(vacated)) {
+                            continue;
+                        }
+                        Piece strong = occ.get(strongNew);
+                        if (strong == null || strong.getSide() != side) {
+                            continue;
+                        }
+                        if (!PieceStrength.isStrictlyStronger(strong.getType(), weak.getType())) {
+                            continue;
+                        }
+                        try {
+                            Map<Position, Piece> t = copyOcc(occ);
+                            validatePullDragOnOcc(t, side, drag, vacated, strongNew);
+                            out.add(List.of(copyStep(drag)));
+                        } catch (IllegalArgumentException ignored) {
+                            // skip
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private static void addPushBundles(Map<Position, Piece> occ, PlayerSide side, Position strongPos, Piece strong, List<List<Step>> out) {
@@ -281,47 +328,6 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
     }
 
-    private static void addPullBundles(Map<Position, Piece> occ, PlayerSide side, Position strongPos, Piece strong, List<List<Step>> out) {
-        for (Position vac : orthogonalNeighbors(strongPos)) {
-            if (occ.get(vac) != null) {
-                continue;
-            }
-            Step vacStep = new Step();
-            vacStep.setKind(StepKind.PULL_VACATE_STRONGER);
-            vacStep.setFrom(strongPos);
-            vacStep.setTo(vac);
-            for (Position weakPos : orthogonalNeighbors(strongPos)) {
-                if (weakPos.equals(vac)) {
-                    continue;
-                }
-                Piece weak = occ.get(weakPos);
-                if (weak == null || weak.getSide() == side) {
-                    continue;
-                }
-                if (!PieceStrength.isStrictlyStronger(strong.getType(), weak.getType())) {
-                    continue;
-                }
-                Step drag = new Step();
-                drag.setKind(StepKind.PULL_DRAG_WEAKER);
-                drag.setFrom(weakPos);
-                drag.setTo(strongPos);
-                try {
-                    Map<Position, Piece> t = copyOcc(occ);
-                    List<Step> buf = new ArrayList<>();
-                    validatePullVacateOnOcc(t, side, vacStep, buf);
-                    applyOneStepOnOccupancy(t, vacStep);
-                    resolveTrapsOnOccupancy(t);
-                    buf.add(vacStep);
-                    validatePullDragOnOcc(t, side, drag, strongPos, vac);
-                    out.add(List.of(copyStep(vacStep), copyStep(drag)));
-                } catch (IllegalArgumentException ignored) {
-                    // skip
-                }
-            }
-        }
-    }
-
-
     private static Map<Position, Piece> validateSequentialSteps(Game game, Move move, boolean requireFullTurn, Map<Position, Piece> initialOcc) {
         List<Step> steps = move.getSteps();
         int n = steps.size();
@@ -346,6 +352,14 @@ public final class DefaultRuleEngine implements RuleEngine {
                     applyOneStepOnOccupancy(occ, s);
                     resolveTrapsOnOccupancy(occ);
                     i++;
+                    if (i < n && kindOf(steps.get(i)) == StepKind.PULL_DRAG_WEAKER) {
+                        Step drag = steps.get(i);
+                        Step vacate = steps.get(i - 1);
+                        validatePullDragOnOcc(occ, side, drag, vacate.getFrom(), vacate.getTo());
+                        applyOneStepOnOccupancy(occ, drag);
+                        resolveTrapsOnOccupancy(occ);
+                        i++;
+                    }
                 }
                 case PUSH_DISPLACE_WEAKER -> {
                     validatePushDisplaceOnOcc(occ, side, s, steps.subList(0, i));
@@ -383,7 +397,8 @@ public final class DefaultRuleEngine implements RuleEngine {
                     resolveTrapsOnOccupancy(occ);
                     i++;
                 }
-                case PULL_DRAG_WEAKER -> throw new IllegalMoveException("PULL_DRAG without PULL_VACATE");
+                case PULL_DRAG_WEAKER ->
+                        throw new IllegalMoveException("PULL_DRAG must follow SLIDE or PULL_VACATE");
                 default -> throw new IllegalMoveException("Unknown kind");
             }
         }
@@ -625,6 +640,109 @@ public final class DefaultRuleEngine implements RuleEngine {
                 board.setPiece(trap, null);
             }
         }
+    }
+
+    /**
+     * Arimaa game notation body (space-separated tokens) for a completed legal turn — slides, trap removals ({@code …​x}),
+     * push/pull pairs — matching trap resolution order in {@link #applyMoveToBoard}.
+     */
+    public static String buildArimaaNotationBody(Board before, Move move) {
+        Objects.requireNonNull(before, "before");
+        Objects.requireNonNull(move, "move");
+        Board board = before.copy();
+        StringBuilder sb = new StringBuilder();
+        List<Step> steps = move.getSteps();
+        for (int i = 0; i < steps.size(); i++) {
+            Step s = steps.get(i);
+            StepKind k = kindOf(s);
+            if (k == StepKind.SLIDE) {
+                appendStepNotation(sb, board, s);
+                applyOneStep(board, s);
+                appendTrapNotation(sb, board);
+                if (i + 1 < steps.size() && kindOf(steps.get(i + 1)) == StepKind.PULL_DRAG_WEAKER) {
+                    i++;
+                    Step s2 = steps.get(i);
+                    appendStepNotation(sb, board, s2);
+                    applyOneStep(board, s2);
+                    appendTrapNotation(sb, board);
+                }
+            } else if (k == StepKind.PUSH_DISPLACE_WEAKER) {
+                appendStepNotation(sb, board, s);
+                applyOneStep(board, s);
+                appendTrapNotation(sb, board);
+                i++;
+                Step s2 = steps.get(i);
+                appendStepNotation(sb, board, s2);
+                applyOneStep(board, s2);
+                appendTrapNotation(sb, board);
+            } else if (k == StepKind.PULL_VACATE_STRONGER) {
+                appendStepNotation(sb, board, s);
+                applyOneStep(board, s);
+                appendTrapNotation(sb, board);
+                i++;
+                Step s2 = steps.get(i);
+                appendStepNotation(sb, board, s2);
+                applyOneStep(board, s2);
+                appendTrapNotation(sb, board);
+            }
+        }
+        return sb.toString().trim();
+    }
+
+    private static void appendStepNotation(StringBuilder sb, Board board, Step step) {
+        Piece p = board.getPiece(step.getFrom());
+        if (p == null) {
+            throw new IllegalStateException("notation: empty from square");
+        }
+        if (sb.length() > 0) {
+            sb.append(' ');
+        }
+        sb.append(pieceNotationLetter(p))
+                .append(step.getFrom().toAlgebraic())
+                .append(directionLetter(step.getFrom(), step.getTo()));
+    }
+
+    private static void appendTrapNotation(StringBuilder sb, Board board) {
+        resolveTraps(board, victim -> {
+            if (sb.length() > 0) {
+                sb.append(' ');
+            }
+            Position at = victim.getPosition();
+            if (at == null) {
+                throw new IllegalStateException("notation: trap victim without position");
+            }
+            sb.append(pieceNotationLetter(victim)).append(at.toAlgebraic()).append('x');
+        });
+    }
+
+    private static String pieceNotationLetter(Piece p) {
+        char c = switch (p.getType()) {
+            case ELEPHANT -> 'E';
+            case CAMEL -> 'M';
+            case HORSE -> 'H';
+            case DOG -> 'D';
+            case CAT -> 'C';
+            case RABBIT -> 'R';
+        };
+        return String.valueOf(p.getSide() == PlayerSide.GOLD ? c : Character.toLowerCase(c));
+    }
+
+    private static char directionLetter(Position from, Position to) {
+        int df = to.getFileIndex() - from.getFileIndex();
+        int dr = to.getRankIndex() - from.getRankIndex();
+        if (df == 1) {
+            return 'e';
+        }
+        if (df == -1) {
+            return 'w';
+        }
+        if (dr == 1) {
+            return 'n';
+        }
+        if (dr == -1) {
+            return 's';
+        }
+        throw new IllegalArgumentException("notation: non-orthogonal step");
     }
 
     private static boolean hasOrthogonalFriendly(Board board, PlayerSide side, Position pos) {

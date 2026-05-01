@@ -6,6 +6,8 @@ import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.GameTimeline;
 import cz.cvut.fel.pjv.arimaa.model.Move;
 
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,9 +42,24 @@ public class GameController {
      * Records the current game state after a successful mutation (truncates redo branch).
      */
     public void recordAfterMutation() {
+        recordAfterMutation(null);
+    }
+
+    /**
+     * Records state after mutation; {@code playNotationLineOrNull} is set for completed PLAY turns.
+     */
+    public void recordAfterMutation(String playNotationLineOrNull) {
         if (game != null) {
-            timeline.recordAfterMutation(game);
+            timeline.recordAfterMutation(game, playNotationLineOrNull);
         }
+    }
+
+    public List<String> notationLinesVisible() {
+        return timeline.notationLinesVisible();
+    }
+
+    public String nextPlayNotationPrefix() {
+        return timeline.nextPlayNotationPrefix();
     }
 
     public boolean canUndo() {

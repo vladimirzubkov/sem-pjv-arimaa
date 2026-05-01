@@ -389,6 +389,34 @@ class GameTest {
     }
 
     @Test
+    void applyMoveSlideThenPullDragSameAsPullVacatePair() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        Position cat = Position.of(3, 3);
+        Position rab = Position.of(4, 3);
+        Position vac = Position.of(3, 2);
+        g.getBoard().setPiece(cat, new Piece(PieceType.CAT, PlayerSide.GOLD));
+        g.getBoard().setPiece(rab, new Piece(PieceType.RABBIT, PlayerSide.SILVER));
+        Move m = new Move();
+        Step slide = new Step();
+        slide.setKind(StepKind.SLIDE);
+        slide.setFrom(cat);
+        slide.setTo(vac);
+        Step drag = new Step();
+        drag.setKind(StepKind.PULL_DRAG_WEAKER);
+        drag.setFrom(rab);
+        drag.setTo(cat);
+        m.getSteps().add(slide);
+        m.getSteps().add(drag);
+        g.applyMove(m);
+        assertNull(g.getBoard().getPiece(rab));
+        assertEquals(PieceType.CAT, g.getBoard().getPiece(vac).getType());
+        Piece onOldCat = g.getBoard().getPiece(cat);
+        assertNotNull(onOldCat);
+        assertEquals(PieceType.RABBIT, onOldCat.getType());
+        assertEquals(PlayerSide.SILVER, onOldCat.getSide());
+    }
+
+    @Test
     void frozenPieceCannotSlide() {
         Game g = playOnEmptyBoard(PlayerSide.GOLD);
         Position r = Position.of(2, 3);

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.5
+
+- Balíček `cz.cvut.fel.pjv.arimaa.exception`: **`IllegalMoveException`** (rozšíření `IllegalArgumentException`) — porušení pravidel tahu v `DefaultRuleEngine` (slide, push/pull, počet kroků, …).
+- **`GamePhaseException`** (rozšíření `IllegalStateException`) — volání PLAY API (`applyMove`, `simulatePlayPrefix`) mimo `GameState.PLAY`; použito v `DefaultRuleEngine` a `Game.applyMove`.
+- **`GameController.submitHumanMove`** zachytává oba typy; `MainController` beze změny (`catch` na `IllegalArgumentException` stále pokrývá `IllegalMoveException`).
+
 ## 0.5.4
 
 - **Plná pravidla PLAY:** `DefaultRuleEngine` — tahy 1–4 kroků, `StepKind` (`SLIDE`, dvojice push/pull), **mražení** (`isFrozen` / `isFrozenOccupancy`), **pasti** po každém kroku, konec hry (králík v cíli, žádný králík, **imobilizace** po přepnutí strany); pravidlo „cizí králík v cílovém řádku“ z kódu odstraněno (způsobovalo předčasný konec kvůli legálnímu rozestavení Silver na horním řádku). `Game.matchWinner` + `GameMemento`.

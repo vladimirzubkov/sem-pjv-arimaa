@@ -1,5 +1,7 @@
 package cz.cvut.fel.pjv.arimaa.controller;
 
+import cz.cvut.fel.pjv.arimaa.exception.GamePhaseException;
+import cz.cvut.fel.pjv.arimaa.exception.IllegalMoveException;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.GameTimeline;
 import cz.cvut.fel.pjv.arimaa.model.Move;
@@ -72,8 +74,8 @@ public class GameController {
             game.applyMove(move);
             log.info("submitHumanMove: applied {} steps", move.getSteps().size());
             return true;
-        } catch (IllegalArgumentException | IllegalStateException ex) {
-            log.debug("submitHumanMove failed: {}", ex.getMessage());
+        } catch (IllegalMoveException | GamePhaseException ex) {
+            log.debug("submitHumanMove failed ({}): {}", ex.getClass().getSimpleName(), ex.getMessage());
             return false;
         }
     }

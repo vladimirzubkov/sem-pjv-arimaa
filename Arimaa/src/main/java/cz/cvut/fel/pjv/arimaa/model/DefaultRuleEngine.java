@@ -1,5 +1,7 @@
 package cz.cvut.fel.pjv.arimaa.model;
 
+import cz.cvut.fel.pjv.arimaa.exception.GamePhaseException;
+import cz.cvut.fel.pjv.arimaa.exception.IllegalMoveException;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import cz.cvut.fel.pjv.arimaa.util.PieceStrength;
 
@@ -24,7 +26,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(move, "move");
         if (game.getState() != GameState.PLAY) {
-            throw new IllegalStateException("applyMove only in PLAY");
+            throw new GamePhaseException("applyMove only in PLAY");
         }
         PlayerSide mover = game.getSideToMove();
         log.info("applyMove: mover={} stepCount={}", mover, move.getSteps().size());
@@ -99,13 +101,14 @@ public final class DefaultRuleEngine implements RuleEngine {
      * Occupancy after legally applying {@code prefix} (same rules as the engine, including traps after each step).
      * Empty prefix returns a copy of the current board occupancy.
      *
-     * @throws IllegalArgumentException if {@code game} is not in {@link GameState#PLAY} or {@code prefix} is illegal
+     * @throws GamePhaseException if {@code game} is not in {@link GameState#PLAY}
+     * @throws IllegalMoveException if {@code prefix} is illegal
      */
     public static Map<Position, Piece> simulatePlayPrefix(Game game, Move prefix) {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(prefix, "prefix");
         if (game.getState() != GameState.PLAY) {
-            throw new IllegalArgumentException("simulatePlayPrefix only in PLAY");
+            throw new GamePhaseException("simulatePlayPrefix only in PLAY");
         }
         Map<Position, Piece> root = snapshotOccupancy(game.getBoard());
         if (prefix.getSteps().isEmpty()) {
@@ -292,11 +295,11 @@ public final class DefaultRuleEngine implements RuleEngine {
         int n = steps.size();
         if (requireFullTurn) {
             if (n < 1 || n > 4) {
-                throw new IllegalArgumentException("Turn must have 1–4 steps, got " + n);
+                throw new IllegalMoveException("Turn must have 1–4 steps, got " + n);
             }
         } else {
             if (n < 0 || n > 4) {
-                throw new IllegalArgumentException("Prefix may have at most 4 steps, got " + n);
+                throw new IllegalMoveException("Prefix may have at most 4 steps, got " + n);
             }
         }
         PlayerSide side = game.getSideToMove();
@@ -318,18 +321,18 @@ public final class DefaultRuleEngine implements RuleEngine {
                     resolveTrapsOnOccupancy(occ);
                     i++;
                     if (i >= n) {
-                        throw new IllegalArgumentException("Push missing advance step");
+                        throw new IllegalMoveException("Push missing advance step");
                     }
                     Step s2 = steps.get(i);
                     if (kindOf(s2) != StepKind.PUSH_ADVANCE_STRONGER) {
-                        throw new IllegalArgumentException("Push must be followed by PUSH_ADVANCE_STRONGER");
+                        throw new IllegalMoveException("Push must be followed by PUSH_ADVANCE_STRONGER");
                     }
                     validatePushAdvanceOnOcc(occ, side, s2, s.getFrom(), null);
                     applyOneStepOnOccupancy(occ, s2);
                     resolveTrapsOnOccupancy(occ);
                     i++;
                 }
-                case PUSH_ADVANCE_STRONGER -> throw new IllegalArgumentException("PUSH_ADVANCE without PUSH_DISPLACE");
+                case PUSH_ADVANCE_STRONGER -> throw new IllegalMoveException("PUSH_ADVANCE without PUSH_DISPLACE");
                 case PULL_VACATE_STRONGER -> {
                     validatePullVacateOnOcc(occ, side, s, steps.subList(0, i));
                     Position strongOld = s.getFrom();
@@ -337,19 +340,19 @@ public final class DefaultRuleEngine implements RuleEngine {
                     resolveTrapsOnOccupancy(occ);
                     i++;
                     if (i >= n) {
-                        throw new IllegalArgumentException("Pull missing drag step");
+                        throw new IllegalMoveException("Pull missing drag step");
                     }
                     Step s2 = steps.get(i);
                     if (kindOf(s2) != StepKind.PULL_DRAG_WEAKER) {
-                        throw new IllegalArgumentException("Pull must be followed by PULL_DRAG_WEAKER");
+                        throw new IllegalMoveException("Pull must be followed by PULL_DRAG_WEAKER");
                     }
                     validatePullDragOnOcc(occ, side, s2, strongOld, s.getTo());
                     applyOneStepOnOccupancy(occ, s2);
                     resolveTrapsOnOccupancy(occ);
                     i++;
                 }
-                case PULL_DRAG_WEAKER -> throw new IllegalArgumentException("PULL_DRAG without PULL_VACATE");
-                default -> throw new IllegalArgumentException("Unknown kind");
+                case PULL_DRAG_WEAKER -> throw new IllegalMoveException("PULL_DRAG without PULL_VACATE");
+                default -> throw new IllegalMoveException("Unknown kind");
             }
         }
         return occ;
@@ -395,20 +398,20 @@ public final class DefaultRuleEngine implements RuleEngine {
         Objects.requireNonNull(from, "from");
         Objects.requireNonNull(to, "to");
         if (!isOrthogonalNeighbor(from, to)) {
-            throw new IllegalArgumentException("Slide must be orthogonal");
+            throw new IllegalMoveException("Slide must be orthogonal");
         }
         Piece moving = occ.get(from);
         if (moving == null || moving.getSide() != side) {
-            throw new IllegalArgumentException("Slide must move own piece");
+            throw new IllegalMoveException("Slide must move own piece");
         }
         if (isFrozenOccupancy(occ, from)) {
-            throw new IllegalArgumentException("Frozen piece cannot slide");
+            throw new IllegalMoveException("Frozen piece cannot slide");
         }
         if (occ.get(to) != null) {
-            throw new IllegalArgumentException("Slide destination must be empty");
+            throw new IllegalMoveException("Slide destination must be empty");
         }
         if (moving.getType() == PieceType.RABBIT && isRabbitBackward(moving.getSide(), from, to)) {
-            throw new IllegalArgumentException("Rabbit cannot move backward");
+            throw new IllegalMoveException("Rabbit cannot move backward");
         }
     }
 
@@ -416,21 +419,21 @@ public final class DefaultRuleEngine implements RuleEngine {
         Position weakFrom = step.getFrom();
         Position weakTo = step.getTo();
         if (!isOrthogonalNeighbor(weakFrom, weakTo)) {
-            throw new IllegalArgumentException("Push displace must be orthogonal");
+            throw new IllegalMoveException("Push displace must be orthogonal");
         }
         Piece weak = occ.get(weakFrom);
         if (weak == null || weak.getSide() == side) {
-            throw new IllegalArgumentException("Push must displace opponent");
+            throw new IllegalMoveException("Push must displace opponent");
         }
         if (occ.get(weakTo) != null) {
-            throw new IllegalArgumentException("Push target must be empty");
+            throw new IllegalMoveException("Push target must be empty");
         }
         Position strongSquare = findStrongOrthNeighbor(occ, side, weakFrom, weak);
         if (strongSquare == null) {
-            throw new IllegalArgumentException("No stronger adjacent piece to push");
+            throw new IllegalMoveException("No stronger adjacent piece to push");
         }
         if (isFrozenOccupancy(occ, strongSquare)) {
-            throw new IllegalArgumentException("Frozen piece cannot push");
+            throw new IllegalMoveException("Frozen piece cannot push");
         }
     }
 
@@ -438,17 +441,17 @@ public final class DefaultRuleEngine implements RuleEngine {
         Position from = step.getFrom();
         Position to = step.getTo();
         if (!isOrthogonalNeighbor(from, to)) {
-            throw new IllegalArgumentException("Push advance must be orthogonal");
+            throw new IllegalMoveException("Push advance must be orthogonal");
         }
         Piece strong = occ.get(from);
         if (strong == null || strong.getSide() != side) {
-            throw new IllegalArgumentException("Push advance must move own piece");
+            throw new IllegalMoveException("Push advance must move own piece");
         }
         if (!to.equals(weakOld)) {
-            throw new IllegalArgumentException("Push advance must land on weak piece origin");
+            throw new IllegalMoveException("Push advance must land on weak piece origin");
         }
         if (occ.get(to) != null) {
-            throw new IllegalArgumentException("Push advance destination must be empty");
+            throw new IllegalMoveException("Push advance destination must be empty");
         }
     }
 
@@ -456,17 +459,17 @@ public final class DefaultRuleEngine implements RuleEngine {
         Position from = step.getFrom();
         Position to = step.getTo();
         if (!isOrthogonalNeighbor(from, to)) {
-            throw new IllegalArgumentException("Pull vacate must be orthogonal");
+            throw new IllegalMoveException("Pull vacate must be orthogonal");
         }
         Piece strong = occ.get(from);
         if (strong == null || strong.getSide() != side) {
-            throw new IllegalArgumentException("Pull must move own piece first");
+            throw new IllegalMoveException("Pull must move own piece first");
         }
         if (isFrozenOccupancy(occ, from)) {
-            throw new IllegalArgumentException("Frozen piece cannot pull");
+            throw new IllegalMoveException("Frozen piece cannot pull");
         }
         if (occ.get(to) != null) {
-            throw new IllegalArgumentException("Pull vacate target must be empty");
+            throw new IllegalMoveException("Pull vacate target must be empty");
         }
     }
 
@@ -475,24 +478,24 @@ public final class DefaultRuleEngine implements RuleEngine {
         Position from = step.getFrom();
         Position to = step.getTo();
         if (!isOrthogonalNeighbor(from, to)) {
-            throw new IllegalArgumentException("Pull drag must be orthogonal");
+            throw new IllegalMoveException("Pull drag must be orthogonal");
         }
         Piece weak = occ.get(from);
         if (weak == null || weak.getSide() == side) {
-            throw new IllegalArgumentException("Pull drag must move opponent");
+            throw new IllegalMoveException("Pull drag must move opponent");
         }
         if (!to.equals(strongOld)) {
-            throw new IllegalArgumentException("Pull drag must target vacated strong square");
+            throw new IllegalMoveException("Pull drag must target vacated strong square");
         }
         if (occ.get(to) != null) {
-            throw new IllegalArgumentException("Pull drag destination must be empty");
+            throw new IllegalMoveException("Pull drag destination must be empty");
         }
         Piece strong = occ.get(strongNew);
         if (strong == null || strong.getSide() != side) {
-            throw new IllegalArgumentException("Pull drag requires pulling piece on vacate square");
+            throw new IllegalMoveException("Pull drag requires pulling piece on vacate square");
         }
         if (!PieceStrength.isStrictlyStronger(strong.getType(), weak.getType())) {
-            throw new IllegalArgumentException("Pull requires stronger piece");
+            throw new IllegalMoveException("Pull requires stronger piece");
         }
     }
 

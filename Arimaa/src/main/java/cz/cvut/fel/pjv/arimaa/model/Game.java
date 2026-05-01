@@ -1,5 +1,7 @@
 package cz.cvut.fel.pjv.arimaa.model;
 
+import cz.cvut.fel.pjv.arimaa.exception.GamePhaseException;
+import cz.cvut.fel.pjv.arimaa.exception.IllegalMoveException;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import cz.cvut.fel.pjv.arimaa.util.HomeTerritory;
 
@@ -331,13 +333,13 @@ public class Game {
      * Applies a full turn during {@link GameState#PLAY}: 1–4 simple steps, trap resolution, then switches {@link #sideToMove}.
      *
      * @param move non-null turn with {@link Move#getSteps()} size 1–4
-     * @throws IllegalStateException if not in {@link GameState#PLAY}
-     * @throws IllegalArgumentException if the move is illegal
+     * @throws GamePhaseException if not in {@link GameState#PLAY}
+     * @throws IllegalMoveException if the move is illegal
      */
     public void applyMove(Move move) {
         Objects.requireNonNull(move, "move");
         if (state != GameState.PLAY) {
-            throw new IllegalStateException("applyMove only in PLAY");
+            throw new GamePhaseException("applyMove only in PLAY");
         }
         log.debug("Game.applyMove: sideToMove={} stepCount={}", sideToMove, move.getSteps().size());
         ruleEngine.applyMove(this, move);

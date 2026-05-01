@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.8
+
+- **UI (Gameplay):** volba **Otáčet desku — hráč na tahu dole**; při zapnutí v **PLAY** (a v **GAME_OVER** s vítězem) se deska zobrazí otočená o **180°** vůči výchozímu pohledu (nejen **řádky**, ale i **sloupce** / soubory a–h), aby hráč na tahu seděl „dole“ jako při klasické desce; v **SETUP** zůstává stabilní orientace (Gold dole).
+- **MainController:** mapování vizuální mřížka ↔ model (`modelFileFromVisualCol` / `visualColFromModelFile` vedle ranků); dynamické popisky souborů nad/pod deskou; konzistentní kliky, podsvícení a šachovnice podle modelových souřadnic.
+
 ## 0.6.7
 
 - **Notace tahů (Arimaa):** panel **Notace tahů** pod zajatými (viditelný až po rozestavení — PLAY / GAME_OVER); řádky ve stylu [arimaa.com notation](https://arimaa.com/arimaa/learn/notation.html) — `DefaultRuleEngine.buildArimaaNotationBody`, `Position.toAlgebraic`, `ArimaaNotation.formatFullTurn` s ` ... pass` při méně než 4 krocích; během rozpracovaného tahu náhled řádku (`formatPartialTurnLine`) bez `... pass`.

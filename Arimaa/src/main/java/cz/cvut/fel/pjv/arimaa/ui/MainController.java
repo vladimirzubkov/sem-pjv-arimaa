@@ -52,6 +52,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.paint.Color;
+import javafx.scene.paint.Paint;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.StrokeType;
 import javafx.scene.text.Font;
@@ -126,10 +127,19 @@ public class MainController {
     /** When selected, „Zrušit rozpracovaný tah“ is disabled after the mover's own piece is trapped in the current prefix. */
     private CheckMenuItem forbidCancelAfterOwnTrapItem;
 
-    /** Home square currently hovered during setup (ghost placement); both null if none. */
+    /** Home square currently hovered during setup (ghost placement); both null if none. Visual row 0 = top of board. */
     private Integer hoverFileIndex;
-    private Integer hoverRankIndex;
+    private Integer hoverVisualRow;
 
+    /** Rank digits beside the board (columns 0 and 9); updated when board orientation changes. */
+    private final Label[] rankCoordLabelsLeft = new Label[BoardConstants.BOARD_SIZE];
+    private final Label[] rankCoordLabelsRight = new Label[BoardConstants.BOARD_SIZE];
+    /** File letters above/below the board (rows 0 and 9); updated when board orientation changes. */
+    private final Label[] fileCoordLabelsTop = new Label[BoardConstants.BOARD_SIZE];
+    private final Label[] fileCoordLabelsBottom = new Label[BoardConstants.BOARD_SIZE];
+
+    /** When selected, during PLAY/GAME_OVER the board orients so the side to move (or winner) is at the bottom edge. */
+    private CheckMenuItem rotateBoardToMoverItem;
     /** In {@link GameState#PLAY}: steps not yet committed; origin for the next step. */
     private final Move playPartialMove = new Move();
     private Position playNextFrom;
@@ -394,6 +404,11 @@ public class MainController {
         forbidCancelAfterOwnTrapItem.selectedProperty().addListener((obs, prev, now) -> refreshAll());
         menuGameplay.getItems().add(forbidCancelAfterOwnTrapItem);
 
+        rotateBoardToMoverItem = new CheckMenuItem("Otáčet desku — hráč na tahu dole");
+        rotateBoardToMoverItem.setSelected(false);
+        rotateBoardToMoverItem.selectedProperty().addListener((obs, prev, now) -> refreshAll());
+        menuGameplay.getItems().add(rotateBoardToMoverItem);
+
         Menu menuLog = new Menu("Log");
         Menu menuLogLevel = new Menu("Logback Level");
         logLevelToggleGroup = new ToggleGroup();
@@ -531,14 +546,21 @@ public class MainController {
             }
         }
         for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
-            surface.add(coordLabel(String.valueOf((char) ('a' + f)), CELL, COORD, true), f + 1, 0);
-            surface.add(coordLabel(String.valueOf((char) ('a' + f)), CELL, COORD, true), f + 1, 9);
+            Label top = coordLabel(String.valueOf((char) ('a' + f)), CELL, COORD, true);
+            Label bottom = coordLabel(String.valueOf((char) ('a' + f)), CELL, COORD, true);
+            fileCoordLabelsTop[f] = top;
+            fileCoordLabelsBottom[f] = bottom;
+            surface.add(top, f + 1, 0);
+            surface.add(bottom, f + 1, 9);
         }
         for (int visualRow = 0; visualRow < BoardConstants.BOARD_SIZE; visualRow++) {
-            String rankText = Integer.toString(BoardConstants.BOARD_SIZE - visualRow);
             int gridRow = visualRow + 1;
-            surface.add(coordLabel(rankText, COORD, CELL, false), 0, gridRow);
-            surface.add(coordLabel(rankText, COORD, CELL, false), 9, gridRow);
+            Label left = coordLabel("8", COORD, CELL, false);
+            Label right = coordLabel("8", COORD, CELL, false);
+            rankCoordLabelsLeft[visualRow] = left;
+            rankCoordLabelsRight[visualRow] = right;
+            surface.add(left, 0, gridRow);
+            surface.add(right, 9, gridRow);
         }
         for (int row = 0; row < BoardConstants.BOARD_SIZE; row++) {
             for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
@@ -585,17 +607,17 @@ public class MainController {
         return lab;
     }
 
-    private StackPane createCell(int fileIndex, int gridRow) {
+    private StackPane createCell(int fileIndex, int visualRow) {
         Rectangle bg = new Rectangle(CELL, CELL);
         bg.setStrokeType(StrokeType.INSIDE);
-        int rankIndex = BoardConstants.BOARD_SIZE - 1 - gridRow;
+        int rankIndex = BoardConstants.BOARD_SIZE - 1 - visualRow;
         Position pos = Position.of(fileIndex, rankIndex);
         Color baseFill;
         if (HomeTerritory.contains(PlayerSide.GOLD, pos, false)
                 || HomeTerritory.contains(PlayerSide.SILVER, pos, false)) {
             baseFill = Color.color(0.75, 0.82, 0.95);
         } else {
-            baseFill = gridRow % 2 == fileIndex % 2 ? Color.color(0.93, 0.88, 0.78) : Color.color(0.85, 0.78, 0.65);
+            baseFill = visualRow % 2 == fileIndex % 2 ? Color.color(0.93, 0.88, 0.78) : Color.color(0.85, 0.78, 0.65);
         }
         Color baseStroke;
         double baseStrokeWidth;
@@ -635,33 +657,34 @@ public class MainController {
         hoverLbl.setOpacity(0.5);
 
         StackPane cell = new StackPane(bg, pieceLbl, pieceImg, hoverImg, hoverLbl);
-        cell.setUserData(new CellData(fileIndex, rankIndex, bg, baseFill, baseStroke, baseStrokeWidth,
+        cell.setUserData(new CellData(fileIndex, visualRow, bg, baseFill, baseStroke, baseStrokeWidth,
                 pieceLbl, pieceImg, hoverImg, hoverLbl));
 
         final int fi = fileIndex;
-        final int ri = rankIndex;
+        final int vr = visualRow;
         cell.hoverProperty().addListener((obs, was, hovering) -> {
             if (Boolean.TRUE.equals(hovering)) {
-                setHoverCell(fi, ri);
+                setHoverCell(fi, vr);
             } else {
-                clearHoverCellIf(fi, ri);
+                clearHoverCellIf(fi, vr);
             }
         });
 
-        cell.setOnMouseClicked(e -> onBoardCellClick(fileIndex, rankIndex));
+        cell.setOnMouseClicked(e -> onBoardCellClick(fi, vr));
         return cell;
     }
 
-    private void setHoverCell(int fileIndex, int rankIndex) {
+    private void setHoverCell(int fileIndex, int visualRow) {
         hoverFileIndex = fileIndex;
-        hoverRankIndex = rankIndex;
+        hoverVisualRow = visualRow;
         paintHoverOverlay(game());
     }
 
-    private void clearHoverCellIf(int fileIndex, int rankIndex) {
-        if (hoverFileIndex != null && hoverFileIndex == fileIndex && hoverRankIndex != null && hoverRankIndex == rankIndex) {
+    private void clearHoverCellIf(int fileIndex, int visualRow) {
+        if (hoverFileIndex != null && hoverFileIndex == fileIndex
+                && hoverVisualRow != null && hoverVisualRow == visualRow) {
             hoverFileIndex = null;
-            hoverRankIndex = null;
+            hoverVisualRow = null;
             paintHoverOverlay(game());
         }
     }
@@ -686,10 +709,12 @@ public class MainController {
                 GameState st = g.getState();
                 boolean setup = st == GameState.SETUP_GOLD || st == GameState.SETUP_SILVER;
                 Piece hand = g.getSetupHand();
-                Position pos = Position.of(data.fileIndex(), data.rankIndex());
+                int mf = modelFileFromVisualCol(data.fileIndex(), g);
+                int mr = modelRankFromVisualRow(data.visualRow(), g);
+                Position pos = Position.of(mf, mr);
                 boolean overHere = setup && hand != null
-                        && hoverFileIndex != null && hoverRankIndex != null
-                        && data.fileIndex() == hoverFileIndex && data.rankIndex() == hoverRankIndex;
+                        && hoverFileIndex != null && hoverVisualRow != null
+                        && data.fileIndex() == hoverFileIndex && data.visualRow() == hoverVisualRow;
                 boolean show = overHere && g.isLegalSetupHandPlacementTarget(pos);
                 if (!show) {
                     hImg.setVisible(false);
@@ -718,21 +743,23 @@ public class MainController {
         }
     }
 
-    private void onBoardCellClick(int fileIndex, int rankIndex) {
+    private void onBoardCellClick(int fileIndex, int visualRow) {
         Game g = game();
         if (g == null || g.getBoard() == null) {
             return;
         }
+        int modelFile = modelFileFromVisualCol(fileIndex, g);
+        int modelRank = modelRankFromVisualRow(visualRow, g);
         GameState st = g.getState();
         if (st == GameState.PLAY) {
-            onBoardCellClickPlay(fileIndex, rankIndex);
+            onBoardCellClickPlay(modelFile, modelRank);
             return;
         }
         if (st != GameState.SETUP_GOLD && st != GameState.SETUP_SILVER) {
             return;
         }
         PlayerSide side = g.getSideToMove();
-        Position pos = Position.of(fileIndex, rankIndex);
+        Position pos = Position.of(modelFile, modelRank);
         Piece hand = g.getSetupHand();
 
         if (hand != null) {
@@ -782,6 +809,8 @@ public class MainController {
             refreshNotationPanelVisibility(null);
             return;
         }
+        updateRankCoordLabels(g);
+        updateFileCoordLabels(g);
         paintBoard(g);
         paintPlayHighlights(g);
         refreshReserveButtons(g);
@@ -829,26 +858,131 @@ public class MainController {
     }
 
     /**
+     * When the gameplay option is on: PLAY shows mover's side at the bottom with a full 180° view (ranks and
+     * files mirrored relative to the Gold-at-bottom layout); GAME_OVER shows winner at the bottom the same way.
+     * Setup always uses Gold at the bottom (canonical coordinates).
+     */
+    private boolean boardGoldVisualBottom(Game g) {
+        if (rotateBoardToMoverItem == null || !rotateBoardToMoverItem.isSelected()) {
+            return true;
+        }
+        if (g == null) {
+            return true;
+        }
+        GameState st = g.getState();
+        if (st == GameState.SETUP_GOLD || st == GameState.SETUP_SILVER) {
+            return true;
+        }
+        if (st == GameState.GAME_OVER) {
+            PlayerSide w = g.getMatchWinner();
+            if (w != null) {
+                return w == PlayerSide.GOLD;
+            }
+            return true;
+        }
+        if (st == GameState.PLAY) {
+            return g.getSideToMove() == PlayerSide.GOLD;
+        }
+        return true;
+    }
+
+    /** Maps board row index from top ({@code 0}) to model rank; Gold-at-bottom flips vertically; mover-at-bottom uses identity (180° total with files). */
+    private int modelRankFromVisualRow(int visualRow, Game g) {
+        if (boardGoldVisualBottom(g)) {
+            return BoardConstants.BOARD_SIZE - 1 - visualRow;
+        }
+        return visualRow;
+    }
+
+    private int visualRowFromModelRank(int modelRank, Game g) {
+        if (boardGoldVisualBottom(g)) {
+            return BoardConstants.BOARD_SIZE - 1 - modelRank;
+        }
+        return modelRank;
+    }
+
+    /** Maps grid column from left ({@code 0}) to model file index ({@code a} = {@code 0}). */
+    private int modelFileFromVisualCol(int visualCol, Game g) {
+        if (boardGoldVisualBottom(g)) {
+            return visualCol;
+        }
+        return BoardConstants.BOARD_SIZE - 1 - visualCol;
+    }
+
+    private int visualColFromModelFile(int modelFile, Game g) {
+        if (boardGoldVisualBottom(g)) {
+            return modelFile;
+        }
+        return BoardConstants.BOARD_SIZE - 1 - modelFile;
+    }
+
+    private void updateFileCoordLabels(Game g) {
+        if (fileCoordLabelsTop[0] == null) {
+            return;
+        }
+        for (int vc = 0; vc < BoardConstants.BOARD_SIZE; vc++) {
+            int mf = modelFileFromVisualCol(vc, g);
+            String letter = String.valueOf((char) ('a' + mf));
+            fileCoordLabelsTop[vc].setText(letter);
+            fileCoordLabelsBottom[vc].setText(letter);
+        }
+    }
+
+    private void updateRankCoordLabels(Game g) {
+        if (rankCoordLabelsLeft[0] == null) {
+            return;
+        }
+        for (int vr = 0; vr < BoardConstants.BOARD_SIZE; vr++) {
+            int mr = modelRankFromVisualRow(vr, g);
+            String t = Integer.toString(mr + 1);
+            rankCoordLabelsLeft[vr].setText(t);
+            rankCoordLabelsRight[vr].setText(t);
+        }
+    }
+
+    private void refreshAllSquareDecorations(Game g) {
+        for (int visualRow = 0; visualRow < BoardConstants.BOARD_SIZE; visualRow++) {
+            for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
+                StackPane cell = boardCells[visualRow][col];
+                CellData data = (CellData) cell.getUserData();
+                int mf = modelFileFromVisualCol(col, g);
+                int mr = modelRankFromVisualRow(visualRow, g);
+                Position pos = Position.of(mf, mr);
+                Rectangle bg = data.background();
+                Color baseFill;
+                if (HomeTerritory.contains(PlayerSide.GOLD, pos, false)
+                        || HomeTerritory.contains(PlayerSide.SILVER, pos, false)) {
+                    baseFill = Color.color(0.75, 0.82, 0.95);
+                } else {
+                    baseFill = (mf + mr) % 2 == 0
+                            ? Color.color(0.93, 0.88, 0.78)
+                            : Color.color(0.85, 0.78, 0.65);
+                }
+                boolean trap = isStaticTrapSquare(pos);
+                bg.setFill(baseFill);
+                bg.setStroke(trap ? Color.DARKRED : Color.gray(0.35));
+                bg.setStrokeWidth(trap ? 2 : 1);
+            }
+        }
+    }
+
+    private static Color cellBaseFillForHighlight(CellData d) {
+        Paint p = d.background().getFill();
+        return p instanceof Color c ? c : d.baseFill();
+    }
+
+    /**
      * Resets each cell’s background to its base style, then in {@link GameState#PLAY} highlights the
      * selected origin square and legal step targets (orthogonal empty squares).
      */
     private void paintPlayHighlights(Game g) {
-        for (int row = 0; row < BoardConstants.BOARD_SIZE; row++) {
-            for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
-                StackPane cell = boardCells[row][col];
-                CellData data = (CellData) cell.getUserData();
-                Rectangle bg = data.background();
-                bg.setFill(data.baseFill());
-                bg.setStroke(data.baseStroke());
-                bg.setStrokeWidth(data.baseStrokeWidth());
-            }
-        }
+        refreshAllSquareDecorations(g);
         if (g == null || g.getState() != GameState.PLAY || playNextFrom == null) {
             return;
         }
         CellData selected = cellDataAt(playNextFrom);
         Rectangle selBg = selected.background();
-        selBg.setFill(selected.baseFill().interpolate(Color.web("#ffec99"), 0.42));
+        selBg.setFill(cellBaseFillForHighlight(selected).interpolate(Color.web("#ffec99"), 0.42));
         selBg.setStroke(Color.web("#b8860b"));
         selBg.setStrokeWidth(3);
         if (playPartialMove.getSteps().size() >= 4) {
@@ -857,7 +991,7 @@ public class MainController {
         for (Position to : computeLegalPlayTargetsForSelection(g)) {
             CellData tdata = cellDataAt(to);
             Rectangle tbg = tdata.background();
-            tbg.setFill(tdata.baseFill().interpolate(Color.web("#a8f0c0"), 0.48));
+            tbg.setFill(cellBaseFillForHighlight(tdata).interpolate(Color.web("#a8f0c0"), 0.48));
             tbg.setStroke(Color.web("#1e7a3a"));
             tbg.setStrokeWidth(2.5);
         }
@@ -870,9 +1004,10 @@ public class MainController {
     }
 
     private CellData cellDataAt(Position pos) {
-        int row = BoardConstants.BOARD_SIZE - 1 - pos.getRankIndex();
-        int col = pos.getFileIndex();
-        return (CellData) boardCells[row][col].getUserData();
+        Game g = game();
+        int visualRow = visualRowFromModelRank(pos.getRankIndex(), g);
+        int visualCol = visualColFromModelFile(pos.getFileIndex(), g);
+        return (CellData) boardCells[visualRow][visualCol].getUserData();
     }
 
     private Set<Position> computeLegalPlayTargetsForSelection(Game g) {
@@ -1003,7 +1138,9 @@ public class MainController {
             for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
                 StackPane cell = boardCells[row][col];
                 CellData data = (CellData) cell.getUserData();
-                Position pos = Position.of(data.fileIndex(), data.rankIndex());
+                int mf = modelFileFromVisualCol(data.fileIndex(), g);
+                int mr = modelRankFromVisualRow(row, g);
+                Position pos = Position.of(mf, mr);
                 Piece p = effectivePieceAt(g, pos);
                 if (pieceSkin == PieceSkin.NONE) {
                     data.pieceImage.setImage(null);
@@ -1510,8 +1647,9 @@ public class MainController {
     }
 
     private record CellData(
+            /** Visual column index ({@code 0} = left edge of the grid). */
             int fileIndex,
-            int rankIndex,
+            int visualRow,
             Rectangle background,
             Color baseFill,
             Color baseStroke,

@@ -294,6 +294,47 @@ public class Game {
     }
 
     /**
+     * Randomly permutes this side's sixteen pieces among home squares (same multiset, new arrangement).
+     * Requires empty reserve, nothing in hand for this side, and exactly sixteen friendly pieces on home.
+     *
+     * @param side the player whose home ranks are shuffled
+     * @return {@code true} if pieces were reshuffled
+     */
+    public boolean shuffleSetupPiecesOnHomeRandomly(PlayerSide side) {
+        if (side == null || board == null || !isSetupPhaseForSide(side)) {
+            return false;
+        }
+        if (setupHand != null && setupHand.getSide() == side) {
+            cancelPendingSetupPlacement();
+        }
+        if (!reserveList(side).isEmpty()) {
+            return false;
+        }
+        List<Position> homes = listHomeSquares(side);
+        List<Piece> pieces = new ArrayList<>(homes.size());
+        for (Position p : homes) {
+            Piece pc = board.getPiece(p);
+            if (pc == null || pc.getSide() != side) {
+                return false;
+            }
+            pieces.add(pc);
+        }
+        if (pieces.size() != 16) {
+            return false;
+        }
+        for (Position p : homes) {
+            board.setPiece(p, null);
+        }
+        Collections.shuffle(pieces);
+        List<Position> slotOrder = new ArrayList<>(homes);
+        Collections.shuffle(slotOrder);
+        for (int i = 0; i < pieces.size(); i++) {
+            board.setPiece(slotOrder.get(i), pieces.get(i));
+        }
+        return true;
+    }
+
+    /**
      * Clears this side’s home rows onto the tray, then places the official multiset in a fixed “chess mapping” layout:
      * back rank a–h = Horse, Cat, Dog, Camel, Elephant, Dog, Cat, Horse (R,N,B,Q,K…); forward rank = eight rabbits.
      * Silver uses rabbits on rank 6 (index 6) and the same back rank on rank 7.
@@ -493,6 +534,20 @@ public class Game {
             for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
                 Position p = Position.of(f, r);
                 if (homeContains(side, p) && board.isEmpty(p)) {
+                    out.add(p);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** All squares in {@code side}'s home territory (sixteen coordinates). */
+    private List<Position> listHomeSquares(PlayerSide side) {
+        List<Position> out = new ArrayList<>(16);
+        for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
+            for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
+                Position p = Position.of(f, r);
+                if (homeContains(side, p)) {
                     out.add(p);
                 }
             }

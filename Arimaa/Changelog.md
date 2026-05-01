@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.7
+
+- **Rozestavení:** pokud jsou všechny figury na domovských řadách, tlačítko **Náhodně doplnit zbytek** se změní na **Náhodně rozestavit** a náhodně přeřadí 16 figurek na domově (`Game.shuffleSetupPiecesOnHomeRandomly`); Undo/Redo přes memento jako dosud.
+
 ## 0.5.6
 
 - **UI (PLAY / GAME_OVER):** skrytí bloku rezervy a tlačítek rozestavení; řádek „Tah (Gold/Silver): …“; postranní panel **Zajaté (Gold) / (Silver)** s ikonami zajatých typů (lovčky; **36 px**), včetně náhledu během rozpracovaného tahu.

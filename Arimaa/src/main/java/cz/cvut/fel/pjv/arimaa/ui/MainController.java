@@ -201,7 +201,14 @@ public class MainController {
                 return;
             }
             PlayerSide side = g.getSideToMove();
-            if (g.placeRemainingPiecesRandomly(side)) {
+            if (g.allSetupPiecesOnBoard(side)) {
+                if (g.shuffleSetupPiecesOnHomeRandomly(side)) {
+                    setStatus("Figury na domovských řadách náhodně přeřazeny.");
+                    recordTimeline();
+                } else {
+                    setStatus("Náhodné přeřazení se nepovedlo.");
+                }
+            } else if (g.placeRemainingPiecesRandomly(side)) {
                 setStatus("Zbývající figury umístěny náhodně.");
                 recordTimeline();
             } else {
@@ -1008,8 +1015,12 @@ public class MainController {
         cancelHandButton.setDisable(!setup || g.getSetupHand() == null);
         chessButton.setDisable(!setup);
         doneButton.setDisable(!setup || !g.allSetupPiecesOnBoard(side));
-        boolean canRandom = setup && reserveSizesMatchEmptyHome(g, side);
-        randomButton.setDisable(!setup || !canRandom);
+        boolean canRandomFill = setup && reserveSizesMatchEmptyHome(g, side);
+        boolean canRandomShuffle = setup && g.allSetupPiecesOnBoard(side);
+        randomButton.setDisable(!setup || (!canRandomFill && !canRandomShuffle));
+        if (setup) {
+            randomButton.setText(canRandomShuffle ? "Náhodně rozestavit" : "Náhodně doplnit zbytek");
+        }
         if (playEndTurnButton != null) {
             playEndTurnButton.setDisable(!play || playPartialMove.getSteps().isEmpty());
         }

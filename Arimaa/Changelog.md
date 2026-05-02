@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.10
+
+- **PLAY — podsvícení rozpracovaného tahu:** počátek segmentu **aktuálně vybrané** figury (`playActiveSegmentOrigin`); po výběru jiné vlastní figury se přepočítá; zlatý nádech pro **Gold**, světlý kovový pro **Silver**; obrys `StrokeType.INSIDE` (stejně jako legální cíle / tahnutí). Lehký **salátový** odstín na poli **`from` posledního kroku** (odkud se právě šlo).
+- **Klávesnice:** pohyb po šachovnici jako klik — **šipky**, **WASD**, numerická podsada; `KeyEvent` **filtr** na `Scene` (capture před `ScrollPane`, který jinak bere šipky na scroll); **Enter** končí tah (jako dříve).
+- **Undo / Zrušit rozpracovaný tah:** snapshot po zrušení rozpracovaného tahu rozšířen o `playActiveSegmentOrigin`; obnova kroků (redo) obnoví počátek segmentu, pokud je potřeba.
+
 ## 0.6.9
 
 - **`GameHistory` + `GameHistoryEvent`:** append-only журнал событий партии (шаги черновика, пошаговый undo/redo в PLAY, сброс черновика, зафиксированный полуход); экземпляр в `GameController`, сброс при `resetTimeline`.

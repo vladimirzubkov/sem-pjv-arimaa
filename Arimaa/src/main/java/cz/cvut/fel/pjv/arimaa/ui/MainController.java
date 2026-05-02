@@ -31,6 +31,7 @@ import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -151,7 +152,16 @@ public class MainController {
     /** Snapshot after \"Zrušit rozpracovaný tah\"; redo restores it once. */
     private CancelledDraftSnapshot cancelledDraftOrNull = null;
 
-    private record CancelledDraftSnapshot(Move move, Position playNextFromOrNull) {}
+    private record CancelledDraftSnapshot(
+            Move move,
+            Position playNextFromOrNull,
+            Position playActiveSegmentOriginOrNull) {}
+
+    /**
+     * Board square where the currently selected piece started its segment of the draft turn (updates when
+     * the player picks another own piece).
+     */
+    private Position playActiveSegmentOrigin;
 
     private Button playEndTurnButton;
     private Button playCancelTurnButton;
@@ -290,10 +300,12 @@ public class MainController {
             if (playPartialMove.getSteps().isEmpty() && playNextFrom == null) {
                 return;
             }
-            cancelledDraftOrNull = new CancelledDraftSnapshot(copyMove(playPartialMove), playNextFrom);
+            cancelledDraftOrNull = new CancelledDraftSnapshot(
+                    copyMove(playPartialMove), playNextFrom, playActiveSegmentOrigin);
             draftRedoSteps.clear();
             playPartialMove.getSteps().clear();
             playNextFrom = null;
+            playActiveSegmentOrigin = null;
             appendHistory(new GameHistoryEvent.DraftCleared());
             setStatus("Rozpracovaný tah zrušen (Vpřed obnoví).");
             refreshAll();
@@ -487,14 +499,33 @@ public class MainController {
                 e.consume();
             }
         });
-        scene.addEventHandler(KeyEvent.KEY_PRESSED, e -> {
-            if (e.getCode() == KeyCode.ENTER) {
-                Game g = game();
-                if (g != null && g.getState() == GameState.PLAY) {
-                    tryEndPlayTurn();
-                    e.consume();
-                }
+        /**
+         * Capture phase so arrow keys reach here before a {@link ScrollPane} (side panel) consumes them for
+         * scrolling; same as play clicks + Enter to end turn.
+         */
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            if (e.getTarget() instanceof TextInputControl t && t.isEditable()) {
+                return;
             }
+            Game g = game();
+            if (g == null || g.getState() != GameState.PLAY) {
+                return;
+            }
+            if (e.getCode() == KeyCode.ENTER) {
+                tryEndPlayTurn();
+                e.consume();
+                return;
+            }
+            if (e.isShortcutDown()) {
+                return;
+            }
+            int[] dVis = visualDeltaForPlayNavigation(e.getCode());
+            if (dVis == null || playNextFrom == null) {
+                return;
+            }
+            Position target = modelNeighborFromVisualDelta(g, playNextFrom, dVis[0], dVis[1]);
+            handlePlayBoardActivation(target.getFileIndex(), target.getRankIndex());
+            e.consume();
         });
         primaryStage.setTitle("Arimaa – rozestavení");
         primaryStage.setScene(scene);
@@ -774,7 +805,7 @@ public class MainController {
         int modelRank = modelRankFromVisualRow(visualRow, g);
         GameState st = g.getState();
         if (st == GameState.PLAY) {
-            onBoardCellClickPlay(modelFile, modelRank);
+            handlePlayBoardActivation(modelFile, modelRank);
             return;
         }
         if (st != GameState.SETUP_GOLD && st != GameState.SETUP_SILVER) {
@@ -938,6 +969,25 @@ public class MainController {
         return BoardConstants.BOARD_SIZE - 1 - modelFile;
     }
 
+    /** {@code [dVisualCol, dVisualRow]} for arrow keys / WASD; visual row 0 = top of the grid. */
+    private static int[] visualDeltaForPlayNavigation(KeyCode code) {
+        return switch (code) {
+            case UP, W, KP_UP -> new int[] {0, -1};
+            case DOWN, S, KP_DOWN -> new int[] {0, 1};
+            case LEFT, A, KP_LEFT -> new int[] {-1, 0};
+            case RIGHT, D, KP_RIGHT -> new int[] {1, 0};
+            default -> null;
+        };
+    }
+
+    private Position modelNeighborFromVisualDelta(Game g, Position from, int dVisualCol, int dVisualRow) {
+        int vc = visualColFromModelFile(from.getFileIndex(), g);
+        int vr = visualRowFromModelRank(from.getRankIndex(), g);
+        int nvc = Math.min(BoardConstants.BOARD_SIZE - 1, Math.max(0, vc + dVisualCol));
+        int nvr = Math.min(BoardConstants.BOARD_SIZE - 1, Math.max(0, vr + dVisualRow));
+        return Position.of(modelFileFromVisualCol(nvc, g), modelRankFromVisualRow(nvr, g));
+    }
+
     private void updateFileCoordLabels(Game g) {
         if (fileCoordLabelsTop[0] == null) {
             return;
@@ -984,6 +1034,8 @@ public class MainController {
                 bg.setFill(baseFill);
                 bg.setStroke(trap ? Color.DARKRED : Color.gray(0.35));
                 bg.setStrokeWidth(trap ? 2 : 1);
+                bg.getStrokeDashArray().clear();
+                bg.setStrokeType(StrokeType.INSIDE);
             }
         }
     }
@@ -1002,11 +1054,43 @@ public class MainController {
         if (g == null || g.getState() != GameState.PLAY || playNextFrom == null) {
             return;
         }
+        PlayerSide mover = g.getSideToMove();
+        Position origin = playActiveSegmentOrigin;
+        if (origin != null && !origin.equals(playNextFrom)) {
+            CellData originData = cellDataAt(origin);
+            Rectangle obg = originData.background();
+            Color fill;
+            Color stroke;
+            if (mover == PlayerSide.GOLD) {
+                fill = cellBaseFillForHighlight(originData).interpolate(Color.web("#fff4d6"), 0.55);
+                stroke = Color.web("#d9b24a");
+            } else {
+                fill = cellBaseFillForHighlight(originData).interpolate(Color.web("#e8eef2"), 0.5);
+                stroke = Color.web("#8b97a3");
+            }
+            obg.setFill(fill);
+            obg.setStroke(stroke);
+            obg.setStrokeWidth(2.5);
+            obg.getStrokeDashArray().clear();
+            obg.setStrokeType(StrokeType.INSIDE);
+        }
+        if (!playPartialMove.getSteps().isEmpty()) {
+            Step lastStep = playPartialMove.getSteps().get(playPartialMove.getSteps().size() - 1);
+            Position lastFrom = lastStep.getFrom();
+            CellData fromData = cellDataAt(lastFrom);
+            Rectangle fromBg = fromData.background();
+            Paint fp = fromBg.getFill();
+            Color baseTint = fp instanceof Color fc ? fc : cellBaseFillForHighlight(fromData);
+            Color salad = Color.web("#dff3dc");
+            fromBg.setFill(baseTint.interpolate(salad, 0.38));
+            fromBg.setStrokeType(StrokeType.INSIDE);
+        }
         CellData selected = cellDataAt(playNextFrom);
         Rectangle selBg = selected.background();
         selBg.setFill(cellBaseFillForHighlight(selected).interpolate(Color.web("#ffec99"), 0.42));
         selBg.setStroke(Color.web("#b8860b"));
         selBg.setStrokeWidth(3);
+        selBg.setStrokeType(StrokeType.INSIDE);
         if (playPartialMove.getSteps().size() >= 4) {
             return;
         }
@@ -1016,12 +1100,14 @@ public class MainController {
             tbg.setFill(cellBaseFillForHighlight(tdata).interpolate(Color.web("#a8f0c0"), 0.48));
             tbg.setStroke(Color.web("#1e7a3a"));
             tbg.setStrokeWidth(2.5);
+            tbg.setStrokeType(StrokeType.INSIDE);
         }
         for (Position opp : computePullDragTargets(g)) {
             CellData odata = cellDataAt(opp);
             Rectangle obg = odata.background();
             obg.setStroke(Color.web("#b030c0"));
             obg.setStrokeWidth(3);
+            obg.setStrokeType(StrokeType.INSIDE);
         }
     }
 
@@ -1537,6 +1623,9 @@ public class MainController {
         Step last = steps.remove(steps.size() - 1);
         draftRedoSteps.push(copyStep(last));
         playNextFrom = playNextFromAfterPrefixSteps(playPartialMove.getSteps());
+        if (playPartialMove.getSteps().isEmpty()) {
+            playActiveSegmentOrigin = null;
+        }
         appendHistory(new GameHistoryEvent.DraftStepUndone(playPartialMove.getSteps().size()));
     }
 
@@ -1554,6 +1643,9 @@ public class MainController {
         }
         playPartialMove.getSteps().add(copyStep(s));
         playNextFrom = playNextFromAfterPrefixSteps(playPartialMove.getSteps());
+        if (playActiveSegmentOrigin == null && !playPartialMove.getSteps().isEmpty()) {
+            playActiveSegmentOrigin = playPartialMove.getSteps().get(0).getFrom();
+        }
         appendHistory(new GameHistoryEvent.DraftStepRedone(playPartialMove.getSteps().size()));
         return true;
     }
@@ -1572,6 +1664,7 @@ public class MainController {
             playPartialMove.getSteps().add(copyStep(st));
         }
         playNextFrom = cancelledDraftOrNull.playNextFromOrNull();
+        playActiveSegmentOrigin = cancelledDraftOrNull.playActiveSegmentOriginOrNull();
         cancelledDraftOrNull = null;
         draftRedoSteps.clear();
         appendHistory(new GameHistoryEvent.DraftRestoredAfterClear());
@@ -1628,6 +1721,7 @@ public class MainController {
     private void clearPlayTurnUi() {
         playPartialMove.getSteps().clear();
         playNextFrom = null;
+        playActiveSegmentOrigin = null;
         draftRedoSteps.clear();
         cancelledDraftOrNull = null;
     }
@@ -1660,18 +1754,22 @@ public class MainController {
         return t;
     }
 
-    private void onBoardCellClickPlay(int fileIndex, int rankIndex) {
+    /**
+     * Model square (file/rank indices) activated during PLAY — same behaviour as a board click.
+     */
+    private void handlePlayBoardActivation(int modelFile, int modelRank) {
         Game g = game();
         if (g == null) {
             return;
         }
-        Position pos = Position.of(fileIndex, rankIndex);
+        Position pos = Position.of(modelFile, modelRank);
         PlayerSide side = g.getSideToMove();
         Piece at = effectivePieceAt(g, pos);
         if (at != null) {
             if (at.getSide() == side) {
                 discardDraftRedoBranch();
                 playNextFrom = pos;
+                playActiveSegmentOrigin = pos;
                 setStatus("Vybrána figura — volné pole = krok; po uvolnění můžete kliknout na fialově označenou soupeřovu figuru (tahnutí).");
                 refreshAll();
                 return;

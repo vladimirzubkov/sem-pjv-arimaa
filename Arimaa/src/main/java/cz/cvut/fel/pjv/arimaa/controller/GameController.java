@@ -3,6 +3,8 @@ package cz.cvut.fel.pjv.arimaa.controller;
 import cz.cvut.fel.pjv.arimaa.exception.GamePhaseException;
 import cz.cvut.fel.pjv.arimaa.exception.IllegalMoveException;
 import cz.cvut.fel.pjv.arimaa.model.Game;
+import cz.cvut.fel.pjv.arimaa.model.GameHistory;
+import cz.cvut.fel.pjv.arimaa.model.GameHistoryEvent;
 import cz.cvut.fel.pjv.arimaa.model.GameTimeline;
 import cz.cvut.fel.pjv.arimaa.model.Move;
 
@@ -20,6 +22,7 @@ public class GameController {
 
     private Game game;
     private final GameTimeline timeline = new GameTimeline();
+    private final GameHistory gameHistory = new GameHistory();
 
     public Game getGame() {
         return game;
@@ -36,6 +39,18 @@ public class GameController {
         if (game != null) {
             timeline.reset(game);
         }
+        gameHistory.clear();
+    }
+
+    /**
+     * Full event log (draft steps, in-turn undo/redo, committed turns) for the current match.
+     */
+    public GameHistory getGameHistory() {
+        return gameHistory;
+    }
+
+    public void appendHistory(GameHistoryEvent event) {
+        gameHistory.append(event);
     }
 
     /**

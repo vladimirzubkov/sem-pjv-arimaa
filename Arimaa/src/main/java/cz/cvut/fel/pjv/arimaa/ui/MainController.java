@@ -4,6 +4,7 @@ import cz.cvut.fel.pjv.arimaa.controller.GameController;
 import cz.cvut.fel.pjv.arimaa.logging.LoggingSupport;
 import cz.cvut.fel.pjv.arimaa.model.DefaultRuleEngine;
 import cz.cvut.fel.pjv.arimaa.model.Game;
+import cz.cvut.fel.pjv.arimaa.model.GameHistoryEvent;
 import cz.cvut.fel.pjv.arimaa.model.GameState;
 import cz.cvut.fel.pjv.arimaa.model.Move;
 import cz.cvut.fel.pjv.arimaa.model.Piece;
@@ -64,7 +65,9 @@ import ch.qos.logback.classic.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
@@ -143,6 +146,13 @@ public class MainController {
     /** In {@link GameState#PLAY}: steps not yet committed; origin for the next step. */
     private final Move playPartialMove = new Move();
     private Position playNextFrom;
+    /** Steps undone within the current PLAY turn (redo reapplies to {@link #playPartialMove}). */
+    private final Deque<Step> draftRedoSteps = new ArrayDeque<>();
+    /** Snapshot after \"Zrušit rozpracovaný tah\"; redo restores it once. */
+    private CancelledDraftSnapshot cancelledDraftOrNull = null;
+
+    private record CancelledDraftSnapshot(Move move, Position playNextFromOrNull) {}
+
     private Button playEndTurnButton;
     private Button playCancelTurnButton;
 
@@ -273,11 +283,20 @@ public class MainController {
         playCancelTurnButton = new Button("Zrušit rozpracovaný tah");
         playCancelTurnButton.setMaxWidth(Double.MAX_VALUE);
         playCancelTurnButton.setOnAction(e -> {
-            if (!playPartialMove.getSteps().isEmpty() || playNextFrom != null) {
-                clearPlayTurnUi();
-                setStatus("Rozpracovaný tah zrušen.");
-                refreshAll();
+            Game g = game();
+            if (g == null || g.getState() != GameState.PLAY) {
+                return;
             }
+            if (playPartialMove.getSteps().isEmpty() && playNextFrom == null) {
+                return;
+            }
+            cancelledDraftOrNull = new CancelledDraftSnapshot(copyMove(playPartialMove), playNextFrom);
+            draftRedoSteps.clear();
+            playPartialMove.getSteps().clear();
+            playNextFrom = null;
+            appendHistory(new GameHistoryEvent.DraftCleared());
+            setStatus("Rozpracovaný tah zrušen (Vpřed obnoví).");
+            refreshAll();
         });
 
         handLabel.setWrapText(true);
@@ -294,6 +313,8 @@ public class MainController {
                 silverCapturesPane);
 
         notationHistoryArea.setEditable(false);
+        /** Avoid stealing Ctrl+Z / Ctrl+Y from menu accelerators when this pane is focused (PLAY). */
+        notationHistoryArea.setFocusTraversable(false);
         notationHistoryArea.setWrapText(true);
         notationHistoryArea.setFont(Font.font("Consolas", 11));
         notationHistoryArea.setPrefRowCount(10);
@@ -360,22 +381,10 @@ public class MainController {
         Menu menuTah = new Menu("Tah");
         undoMenuItem = new MenuItem("Zpět");
         undoMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN));
-        undoMenuItem.setOnAction(e -> {
-            if (gameController != null && gameController.undo()) {
-                clearPlayTurnUi();
-                setStatus("Zpět — vrácen předchozí stav.");
-                refreshAll();
-            }
-        });
+        undoMenuItem.setOnAction(e -> performUndo());
         redoMenuItem = new MenuItem("Vpřed");
         redoMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.Y, KeyCombination.SHORTCUT_DOWN));
-        redoMenuItem.setOnAction(e -> {
-            if (gameController != null && gameController.redo()) {
-                clearPlayTurnUi();
-                setStatus("Vpřed — obnoven stav.");
-                refreshAll();
-            }
-        });
+        redoMenuItem.setOnAction(e -> performRedo());
         menuTah.getItems().addAll(undoMenuItem, redoMenuItem);
 
         Menu menuGameplay = new Menu("Gameplay");
@@ -465,6 +474,19 @@ public class MainController {
 
         Scene scene = new Scene(root, 920, 640);
         scene.setFill(Color.rgb(236, 236, 238));
+        /** Capture phase: {@link TextArea} for notation otherwise consumes shortcut undo/redo before menu accelerators run. */
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            if (!e.isShortcutDown() || e.isAltDown()) {
+                return;
+            }
+            if (e.getCode() == KeyCode.Z) {
+                performUndo();
+                e.consume();
+            } else if (e.getCode() == KeyCode.Y) {
+                performRedo();
+                e.consume();
+            }
+        });
         scene.addEventHandler(KeyEvent.KEY_PRESSED, e -> {
             if (e.getCode() == KeyCode.ENTER) {
                 Game g = game();
@@ -1427,12 +1449,163 @@ public class MainController {
     }
 
     private void refreshHistoryMenus() {
+        Game g = game();
+        boolean undo;
+        boolean redo;
+        if (g == null || gameController == null) {
+            undo = false;
+            redo = false;
+        } else if (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER) {
+            undo = gameController.canUndo();
+            redo = gameController.canRedo();
+        } else if (g.getState() == GameState.PLAY) {
+            undo = !playPartialMove.getSteps().isEmpty();
+            redo = !draftRedoSteps.isEmpty() || cancelledDraftOrNull != null;
+        } else {
+            undo = false;
+            redo = false;
+        }
         if (undoMenuItem != null) {
-            undoMenuItem.setDisable(gameController == null || !gameController.canUndo());
+            undoMenuItem.setDisable(!undo);
         }
         if (redoMenuItem != null) {
-            redoMenuItem.setDisable(gameController == null || !gameController.canRedo());
+            redoMenuItem.setDisable(!redo);
         }
+    }
+
+    private void appendHistory(GameHistoryEvent event) {
+        if (gameController != null) {
+            gameController.appendHistory(event);
+        }
+    }
+
+    /** Clears redo stacks when the user starts a new editing branch (new step or divergent change). */
+    private void discardDraftRedoBranch() {
+        draftRedoSteps.clear();
+        cancelledDraftOrNull = null;
+    }
+
+    private void performUndo() {
+        Game g = game();
+        if (g == null || gameController == null) {
+            return;
+        }
+        if (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER) {
+            if (gameController.undo()) {
+                setStatus("Zpět — vrácen předchozí stav.");
+                refreshAll();
+            }
+            return;
+        }
+        if (g.getState() == GameState.PLAY && !playPartialMove.getSteps().isEmpty()) {
+            undoPlayDraftStep();
+            setStatus("Zpět — odstraněn poslední krok tahu.");
+            refreshAll();
+        }
+    }
+
+    private void performRedo() {
+        Game g = game();
+        if (g == null || gameController == null) {
+            return;
+        }
+        if (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER) {
+            if (gameController.redo()) {
+                setStatus("Vpřed — obnoven stav.");
+                refreshAll();
+            }
+            return;
+        }
+        if (g.getState() != GameState.PLAY) {
+            return;
+        }
+        if (!draftRedoSteps.isEmpty()) {
+            if (redoPlayDraftStep()) {
+                setStatus("Vpřed — krok obnoven.");
+                refreshAll();
+            }
+            return;
+        }
+        if (cancelledDraftOrNull != null && redoCancelledDraft()) {
+            setStatus("Vpřed — obnoven rozpracovaný tah.");
+            refreshAll();
+        }
+    }
+
+    private void undoPlayDraftStep() {
+        List<Step> steps = playPartialMove.getSteps();
+        Step last = steps.remove(steps.size() - 1);
+        draftRedoSteps.push(copyStep(last));
+        playNextFrom = playNextFromAfterPrefixSteps(playPartialMove.getSteps());
+        appendHistory(new GameHistoryEvent.DraftStepUndone(playPartialMove.getSteps().size()));
+    }
+
+    private boolean redoPlayDraftStep() {
+        Game g = game();
+        if (g == null || draftRedoSteps.isEmpty()) {
+            return false;
+        }
+        Step s = draftRedoSteps.pop();
+        Move trial = copyMove(playPartialMove);
+        trial.getSteps().add(copyStep(s));
+        if (!DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
+            draftRedoSteps.push(s);
+            return false;
+        }
+        playPartialMove.getSteps().add(copyStep(s));
+        playNextFrom = playNextFromAfterPrefixSteps(playPartialMove.getSteps());
+        appendHistory(new GameHistoryEvent.DraftStepRedone(playPartialMove.getSteps().size()));
+        return true;
+    }
+
+    private boolean redoCancelledDraft() {
+        Game g = game();
+        if (g == null || cancelledDraftOrNull == null) {
+            return false;
+        }
+        Move m = copyMove(cancelledDraftOrNull.move());
+        if (!DefaultRuleEngine.isValidPlayPrefix(g, m)) {
+            return false;
+        }
+        playPartialMove.getSteps().clear();
+        for (Step st : m.getSteps()) {
+            playPartialMove.getSteps().add(copyStep(st));
+        }
+        playNextFrom = cancelledDraftOrNull.playNextFromOrNull();
+        cancelledDraftOrNull = null;
+        draftRedoSteps.clear();
+        appendHistory(new GameHistoryEvent.DraftRestoredAfterClear());
+        return true;
+    }
+
+    /**
+     * Square where the side to move's active piece stands after the given prefix (same convention as when adding steps).
+     */
+    private static Position playNextFromAfterPrefixSteps(List<Step> steps) {
+        if (steps.isEmpty()) {
+            return null;
+        }
+        int n = steps.size();
+        Step last = steps.get(n - 1);
+        StepKind lk = DefaultRuleEngine.kindOf(last);
+        if (lk == StepKind.PULL_DRAG_WEAKER && n >= 2) {
+            Step prev = steps.get(n - 2);
+            if (DefaultRuleEngine.kindOf(prev) == StepKind.SLIDE) {
+                return prev.getTo();
+            }
+        }
+        if (lk == StepKind.SLIDE) {
+            return last.getTo();
+        }
+        if (n >= 2) {
+            Step prev = steps.get(n - 2);
+            StepKind pk = DefaultRuleEngine.kindOf(prev);
+            if ((pk == StepKind.PUSH_DISPLACE_WEAKER && lk == StepKind.PUSH_ADVANCE_STRONGER)
+                    || (pk == StepKind.PULL_VACATE_STRONGER && lk == StepKind.PULL_DRAG_WEAKER)) {
+                return endOwnSquareAfterBundle(List.of(prev, last));
+            }
+        }
+        return last.getTo();
     }
 
     private static boolean isStaticTrapSquare(Position pos) {
@@ -1455,6 +1628,8 @@ public class MainController {
     private void clearPlayTurnUi() {
         playPartialMove.getSteps().clear();
         playNextFrom = null;
+        draftRedoSteps.clear();
+        cancelledDraftOrNull = null;
     }
 
     private Piece effectivePieceAt(Game g, Position pos) {
@@ -1495,6 +1670,7 @@ public class MainController {
         Piece at = effectivePieceAt(g, pos);
         if (at != null) {
             if (at.getSide() == side) {
+                discardDraftRedoBranch();
                 playNextFrom = pos;
                 setStatus("Vybrána figura — volné pole = krok; po uvolnění můžete kliknout na fialově označenou soupeřovu figuru (tahnutí).");
                 refreshAll();
@@ -1511,8 +1687,10 @@ public class MainController {
                     Move trial = copyMove(playPartialMove);
                     trial.getSteps().add(copyStep(drag));
                     if (DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
+                        discardDraftRedoBranch();
                         playPartialMove.getSteps().add(copyStep(drag));
                         playNextFrom = last.getTo();
+                        appendHistory(new GameHistoryEvent.DraftStepAdded(playPartialMove.getSteps().size()));
                         setStatus("Tahnutí dokončeno (" + playPartialMove.getSteps().size() + "/4). Konec tahu nebo další krok.");
                         refreshAll();
                         return;
@@ -1539,8 +1717,10 @@ public class MainController {
             Move trialSlide = copyMove(playPartialMove);
             trialSlide.getSteps().add(copyStep(slide));
             if (DefaultRuleEngine.isValidPlayPrefix(g, trialSlide)) {
+                discardDraftRedoBranch();
                 playPartialMove.getSteps().add(copyStep(slide));
                 playNextFrom = pos;
+                appendHistory(new GameHistoryEvent.DraftStepAdded(playPartialMove.getSteps().size()));
                 setStatus("Krok přidán (" + playPartialMove.getSteps().size() + "/4). Konec tahu nebo další krok.");
                 refreshAll();
                 return;
@@ -1571,10 +1751,12 @@ public class MainController {
                 if (!DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
                     continue;
                 }
+                discardDraftRedoBranch();
                 for (Step st : bundle) {
                     playPartialMove.getSteps().add(copyStep(st));
                 }
                 playNextFrom = endOwnSquareAfterBundle(bundle);
+                appendHistory(new GameHistoryEvent.DraftStepAdded(playPartialMove.getSteps().size()));
                 setStatus("Krok přidán (" + playPartialMove.getSteps().size() + "/4). Konec tahu nebo další krok.");
                 refreshAll();
                 return;
@@ -1612,6 +1794,7 @@ public class MainController {
             setStatus("Tah proveden.");
         }
         recordTimeline(notationLine);
+        appendHistory(new GameHistoryEvent.TurnCommitted(notationLine));
         refreshAll();
     }
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.9
+
+- **`GameHistory` + `GameHistoryEvent`:** append-only журнал событий партии (шаги черновика, пошаговый undo/redo в PLAY, сброс черновика, зафиксированный полуход); экземпляр в `GameController`, сброс при `resetTimeline`.
+- **PLAY — Undo/Redo:** Ctrl+Z / Ctrl+Y работают **только с черновиком текущего хода** (отмена последнего шага, redo шага или восстановление после **Zrušit rozpracovaný tah**); завершённый полуход отменить нельзя. **SETUP:** по-прежнему снимки в `GameTimeline`.
+- **`GameTimeline`:** по-прежнему только зафиксированные состояния и нотация после завершения хода (логика записи без изменений).
+- **UI:** zkratky **Ctrl+Z / Ctrl+Y** v PLAY — `KeyEvent` filtr na `Scene` (výchozí `TextArea` notace jinak zkratky „sežere“); panel notace bez tab-fokusu (`setFocusTraversable(false)`).
+- Testy: `GameHistoryTest`.
+
 ## 0.6.8
 
 - **UI (Gameplay):** volba **Otáčet desku — hráč na tahu dole**; při zapnutí v **PLAY** (a v **GAME_OVER** s vítězem) se deska zobrazí otočená o **180°** vůči výchozímu pohledu (nejen **řádky**, ale i **sloupce** / soubory a–h), aby hráč na tahu seděl „dole“ jako při klasické desce; v **SETUP** zůstává stabilní orientace (Gold dole).

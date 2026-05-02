@@ -128,8 +128,8 @@ public class MainController {
     private final FigureSvgRasterCache figureRasterCache = new FigureSvgRasterCache();
     private PieceSkin pieceSkin = PieceSkin.DEFAULT;
 
-    /** When selected, „Zrušit rozpracovaný tah“ is disabled after the mover's own piece is trapped in the current prefix. */
-    private CheckMenuItem forbidCancelAfterOwnTrapItem;
+    /** When selected, draft cancel / in-turn Undo·Redo are disabled after any trap removal in the current prefix. */
+    private CheckMenuItem forbidCancelAfterTrapItem;
 
     /** Home square currently hovered during setup (ghost placement); both null if none. Visual row 0 = top of board. */
     private Integer hoverFileIndex;
@@ -392,10 +392,9 @@ public class MainController {
 
         Menu menuTah = new Menu("Tah");
         undoMenuItem = new MenuItem("Zpět");
-        undoMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.Z, KeyCombination.SHORTCUT_DOWN));
+        /** Keyboard: {@link Scene} filter (Ctrl+Z) — no {@link MenuItem#setAccelerator} to avoid double fire with filter. */
         undoMenuItem.setOnAction(e -> performUndo());
         redoMenuItem = new MenuItem("Vpřed");
-        redoMenuItem.setAccelerator(new KeyCodeCombination(KeyCode.Y, KeyCombination.SHORTCUT_DOWN));
         redoMenuItem.setOnAction(e -> performRedo());
         menuTah.getItems().addAll(undoMenuItem, redoMenuItem);
 
@@ -419,11 +418,11 @@ public class MainController {
         menuSkins.getItems().addAll(skinDefaultItem, skinNoneItem);
         menuGameplay.getItems().add(menuSkins);
         menuGameplay.getItems().add(new SeparatorMenuItem());
-        forbidCancelAfterOwnTrapItem = new CheckMenuItem(
-                "Po pádu vlastní figury do pasti nelze zrušit rozpracovaný tah");
-        forbidCancelAfterOwnTrapItem.setSelected(false);
-        forbidCancelAfterOwnTrapItem.selectedProperty().addListener((obs, prev, now) -> refreshAll());
-        menuGameplay.getItems().add(forbidCancelAfterOwnTrapItem);
+        forbidCancelAfterTrapItem = new CheckMenuItem(
+                "Po pádu figury do pasti nelze zrušit rozpracovaný tah");
+        forbidCancelAfterTrapItem.setSelected(false);
+        forbidCancelAfterTrapItem.selectedProperty().addListener((obs, prev, now) -> refreshAll());
+        menuGameplay.getItems().add(forbidCancelAfterTrapItem);
 
         rotateBoardToMoverItem = new CheckMenuItem("Otáčet desku — hráč na tahu dole");
         rotateBoardToMoverItem.setSelected(false);
@@ -486,9 +485,12 @@ public class MainController {
 
         Scene scene = new Scene(root, 920, 640);
         scene.setFill(Color.rgb(236, 236, 238));
-        /** Capture phase: {@link TextArea} for notation otherwise consumes shortcut undo/redo before menu accelerators run. */
+        /** Capture phase: Ctrl+Z/Y for draft undo/redo (PLAY) or timeline (SETUP). No menu accelerators — avoids double invocation with this filter. */
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (!e.isShortcutDown() || e.isAltDown()) {
+                return;
+            }
+            if (e.getTarget() instanceof TextInputControl t && t.isEditable()) {
                 return;
             }
             if (e.getCode() == KeyCode.Z) {
@@ -1337,9 +1339,9 @@ public class MainController {
         if (playCancelTurnButton != null) {
             boolean canCancelNormally = play
                     && (!playPartialMove.getSteps().isEmpty() || playNextFrom != null);
-            boolean trapBlocksCancel = forbidCancelAfterOwnTrapItem != null
-                    && forbidCancelAfterOwnTrapItem.isSelected()
-                    && partialTurnOwnPieceTrapped(g);
+            boolean trapBlocksCancel = forbidCancelAfterTrapItem != null
+                    && forbidCancelAfterTrapItem.isSelected()
+                    && partialTurnAnyTrapRemoval(g);
             playCancelTurnButton.setDisable(!canCancelNormally || trapBlocksCancel);
         }
     }
@@ -1435,15 +1437,21 @@ public class MainController {
     }
 
     /**
-     * Whether the current partial move prefix removes at least one friendly piece via trap (preview on board copy).
+     * Whether applying the draft prefix on a board copy removes at least one piece via trap (any colour).
      */
-    private boolean partialTurnOwnPieceTrapped(Game g) {
+    private boolean partialTurnAnyTrapRemoval(Game g) {
         if (g.getState() != GameState.PLAY || playPartialMove.getSteps().isEmpty()) {
             return false;
         }
         DefaultRuleEngine.TrapCapturePreview p = DefaultRuleEngine.trapCapturesIfPrefixApplied(g, playPartialMove);
-        PlayerSide side = g.getSideToMove();
-        return side == PlayerSide.GOLD ? !p.bySilver().isEmpty() : !p.byGold().isEmpty();
+        return !p.byGold().isEmpty() || !p.bySilver().isEmpty();
+    }
+
+    /** Gameplay option: block cancel / draft undo·redo while this holds. */
+    private boolean draftEditsBlockedByTrapMenuOption(Game g) {
+        return forbidCancelAfterTrapItem != null
+                && forbidCancelAfterTrapItem.isSelected()
+                && partialTurnAnyTrapRemoval(g);
     }
 
     /** Committed trap captures plus victims from the in-progress turn prefix (same ordering as events). */
@@ -1545,8 +1553,9 @@ public class MainController {
             undo = gameController.canUndo();
             redo = gameController.canRedo();
         } else if (g.getState() == GameState.PLAY) {
-            undo = !playPartialMove.getSteps().isEmpty();
-            redo = !draftRedoSteps.isEmpty() || cancelledDraftOrNull != null;
+            boolean trapLock = draftEditsBlockedByTrapMenuOption(g);
+            undo = !playPartialMove.getSteps().isEmpty() && !trapLock;
+            redo = (!draftRedoSteps.isEmpty() || cancelledDraftOrNull != null) && !trapLock;
         } else {
             undo = false;
             redo = false;
@@ -1584,6 +1593,10 @@ public class MainController {
             return;
         }
         if (g.getState() == GameState.PLAY && !playPartialMove.getSteps().isEmpty()) {
+            if (draftEditsBlockedByTrapMenuOption(g)) {
+                setStatus("Nelze vrátit krok — v rozpracovaném tahu padla figura do pasti (Gameplay).");
+                return;
+            }
             undoPlayDraftStep();
             setStatus("Zpět — odstraněn poslední krok tahu.");
             refreshAll();
@@ -1603,6 +1616,10 @@ public class MainController {
             return;
         }
         if (g.getState() != GameState.PLAY) {
+            return;
+        }
+        if (draftEditsBlockedByTrapMenuOption(g)) {
+            setStatus("Nelze vpřed — rozpracovaný tah obsahuje pád do pasti (Gameplay).");
             return;
         }
         if (!draftRedoSteps.isEmpty()) {
@@ -1635,13 +1652,38 @@ public class MainController {
             return false;
         }
         Step s = draftRedoSteps.pop();
-        Move trial = copyMove(playPartialMove);
-        trial.getSteps().add(copyStep(s));
-        if (!DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
-            draftRedoSteps.push(s);
+        if (appendRedoneStepsIfValid(g, s)) {
+            return true;
+        }
+        if (!draftRedoSteps.isEmpty()) {
+            Step s2 = draftRedoSteps.pop();
+            if (appendRedoneStepsIfValid(g, s, s2)) {
+                return true;
+            }
+            draftRedoSteps.push(s2);
+        }
+        draftRedoSteps.push(s);
+        return false;
+    }
+
+    /**
+     * Re-applies one or two atomic legs from the redo stack if together they form a legal prefix (push/pull
+     * bundles are two legs; a single leg may be rejected by {@link DefaultRuleEngine#isValidPlayPrefix}).
+     */
+    private boolean appendRedoneStepsIfValid(Game g, Step... legs) {
+        if (legs.length == 0) {
             return false;
         }
-        playPartialMove.getSteps().add(copyStep(s));
+        Move trial = copyMove(playPartialMove);
+        for (Step leg : legs) {
+            trial.getSteps().add(copyStep(leg));
+        }
+        if (!DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
+            return false;
+        }
+        for (Step leg : legs) {
+            playPartialMove.getSteps().add(copyStep(leg));
+        }
         playNextFrom = playNextFromAfterPrefixSteps(playPartialMove.getSteps());
         if (playActiveSegmentOrigin == null && !playPartialMove.getSteps().isEmpty()) {
             playActiveSegmentOrigin = playPartialMove.getSteps().get(0).getFrom();

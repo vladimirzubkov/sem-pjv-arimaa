@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.11
+
+- **PLAY — Undo / Redo (Vpřed):** push a pull jsou v modelu **dvě atomické nohy** za sebou; `isValidPlayPrefix` často **jednu nohu samu** odmítne jako neúplný začátek tahu. Po úplném Zpět a opětovném Vpřed se z redo zásobníku obnovovaly kroky **po jednom**, takže první noha push/pull zůstávala odmítnutá a Vpřed „nefungoval“. **Oprava:** pokud jeden krok z redo není platný jako prefix, zkusí se **dvojice** dvou po sobě sebraných kroků (stejný pár jako při tahu z desky), a teprve pak se kroky vrátí do zásobníku.
+
 ## 0.6.10
 
 - **PLAY — podsvícení rozpracovaného tahu:** počátek segmentu **aktuálně vybrané** figury (`playActiveSegmentOrigin`); po výběru jiné vlastní figury se přepočítá; zlatý nádech pro **Gold**, světlý kovový pro **Silver**; obrys `StrokeType.INSIDE` (stejně jako legální cíle / tahnutí). Lehký **salátový** odstín na poli **`from` posledního kroku** (odkud se právě šlo).

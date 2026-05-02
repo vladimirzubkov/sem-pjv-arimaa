@@ -77,6 +77,7 @@ import java.util.Set;
 
 /**
  * Primary window: board and setup controls (manual, random, chess layout, finish setup).
+ * Scene keyboard: PLAY — Tab / arrows / WASD / Space / Enter; SETUP — Space / Ctrl+Space / Ctrl+Enter.
  */
 public class MainController {
 
@@ -163,6 +164,17 @@ public class MainController {
      */
     private Position playActiveSegmentOrigin;
 
+    /**
+     * During pull-drag (after a slide), Tab cycles opponent squares; Space completes pull for this target
+     * (or the first target in visual order if none focused yet).
+     */
+    private Position playKeyboardPullFocus;
+
+    /**
+     * When a push bundle is legal, Tab cycles first-step destinations; Space applies the focused (or first) push.
+     */
+    private Position playKeyboardPushFocus;
+
     private Button playEndTurnButton;
     private Button playCancelTurnButton;
 
@@ -230,61 +242,15 @@ public class MainController {
 
         randomButton = new Button("Náhodně doplnit zbytek");
         randomButton.setMaxWidth(Double.MAX_VALUE);
-        randomButton.setOnAction(e -> {
-            Game g = game();
-            if (g == null) {
-                return;
-            }
-            PlayerSide side = g.getSideToMove();
-            if (g.allSetupPiecesOnBoard(side)) {
-                if (g.shuffleSetupPiecesOnHomeRandomly(side)) {
-                    setStatus("Figury na domovských řadách náhodně přeřazeny.");
-                    recordTimeline();
-                } else {
-                    setStatus("Náhodné přeřazení se nepovedlo.");
-                }
-            } else if (g.placeRemainingPiecesRandomly(side)) {
-                setStatus("Zbývající figury umístěny náhodně.");
-                recordTimeline();
-            } else {
-                setStatus("Náhodné umístění se nepovedlo (musí sedět počet figurek a volných polí).");
-            }
-            refreshAll();
-        });
+        randomButton.setOnAction(e -> performRandomSetupPlacementAction());
 
         chessButton = new Button("Šachová rozestavení");
         chessButton.setMaxWidth(Double.MAX_VALUE);
-        chessButton.setOnAction(e -> {
-            Game g = game();
-            if (g == null) {
-                return;
-            }
-            PlayerSide side = g.getSideToMove();
-            if (g.applyChessMappedSetup(side)) {
-                setStatus("Použita pevná šachová rozestavení.");
-                recordTimeline();
-            } else {
-                setStatus("Šachovou rozestavení nelze použít.");
-            }
-            refreshAll();
-        });
+        chessButton.setOnAction(e -> applyChessMappedSetupFromUi());
 
         doneButton = new Button("Hotovo (ukončit rozestavení)");
         doneButton.setMaxWidth(Double.MAX_VALUE);
-        doneButton.setOnAction(e -> {
-            Game g = game();
-            if (g == null) {
-                return;
-            }
-            PlayerSide side = g.getSideToMove();
-            if (g.tryCompleteSetup(side)) {
-                setStatus("Rozestavení dokončeno.");
-                recordTimeline();
-            } else {
-                setStatus("Rozestavení nelze dokončit (rezerva, multiset, 16 figurek na domově…).");
-            }
-            refreshAll();
-        });
+        doneButton.setOnAction(e -> tryCompleteSetupFromUi());
 
         playEndTurnButton = new Button("Konec tahu");
         playEndTurnButton.setMaxWidth(Double.MAX_VALUE);
@@ -292,24 +258,8 @@ public class MainController {
 
         playCancelTurnButton = new Button("Zrušit rozpracovaný tah");
         playCancelTurnButton.setMaxWidth(Double.MAX_VALUE);
-        playCancelTurnButton.setOnAction(e -> {
-            Game g = game();
-            if (g == null || g.getState() != GameState.PLAY) {
-                return;
-            }
-            if (playPartialMove.getSteps().isEmpty() && playNextFrom == null) {
-                return;
-            }
-            cancelledDraftOrNull = new CancelledDraftSnapshot(
-                    copyMove(playPartialMove), playNextFrom, playActiveSegmentOrigin);
-            draftRedoSteps.clear();
-            playPartialMove.getSteps().clear();
-            playNextFrom = null;
-            playActiveSegmentOrigin = null;
-            appendHistory(new GameHistoryEvent.DraftCleared());
-            setStatus("Rozpracovaný tah zrušen (Vpřed obnoví).");
-            refreshAll();
-        });
+        playCancelTurnButton.setFocusTraversable(false);
+        playCancelTurnButton.setOnAction(e -> tryCancelPlayDraftFromUi());
 
         handLabel.setWrapText(true);
         handLabel.setMaxWidth(220);
@@ -502,20 +452,68 @@ public class MainController {
             }
         });
         /**
-         * Capture phase so arrow keys reach here before a {@link ScrollPane} (side panel) consumes them for
-         * scrolling; same as play clicks + Enter to end turn.
+         * Capture phase: Esc (cancel draft), arrows / WASD (when a piece is selected), Tab / Shift+Tab (cycle own pieces or pull
+         * targets), Space (complete pull), Enter / Ctrl+Enter (end turn); SETUP: Space / Ctrl+Space / Ctrl+Enter.
+         * Runs before {@link ScrollPane} consumes arrow keys.
          */
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (e.getTarget() instanceof TextInputControl t && t.isEditable()) {
                 return;
             }
             Game g = game();
+            if (g != null && (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER)) {
+                if (e.getCode() == KeyCode.SPACE && e.isControlDown() && !e.isAltDown()) {
+                    if (chessButton != null && !chessButton.isDisabled()) {
+                        applyChessMappedSetupFromUi();
+                        e.consume();
+                    }
+                    return;
+                }
+                if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
+                    if (randomButton != null && !randomButton.isDisabled()) {
+                        performRandomSetupPlacementAction();
+                        e.consume();
+                    }
+                    return;
+                }
+                if (e.getCode() == KeyCode.ENTER && e.isControlDown() && !e.isAltDown()) {
+                    if (doneButton != null && !doneButton.isDisabled()) {
+                        tryCompleteSetupFromUi();
+                        e.consume();
+                    }
+                    return;
+                }
+                return;
+            }
             if (g == null || g.getState() != GameState.PLAY) {
+                return;
+            }
+            if (e.getCode() == KeyCode.ESCAPE) {
+                if (tryCancelPlayDraftFromUi()) {
+                    e.consume();
+                }
                 return;
             }
             if (e.getCode() == KeyCode.ENTER) {
                 tryEndPlayTurn();
                 e.consume();
+                return;
+            }
+            if (e.getCode() == KeyCode.TAB) {
+                advancePlayTabFocus(g, e.isShiftDown());
+                e.consume();
+                return;
+            }
+            if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
+                if (!computePullDragTargets(g).isEmpty()) {
+                    activatePlayPullFromKeyboard(g);
+                    e.consume();
+                    return;
+                }
+                if (!computePushBundleFirstStepTargets(g).isEmpty()) {
+                    activatePlayPushFromKeyboard(g);
+                    e.consume();
+                }
                 return;
             }
             if (e.isShortcutDown()) {
@@ -532,6 +530,7 @@ public class MainController {
         primaryStage.setTitle("Arimaa – rozestavení");
         primaryStage.setScene(scene);
         primaryStage.show();
+        Platform.runLater(() -> scene.getRoot().requestFocus());
 
         if (gameController != null) {
             gameController.resetTimeline();
@@ -1049,12 +1048,21 @@ public class MainController {
 
     /**
      * Resets each cell’s background to its base style, then in {@link GameState#PLAY} highlights the
-     * selected origin square and legal step targets (orthogonal empty squares).
+     * selected origin square and legal step targets: green tint for ordinary moves, peach/orange for
+     * push-bundle first-step cells.
      */
     private void paintPlayHighlights(Game g) {
         refreshAllSquareDecorations(g);
         if (g == null || g.getState() != GameState.PLAY || playNextFrom == null) {
             return;
+        }
+        Set<Position> pullTargets = computePullDragTargets(g);
+        Set<Position> pushTargets = computePushBundleFirstStepTargets(g);
+        if (playKeyboardPullFocus != null && (pullTargets.isEmpty() || !pullTargets.contains(playKeyboardPullFocus))) {
+            playKeyboardPullFocus = null;
+        }
+        if (playKeyboardPushFocus != null && (pushTargets.isEmpty() || !pushTargets.contains(playKeyboardPushFocus))) {
+            playKeyboardPushFocus = null;
         }
         PlayerSide mover = g.getSideToMove();
         Position origin = playActiveSegmentOrigin;
@@ -1099,17 +1107,36 @@ public class MainController {
         for (Position to : computeLegalPlayTargetsForSelection(g)) {
             CellData tdata = cellDataAt(to);
             Rectangle tbg = tdata.background();
-            tbg.setFill(cellBaseFillForHighlight(tdata).interpolate(Color.web("#a8f0c0"), 0.48));
-            tbg.setStroke(Color.web("#1e7a3a"));
+            boolean isPush = pushTargets.contains(to);
+            Color tint = isPush ? Color.web("#ffd4a8") : Color.web("#a8f0c0");
+            Color stroke = isPush ? Color.web("#c45c19") : Color.web("#1e7a3a");
+            tbg.setFill(cellBaseFillForHighlight(tdata).interpolate(tint, isPush ? 0.5 : 0.48));
+            tbg.setStroke(stroke);
             tbg.setStrokeWidth(2.5);
             tbg.setStrokeType(StrokeType.INSIDE);
         }
-        for (Position opp : computePullDragTargets(g)) {
+        for (Position opp : pullTargets) {
             CellData odata = cellDataAt(opp);
             Rectangle obg = odata.background();
             obg.setStroke(Color.web("#b030c0"));
             obg.setStrokeWidth(3);
             obg.setStrokeType(StrokeType.INSIDE);
+        }
+        if (playKeyboardPullFocus != null && pullTargets.contains(playKeyboardPullFocus)) {
+            CellData kdata = cellDataAt(playKeyboardPullFocus);
+            Rectangle kbg = kdata.background();
+            kbg.setStroke(Color.web("#ffcc33"));
+            kbg.setStrokeWidth(4);
+            kbg.getStrokeDashArray().clear();
+            kbg.setStrokeType(StrokeType.INSIDE);
+        }
+        if (playKeyboardPushFocus != null && pushTargets.contains(playKeyboardPushFocus)) {
+            CellData pdata = cellDataAt(playKeyboardPushFocus);
+            Rectangle pbg = pdata.background();
+            pbg.setStroke(Color.web("#ffcc33"));
+            pbg.setStrokeWidth(4);
+            pbg.getStrokeDashArray().clear();
+            pbg.setStrokeType(StrokeType.INSIDE);
         }
     }
 
@@ -1176,6 +1203,47 @@ public class MainController {
                 if (DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
                     out.add(bundle.get(0).getTo());
                 }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Squares that are the destination of the first atomic step of a legal <strong>push</strong> bundle
+     * (displace weaker), for keyboard Tab / Space and distinct highlighting.
+     */
+    private Set<Position> computePushBundleFirstStepTargets(Game g) {
+        Set<Position> out = new HashSet<>();
+        if (playNextFrom == null) {
+            return out;
+        }
+        int remaining = 4 - playPartialMove.getSteps().size();
+        if (remaining < 2) {
+            return out;
+        }
+        Map<Position, Piece> occ;
+        try {
+            occ = DefaultRuleEngine.simulatePlayPrefix(g, playPartialMove);
+        } catch (IllegalArgumentException ex) {
+            return out;
+        }
+        PlayerSide side = g.getSideToMove();
+        for (List<Step> bundle : DefaultRuleEngine.enumerateStepBundles(occ, side)) {
+            if (bundle.size() > remaining) {
+                continue;
+            }
+            if (!bundleStartsFromPlayNext(bundle)) {
+                continue;
+            }
+            if (DefaultRuleEngine.kindOf(bundle.get(0)) != StepKind.PUSH_DISPLACE_WEAKER) {
+                continue;
+            }
+            Move trial = copyMove(playPartialMove);
+            for (Step st : bundle) {
+                trial.getSteps().add(copyStep(st));
+            }
+            if (DefaultRuleEngine.isValidPlayPrefix(g, trial)) {
+                out.add(bundle.get(0).getTo());
             }
         }
         return out;
@@ -1764,8 +1832,99 @@ public class MainController {
         playPartialMove.getSteps().clear();
         playNextFrom = null;
         playActiveSegmentOrigin = null;
+        playKeyboardPullFocus = null;
+        playKeyboardPushFocus = null;
         draftRedoSteps.clear();
         cancelledDraftOrNull = null;
+    }
+
+    /** Same as tlačítko „Náhodně …“ — náhodné doplnění nebo přeřazení na domovských řadách. */
+    private void performRandomSetupPlacementAction() {
+        Game g = game();
+        if (g == null) {
+            return;
+        }
+        PlayerSide side = g.getSideToMove();
+        if (g.allSetupPiecesOnBoard(side)) {
+            if (g.shuffleSetupPiecesOnHomeRandomly(side)) {
+                setStatus("Figury na domovských řadách náhodně přeřazeny.");
+                recordTimeline();
+            } else {
+                setStatus("Náhodné přeřazení se nepovedlo.");
+            }
+        } else if (g.placeRemainingPiecesRandomly(side)) {
+            setStatus("Zbývající figury umístěny náhodně.");
+            recordTimeline();
+        } else {
+            setStatus("Náhodné umístění se nepovedlo (musí sedět počet figurek a volných polí).");
+        }
+        refreshAll();
+    }
+
+    /** Same as „Šachová rozestavení“. */
+    private void applyChessMappedSetupFromUi() {
+        Game g = game();
+        if (g == null) {
+            return;
+        }
+        PlayerSide side = g.getSideToMove();
+        if (g.applyChessMappedSetup(side)) {
+            setStatus("Použita pevná šachová rozestavení.");
+            recordTimeline();
+        } else {
+            setStatus("Šachovou rozestavení nelze použít.");
+        }
+        refreshAll();
+    }
+
+    /** Same as „Hotovo (ukončit rozestavení)“. */
+    private void tryCompleteSetupFromUi() {
+        Game g = game();
+        if (g == null) {
+            return;
+        }
+        PlayerSide side = g.getSideToMove();
+        if (g.tryCompleteSetup(side)) {
+            setStatus("Rozestavení dokončeno.");
+            recordTimeline();
+        } else {
+            setStatus("Rozestavení nelze dokončit (rezerva, multiset, 16 figurek na domově…).");
+        }
+        refreshAll();
+    }
+
+    /**
+     * Clears the in-progress PLAY turn draft (same as „Zrušit rozpracovaný tah“ / Esc).
+     *
+     * @return {@code true} if the draft was cleared; {@code false} if nothing to cancel, wrong phase, or trap lock
+     */
+    private boolean tryCancelPlayDraftFromUi() {
+        Game g = game();
+        if (g == null || g.getState() != GameState.PLAY) {
+            return false;
+        }
+        if (playPartialMove.getSteps().isEmpty() && playNextFrom == null) {
+            return false;
+        }
+        boolean trapBlocksCancel = forbidCancelAfterTrapItem != null
+                && forbidCancelAfterTrapItem.isSelected()
+                && partialTurnAnyTrapRemoval(g);
+        if (trapBlocksCancel) {
+            setStatus("Nelze zrušit rozpracovaný tah — v rozpracovaném tahu padla figura do pasti (Gameplay).");
+            return false;
+        }
+        cancelledDraftOrNull = new CancelledDraftSnapshot(
+                copyMove(playPartialMove), playNextFrom, playActiveSegmentOrigin);
+        draftRedoSteps.clear();
+        playPartialMove.getSteps().clear();
+        playNextFrom = null;
+        playActiveSegmentOrigin = null;
+        playKeyboardPullFocus = null;
+        playKeyboardPushFocus = null;
+        appendHistory(new GameHistoryEvent.DraftCleared());
+        setStatus("Rozpracovaný tah zrušen (Vpřed obnoví).");
+        refreshAll();
+        return true;
     }
 
     private Piece effectivePieceAt(Game g, Position pos) {
@@ -1794,6 +1953,132 @@ public class MainController {
         t.setTo(s.getTo());
         t.setKind(s.getKind());
         return t;
+    }
+
+    private int comparePositionVisual(Position a, Position b, Game g) {
+        int ra = visualRowFromModelRank(a.getRankIndex(), g);
+        int rb = visualRowFromModelRank(b.getRankIndex(), g);
+        int cmp = Integer.compare(ra, rb);
+        if (cmp != 0) {
+            return cmp;
+        }
+        return Integer.compare(visualColFromModelFile(a.getFileIndex(), g), visualColFromModelFile(b.getFileIndex(), g));
+    }
+
+    /**
+     * Own pieces on the board in visual order (left→right, top→bottom), using simulated occupancy for the draft.
+     */
+    private List<Position> ownPiecesOnBoardInVisualOrder(Game g) {
+        PlayerSide side = g.getSideToMove();
+        List<Position> out = new ArrayList<>();
+        for (int vr = 0; vr < BoardConstants.BOARD_SIZE; vr++) {
+            for (int vc = 0; vc < BoardConstants.BOARD_SIZE; vc++) {
+                Position p = Position.of(modelFileFromVisualCol(vc, g), modelRankFromVisualRow(vr, g));
+                Piece pc = effectivePieceAt(g, p);
+                if (pc != null && pc.getSide() == side) {
+                    out.add(p);
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Tab / Shift+Tab: cycle pull targets, else push first-step targets, else own pieces.
+     */
+    private void advancePlayTabFocus(Game g, boolean reverse) {
+        Set<Position> pulls = computePullDragTargets(g);
+        if (!pulls.isEmpty()) {
+            playKeyboardPushFocus = null;
+            List<Position> list = new ArrayList<>(pulls);
+            list.sort((a, b) -> comparePositionVisual(a, b, g));
+            if (playKeyboardPullFocus != null && !pulls.contains(playKeyboardPullFocus)) {
+                playKeyboardPullFocus = null;
+            }
+            int idx;
+            if (playKeyboardPullFocus == null) {
+                idx = reverse ? list.size() - 1 : 0;
+            } else {
+                int cur = list.indexOf(playKeyboardPullFocus);
+                if (cur < 0) {
+                    cur = 0;
+                }
+                idx = reverse ? (cur - 1 + list.size()) % list.size() : (cur + 1) % list.size();
+            }
+            playKeyboardPullFocus = list.get(idx);
+            setStatus("Tahnutí — mezerník dokončí výběr soupeře (Tab = další figura).");
+            refreshAll();
+            return;
+        }
+        playKeyboardPullFocus = null;
+        Set<Position> pushT = computePushBundleFirstStepTargets(g);
+        if (!pushT.isEmpty()) {
+            List<Position> plist = new ArrayList<>(pushT);
+            plist.sort((a, b) -> comparePositionVisual(a, b, g));
+            if (playKeyboardPushFocus != null && !pushT.contains(playKeyboardPushFocus)) {
+                playKeyboardPushFocus = null;
+            }
+            int pidx;
+            if (playKeyboardPushFocus == null) {
+                pidx = reverse ? plist.size() - 1 : 0;
+            } else {
+                int cur = plist.indexOf(playKeyboardPushFocus);
+                if (cur < 0) {
+                    cur = 0;
+                }
+                pidx = reverse ? (cur - 1 + plist.size()) % plist.size() : (cur + 1) % plist.size();
+            }
+            playKeyboardPushFocus = plist.get(pidx);
+            setStatus("Tlačení — mezerník provede výběr (Tab = další oranžový cíl).");
+            refreshAll();
+            return;
+        }
+        playKeyboardPushFocus = null;
+        List<Position> own = ownPiecesOnBoardInVisualOrder(g);
+        if (own.isEmpty()) {
+            return;
+        }
+        int start = playNextFrom == null ? -1 : own.indexOf(playNextFrom);
+        int idx;
+        if (start < 0) {
+            idx = reverse ? own.size() - 1 : 0;
+        } else {
+            idx = reverse ? (start - 1 + own.size()) % own.size() : (start + 1) % own.size();
+        }
+        Position next = own.get(idx);
+        discardDraftRedoBranch();
+        playNextFrom = next;
+        playActiveSegmentOrigin = next;
+        setStatus("Vybrána figura (Tab) — volné pole = krok; po uvolnění můžete dokončit tahnutí.");
+        refreshAll();
+    }
+
+    /** Space: complete pull using keyboard focus or first pull target in visual order. */
+    private void activatePlayPullFromKeyboard(Game g) {
+        Set<Position> pulls = computePullDragTargets(g);
+        if (pulls.isEmpty()) {
+            return;
+        }
+        List<Position> sorted = new ArrayList<>(pulls);
+        sorted.sort((a, b) -> comparePositionVisual(a, b, g));
+        Position pos = playKeyboardPullFocus != null && pulls.contains(playKeyboardPullFocus)
+                ? playKeyboardPullFocus
+                : sorted.get(0);
+        handlePlayBoardActivation(pos.getFileIndex(), pos.getRankIndex());
+    }
+
+    /** Space: apply push bundle for keyboard focus or first push target in visual order. */
+    private void activatePlayPushFromKeyboard(Game g) {
+        Set<Position> pushT = computePushBundleFirstStepTargets(g);
+        if (pushT.isEmpty()) {
+            return;
+        }
+        List<Position> sorted = new ArrayList<>(pushT);
+        sorted.sort((a, b) -> comparePositionVisual(a, b, g));
+        Position pos = playKeyboardPushFocus != null && pushT.contains(playKeyboardPushFocus)
+                ? playKeyboardPushFocus
+                : sorted.get(0);
+        handlePlayBoardActivation(pos.getFileIndex(), pos.getRankIndex());
     }
 
     /**

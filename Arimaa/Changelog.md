@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.12
+
+- **PLAY — klávesnice:** **Tab** / **Shift+Tab** — cyklus vlastních figurek na desce (v pořadí zleva doprava, shora dolů podle aktuálního otočení desky), stejně jako klik na vlastní figuru; při **tahnutí** (po tahu na volné pole) Tab cykluje **soupeřovy** figury označené pro dokončení tahnutí; při dostupném **tlačení** Tab cykluje **oranžové** cíle prvního kroku pushu (odlišné podsvícení od zelených běžných tahů); **mezerník** dokončí tahnutí nebo tlačení na zvýrazněný cíl (nebo první v pořadí). **Enter** a **Ctrl+Enter** končí tah (jako dříve Enter). Šipky / **WASD** beze změny. **Esc** zruší rozpracovaný tah (stejné jako tlačítko); tlačítko **Zrušit rozpracovaný tah** nemá tab-fokus — po startu je fokus na scéně, **mezerník** na desce už neaktivuje omylem zrušení.
+- **SETUP — klávesnice:** **mezerník** = stejné jako tlačítko náhodného rozestavení / doplnění; **Ctrl+mezerník** = šachová rozestavení; **Ctrl+Enter** = Hotovo (ukončit rozestavení), pokud je tlačítko aktivní.
+
 ## 0.6.11
 
 - **PLAY — Undo / Redo (Vpřed):** push a pull jsou v modelu **dvě atomické nohy** za sebou; `isValidPlayPrefix` často **jednu nohu samu** odmítne jako neúplný začátek tahu. Po úplném Zpět a opětovném Vpřed se z redo zásobníku obnovovaly kroky **po jednom**, takže první noha push/pull zůstávala odmítnutá a Vpřed „nefungoval“. **Oprava:** pokud jeden krok z redo není platný jako prefix, zkusí se **dvojice** dvou po sobě sebraných kroků (stejný pár jako při tahu z desky), a teprve pak se kroky vrátí do zásobníku.

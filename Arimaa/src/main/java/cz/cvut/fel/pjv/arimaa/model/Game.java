@@ -441,6 +441,17 @@ public class Game {
     }
 
     /**
+     * Applies a legal in-turn prefix during PLAY without ending the turn (used when restoring saved mid-turn state).
+     */
+    public void applyPlayPrefix(Move prefix) {
+        Objects.requireNonNull(prefix, "prefix");
+        if (state != GameState.PLAY) {
+            throw new GamePhaseException("applyPlayPrefix only in PLAY");
+        }
+        ruleEngine.applyPlayPrefix(this, prefix);
+    }
+
+    /**
      * Captures full match state for undo/redo (Memento).
      */
     public GameMemento createMemento() {

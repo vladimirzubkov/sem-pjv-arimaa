@@ -30,6 +30,11 @@ public final class DefaultRuleEngine implements RuleEngine {
             throw new GamePhaseException("applyMove only in PLAY");
         }
         PlayerSide mover = game.getSideToMove();
+        if (move.getSteps().isEmpty()) {
+            log.info("applyMove: pass (no steps)");
+            finishPlayTurnAfterBoardMutation(game, mover);
+            return;
+        }
         log.info("applyMove: mover={} stepCount={}", mover, move.getSteps().size());
         log.debug("applyMove detail: {}", describeMove(move));
         validateSequentialSteps(game, move, true, null);
@@ -39,6 +44,11 @@ public final class DefaultRuleEngine implements RuleEngine {
                 "after applyMoveToBoard: goldRabbits={} silverRabbits={}",
                 countRabbits(board, PlayerSide.GOLD),
                 countRabbits(board, PlayerSide.SILVER));
+        finishPlayTurnAfterBoardMutation(game, mover);
+    }
+
+    private void finishPlayTurnAfterBoardMutation(Game game, PlayerSide mover) {
+        Board board = game.getBoard();
         TerminalEvaluation terminal = evaluateTerminalWithReason(board);
         if (terminal.winner() != null) {
             log.info("game over: winner={} reason={} lastMover={}", terminal.winner(), terminal.reason(), mover);
@@ -52,6 +62,26 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (!opponentCanMove) {
             log.info("game over: immobilization winner={} immobilized={}", mover, game.getSideToMove());
             game.setMatchWinner(mover);
+            game.setState(GameState.GAME_OVER);
+        }
+    }
+
+    @Override
+    public void applyPlayPrefix(Game game, Move prefix) {
+        Objects.requireNonNull(game, "game");
+        Objects.requireNonNull(prefix, "prefix");
+        if (game.getState() != GameState.PLAY) {
+            throw new GamePhaseException("applyPlayPrefix only in PLAY");
+        }
+        PlayerSide mover = game.getSideToMove();
+        log.info("applyPlayPrefix: mover={} stepCount={}", mover, prefix.getSteps().size());
+        validateSequentialSteps(game, prefix, false, null);
+        applyMoveToBoard(game.getBoard(), prefix, game::recordTrapRemoval);
+        Board board = game.getBoard();
+        TerminalEvaluation terminal = evaluateTerminalWithReason(board);
+        if (terminal.winner() != null) {
+            log.info("game over after prefix: winner={} reason={}", terminal.winner(), terminal.reason());
+            game.setMatchWinner(terminal.winner());
             game.setState(GameState.GAME_OVER);
         }
     }
@@ -264,8 +294,11 @@ public final class DefaultRuleEngine implements RuleEngine {
                     drag.setKind(StepKind.PULL_DRAG_WEAKER);
                     drag.setFrom(weakPos);
                     drag.setTo(vacated);
-                    for (Position strongNew : orthogonalNeighbors(weakPos)) {
-                        if (strongNew.equals(vacated)) {
+                    // The strong piece vacated `vacated` and is now at one of its other orthogonal
+                    // neighbours (strongNew).  Search neighbours of `vacated` (not weakPos) because
+                    // after the slide the strong piece may no longer be adjacent to weakPos.
+                    for (Position strongNew : orthogonalNeighbors(vacated)) {
+                        if (strongNew.equals(weakPos)) {
                             continue;
                         }
                         Piece strong = occ.get(strongNew);

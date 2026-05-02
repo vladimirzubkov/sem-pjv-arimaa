@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.12
+
+- Textový formát uložení a načtení partie (replay notace); rozpracovaný tah po načtení; opravy načítání notace a tahů.
+- Dialogy pamatují poslední složku; **Ctrl+O** / **Ctrl+S**; po načtení přehrání historie na desce.
+
 ## 0.6.12
 
 - **PLAY — klávesnice:** **Tab** / **Shift+Tab** — cyklus vlastních figurek na desce (v pořadí zleva doprava, shora dolů podle aktuálního otočení desky), stejně jako klik na vlastní figuru; při **tahnutí** (po tahu na volné pole) Tab cykluje **soupeřovy** figury označené pro dokončení tahnutí; při dostupném **tlačení** Tab cykluje **oranžové** cíle prvního kroku pushu (odlišné podsvícení od zelených běžných tahů); **mezerník** dokončí tahnutí nebo tlačení na zvýrazněný cíl (nebo první v pořadí). **Enter** a **Ctrl+Enter** končí tah (jako dříve Enter). Šipky / **WASD** beze změny. **Esc** zruší rozpracovaný tah (stejné jako tlačítko); tlačítko **Zrušit rozpracovaný tah** nemá tab-fokus — po startu je fokus na scéně, **mezerník** na desce už neaktivuje omylem zrušení.

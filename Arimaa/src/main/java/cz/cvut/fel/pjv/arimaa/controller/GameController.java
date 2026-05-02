@@ -5,8 +5,10 @@ import cz.cvut.fel.pjv.arimaa.exception.IllegalMoveException;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.GameHistory;
 import cz.cvut.fel.pjv.arimaa.model.GameHistoryEvent;
+import cz.cvut.fel.pjv.arimaa.model.GameMemento;
 import cz.cvut.fel.pjv.arimaa.model.GameTimeline;
 import cz.cvut.fel.pjv.arimaa.model.Move;
+import cz.cvut.fel.pjv.arimaa.persistence.GameSerializer;
 
 import java.util.List;
 
@@ -51,6 +53,24 @@ public class GameController {
 
     public void appendHistory(GameHistoryEvent event) {
         gameHistory.append(event);
+    }
+
+    public void clearGameHistory() {
+        gameHistory.clear();
+    }
+
+    public GameTimeline getTimeline() {
+        return timeline;
+    }
+
+    /**
+     * Replays stored notation on top of {@code setup}; restores undo/redo timeline accordingly.
+     *
+     * @return draft steps when the file ended with an unfinished PLAY turn line
+     */
+    public GameSerializer.LoadOutcome loadFromTxtGame(GameMemento setup, List<String> moveLines) {
+        GameSerializer gs = new GameSerializer();
+        return gs.loadIntoController(this, new GameSerializer.ParsedTxtGame(setup, moveLines));
     }
 
     /**

@@ -1,17 +1,149 @@
 package cz.cvut.fel.pjv.arimaa.persistence;
 
+import cz.cvut.fel.pjv.arimaa.controller.GameController;
 import cz.cvut.fel.pjv.arimaa.model.Game;
+import cz.cvut.fel.pjv.arimaa.model.GameMemento;
+import cz.cvut.fel.pjv.arimaa.model.GameTimeline;
+import cz.cvut.fel.pjv.arimaa.model.Move;
+import cz.cvut.fel.pjv.arimaa.model.Step;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
 
 /**
- * Converts a game to and from official Arimaa notation (or other text format).
+ * Line-oriented save format: {@link GameMementoTextCodec} snapshot, then one move notation line per row (each starts with
+ * {@code Ng}/{@code Ns}). Blank lines are ignored; legacy {@code ---} lines are skipped when loading.
  */
-public class GameSerializer {
+public final class GameSerializer {
 
-    public String toNotation(Game game) {
-        return null;
+    private static final Pattern PLAY_PREFIX_HEAD = Pattern.compile("^\\s*(\\d+)([gs])\\b");
+
+    /**
+     * Frozen snapshot before the first committed PLAY line plus visible notation (including optional trailing draft).
+     */
+    public record ParsedTxtGame(GameMemento playStartSnapshot, List<String> moveLines) {
     }
 
-    public Game fromNotation(String text) {
-        return null;
+    /**
+     * Encodes {@link GameController}'s current branch: layout snapshot (initial PLAY posture or entire SETUP state),
+     * then every notation line shown in the UI (plus optional {@code draftNotationLineOrNull} as the last line).
+     */
+    public String serialize(GameController controller, String draftNotationLineOrNull) {
+        GameMemento setup = computePlayBaseSnapshot(controller.getTimeline());
+        List<String> lines = new ArrayList<>(GameMementoTextCodec.encode(setup));
+        lines.addAll(controller.notationLinesVisible());
+        if (draftNotationLineOrNull != null && !draftNotationLineOrNull.isBlank()) {
+            lines.add(draftNotationLineOrNull.trim());
+        }
+        return String.join(System.lineSeparator(), lines) + System.lineSeparator();
+    }
+
+    public String serialize(GameController controller) {
+        return serialize(controller, null);
+    }
+
+    /**
+     * Parses text produced by {@link #serialize(GameController, String)}.
+     */
+    public ParsedTxtGame parse(String text) {
+        ArrayList<String> cleaned = new ArrayList<>();
+        text.lines().forEach(line -> {
+            String t = line.trim();
+            if (t.isEmpty() || "---".equals(t)) {
+                return;
+            }
+            cleaned.add(t);
+        });
+
+        int firstMove = -1;
+        for (int i = 0; i < cleaned.size(); i++) {
+            if (PLAY_PREFIX_HEAD.matcher(cleaned.get(i)).find()) {
+                firstMove = i;
+                break;
+            }
+        }
+
+        List<String> setupTrimmed =
+                firstMove < 0 ? cleaned : new ArrayList<>(cleaned.subList(0, firstMove));
+        List<String> moves =
+                firstMove < 0 ? List.of() : new ArrayList<>(cleaned.subList(firstMove, cleaned.size()));
+
+        GameMemento mem = GameMementoTextCodec.decode(setupTrimmed);
+        return new ParsedTxtGame(mem, List.copyOf(moves));
+    }
+
+    /** State immediately before the first committed PLAY notation line; otherwise the current timeline tip. */
+    static GameMemento computePlayBaseSnapshot(GameTimeline timeline) {
+        List<String> arrival = timeline.arrivalNotationSnapshot();
+        List<GameMemento> states = timeline.statesSnapshot();
+        int pos = timeline.timelinePosition();
+        int firstPlay = -1;
+        for (int i = 1; i < arrival.size(); i++) {
+            String line = arrival.get(i);
+            if (line != null && !line.isBlank() && PLAY_PREFIX_HEAD.matcher(line).find()) {
+                firstPlay = i;
+                break;
+            }
+        }
+        if (firstPlay <= 0) {
+            return states.get(pos);
+        }
+        return states.get(firstPlay - 1);
+    }
+
+    /** Result of replaying stored notation on top of {@link ParsedTxtGame#playStartSnapshot()}. */
+    public record LoadOutcome(Move pendingPartialTurn) {}
+
+    /**
+     * Restores {@link GameController#getGame()} by replaying {@code moveLines}; returns draft steps when the file
+     * ended mid-turn.
+     */
+    public LoadOutcome loadIntoController(GameController controller, ParsedTxtGame parsed) {
+        Game game = controller.getGame();
+        game.startNewGame();
+        game.restoreMemento(parsed.playStartSnapshot());
+        controller.resetTimeline();
+
+        Move pending = new Move();
+        List<String> lines = parsed.moveLines();
+        for (int i = 0; i < lines.size(); i++) {
+            String raw = lines.get(i);
+            boolean last = i == lines.size() - 1;
+            PlayNotationParser.ParsedLine pl = PlayNotationParser.parseLine(game, raw);
+            Move mv = pl.move();
+            boolean earlyPass = pl.hasEarlyPassSuffix();
+
+            // A line is treated as a partial draft when it is the LAST line, has no "... pass"
+            // marker, AND uses fewer than 4 steps.  This matches the save convention of
+            // ArimaaNotation.formatFullTurn which always appends "... pass" to complete short turns.
+            // The draft steps are returned in LoadOutcome without mutating the board so that the UI
+            // can display them via simulatePlayPrefix (exactly as during normal interactive play).
+            boolean isDraft = last && !earlyPass && mv.getSteps().size() < 4;
+            if (!last && !earlyPass && mv.getSteps().size() < 4) {
+                throw new IllegalArgumentException(
+                        "line " + i + " has fewer than 4 steps without '... pass' but is not the last line: " + raw);
+            }
+            if (!isDraft) {
+                game.applyMove(mv);
+                controller.recordAfterMutation(raw);
+            } else {
+                // Draft: leave board at the start-of-turn position; the UI uses simulatePlayPrefix.
+                controller.recordAfterMutation(null);
+                pending.getSteps().clear();
+                for (Step s : mv.getSteps()) {
+                    pending.getSteps().add(copyStep(s));
+                }
+            }
+        }
+        return new LoadOutcome(pending);
+    }
+
+    private static Step copyStep(Step s) {
+        Step t = new Step();
+        t.setFrom(s.getFrom());
+        t.setTo(s.getTo());
+        t.setKind(s.getKind());
+        return t;
     }
 }

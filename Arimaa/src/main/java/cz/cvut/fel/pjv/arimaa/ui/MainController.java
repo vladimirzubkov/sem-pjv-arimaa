@@ -13,12 +13,17 @@ import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.model.Step;
 import cz.cvut.fel.pjv.arimaa.model.StepKind;
+import cz.cvut.fel.pjv.arimaa.persistence.GameRepository;
+import cz.cvut.fel.pjv.arimaa.persistence.GameSerializer;
 import cz.cvut.fel.pjv.arimaa.util.ArimaaNotation;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import cz.cvut.fel.pjv.arimaa.util.HomeTerritory;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.util.Duration;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckMenuItem;
@@ -59,9 +64,15 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.StrokeType;
 import javafx.scene.text.Font;
 import javafx.scene.transform.Scale;
+import javafx.stage.FileChooser;
+import javafx.stage.FileChooser.ExtensionFilter;
 import javafx.stage.Stage;
 
 import ch.qos.logback.classic.Level;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -104,6 +115,7 @@ public class MainController {
     private GameController gameController;
 
     private Stage stage;
+    private File lastUsedDir;
     /** Pixel size of the framed board (coordinates + frame); used for scaling. */
     private double framedOuterSize = 1.0;
     private final Label statusLabel = new Label();
@@ -335,10 +347,23 @@ public class MainController {
         MenuItem novaHraItem = new MenuItem("Nová hra");
         novaHraItem.setAccelerator(new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN));
         novaHraItem.setOnAction(e -> startNewGameAction());
+        MenuItem ulozitHruItem = new MenuItem("Uložit hru…");
+        ulozitHruItem.setAccelerator(new KeyCodeCombination(KeyCode.S, KeyCombination.SHORTCUT_DOWN));
+        ulozitHruItem.setOnAction(e -> saveGameToFileAction());
+        MenuItem nacistHruItem = new MenuItem("Načíst hru…");
+        nacistHruItem.setAccelerator(new KeyCodeCombination(KeyCode.O, KeyCombination.SHORTCUT_DOWN));
+        nacistHruItem.setOnAction(e -> loadGameFromFileAction());
         MenuItem ukoncitItem = new MenuItem("Ukončit");
         ukoncitItem.setAccelerator(new KeyCodeCombination(KeyCode.Q, KeyCombination.SHORTCUT_DOWN));
         ukoncitItem.setOnAction(e -> Platform.exit());
-        menuHra.getItems().addAll(novaHraItem, new SeparatorMenuItem(), ukoncitItem);
+        menuHra.getItems()
+                .addAll(
+                        novaHraItem,
+                        new SeparatorMenuItem(),
+                        ulozitHruItem,
+                        nacistHruItem,
+                        new SeparatorMenuItem(),
+                        ukoncitItem);
 
         Menu menuTah = new Menu("Tah");
         undoMenuItem = new MenuItem("Zpět");
@@ -1597,6 +1622,120 @@ public class MainController {
             }
             setStatus("Nová hra — rozestavuje Gold.");
             refreshAll();
+        }
+    }
+
+    private void saveGameToFileAction() {
+        if (gameController == null || stage == null) {
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Uložit hru");
+        chooser.getExtensionFilters().add(new ExtensionFilter("Arimaa (*.txt)", "*.txt"));
+        if (lastUsedDir != null && lastUsedDir.isDirectory()) {
+            chooser.setInitialDirectory(lastUsedDir);
+        }
+        File file = chooser.showSaveDialog(stage);
+        if (file == null) {
+            return;
+        }
+        lastUsedDir = file.getParentFile();
+        Path path = file.toPath();
+        Game g = game();
+        String draft = null;
+        if (g != null && g.getState() == GameState.PLAY && !playPartialMove.getSteps().isEmpty()) {
+            String prefix = gameController.nextPlayNotationPrefix();
+            draft = ArimaaNotation.formatPartialTurnLine(g.getBoard(), playPartialMove, prefix);
+        }
+        GameSerializer ser = new GameSerializer();
+        String text = ser.serialize(gameController, draft);
+        try {
+            new GameRepository().saveUtf8(path, text);
+            setStatus("Hra uložena do souboru.");
+            log.info("user action: game saved to {}", path);
+        } catch (IOException ex) {
+            log.warn("save failed", ex);
+            setStatus("Uložení se nepovedlo: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * After a successful load, rewinds the timeline to the play-start snapshot and replays
+     * each committed turn visually (300 ms per step), ending with a full refresh.
+     */
+    private void playbackLoadedHistory() {
+        int finalPos = gameController.getTimeline().timelinePosition();
+        // Rewind to the initial play-start position.
+        while (gameController.canUndo()) {
+            gameController.undo();
+        }
+        Game g = game();
+        if (g != null) {
+            paintBoard(g);
+        }
+        if (finalPos <= 0) {
+            refreshAll();
+            setStatus("Hra načtena ze souboru.");
+            return;
+        }
+        setStatus("Přehrávám tahy… (0 / " + finalPos + ")");
+        Timeline anim = new Timeline();
+        for (int i = 1; i <= finalPos; i++) {
+            final int step = i;
+            anim.getKeyFrames().add(new KeyFrame(Duration.millis(step * 300L), e -> {
+                gameController.redo();
+                Game gd = game();
+                if (gd != null) {
+                    paintBoard(gd);
+                    refreshNotationHistory();
+                    setStatus("Přehrávám tahy… (" + step + " / " + finalPos + ")");
+                }
+            }));
+        }
+        anim.setOnFinished(e -> {
+            refreshAll();
+            setStatus("Hra načtena ze souboru.");
+        });
+        anim.play();
+    }
+
+    private void loadGameFromFileAction() {
+        if (gameController == null || stage == null) {
+            return;
+        }
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Načíst hru");
+        chooser.getExtensionFilters().add(new ExtensionFilter("Arimaa (*.txt)", "*.txt"));
+        if (lastUsedDir != null && lastUsedDir.isDirectory()) {
+            chooser.setInitialDirectory(lastUsedDir);
+        }
+        File file = chooser.showOpenDialog(stage);
+        if (file == null) {
+            return;
+        }
+        lastUsedDir = file.getParentFile();
+        Path path = file.toPath();
+        try {
+            String text = new GameRepository().loadUtf8(path);
+            GameSerializer ser = new GameSerializer();
+            GameSerializer.ParsedTxtGame p = ser.parse(text);
+            clearPlayTurnUi();
+            GameSerializer.LoadOutcome out = gameController.loadFromTxtGame(p.playStartSnapshot(), p.moveLines());
+            for (Step s : out.pendingPartialTurn().getSteps()) {
+                playPartialMove.getSteps().add(copyStep(s));
+            }
+            // Restore selection highlight for the draft so the user sees the in-progress turn.
+            if (!playPartialMove.getSteps().isEmpty()) {
+                playNextFrom = playNextFromAfterPrefixSteps(playPartialMove.getSteps());
+            }
+            log.info("user action: game loaded from {}", path);
+            playbackLoadedHistory();
+        } catch (IOException ex) {
+            log.warn("load failed", ex);
+            setStatus("Načtení se nepovedlo: " + ex.getMessage());
+        } catch (RuntimeException ex) {
+            log.warn("load parse/replay failed", ex);
+            setStatus("Soubor nelze načíst: " + ex.getMessage());
         }
     }
 

@@ -1,6 +1,7 @@
 package cz.cvut.fel.pjv.arimaa.model;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -132,5 +133,20 @@ public final class GameTimeline {
         game.restoreMemento(states.get(pos));
         log.debug("timeline redo: pos={}", pos);
         return true;
+    }
+
+    /** Snapshot index currently restored via undo/redo ({@code 0 .. states.size()-1}). */
+    public int timelinePosition() {
+        return pos;
+    }
+
+    /** Immutable copy of all stored snapshots (same indices as notation entries). */
+    public List<GameMemento> statesSnapshot() {
+        return Collections.unmodifiableList(new ArrayList<>(states));
+    }
+
+    /** Parallel notation lines aligned with {@link #statesSnapshot()} indices (nullable entries allowed). */
+    public List<String> arrivalNotationSnapshot() {
+        return Collections.unmodifiableList(new ArrayList<>(arrivalNotation));
     }
 }

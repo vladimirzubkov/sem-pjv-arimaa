@@ -1,17 +1,20 @@
 package cz.cvut.fel.pjv.arimaa.persistence;
 
-import cz.cvut.fel.pjv.arimaa.model.Game;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Loads and saves game state to local files.
+ * UTF-8 text persistence for {@link GameSerializer} output.
  */
-public class GameRepository {
+public final class GameRepository {
 
-    public void save(Game game, Path path) {
+    public void saveUtf8(Path path, String text) throws IOException {
+        Files.writeString(path, text, StandardCharsets.UTF_8);
     }
 
-    public Game load(Path path) {
-        return null;
+    public String loadUtf8(Path path) throws IOException {
+        return Files.readString(path, StandardCharsets.UTF_8);
     }
 }

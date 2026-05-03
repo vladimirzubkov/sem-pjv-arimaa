@@ -10,6 +10,7 @@ public class Move {
 
     private final List<Step> steps = new ArrayList<>();
 
+    /** Mutable list of steps forming this turn (up to four in PLAY). */
     public List<Step> getSteps() {
         return steps;
     }

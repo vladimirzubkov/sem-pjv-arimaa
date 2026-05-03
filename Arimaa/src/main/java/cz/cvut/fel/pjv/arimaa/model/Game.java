@@ -16,7 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Root aggregate for match state: board, side to move, lifecycle state, and setup flow.
+ * Root aggregate for match state: board, side to move, lifecycle, setup flow (incl. {@link SetupPresets} one-click
+ * layouts), and trap-capture book-keeping.
  */
 public class Game {
 
@@ -53,29 +54,32 @@ public class Game {
         return setupHand;
     }
 
-    private record Slot(Position position, PieceType type) {
-    }
-
+    /** Current lifecycle phase ({@link GameState#SETUP_GOLD}, PLAY, …). */
     public GameState getState() {
         return state;
     }
 
+    /** Assigns lifecycle phase (used when restoring mementos or tests). */
     public void setState(GameState state) {
         this.state = state;
     }
 
+    /** Live 8×8 grid; never {@code null} after {@link #startNewGame()}. */
     public Board getBoard() {
         return board;
     }
 
+    /** Rebinds the board (serialization / tests). */
     public void setBoard(Board board) {
         this.board = board;
     }
 
+    /** Side allowed to act next (setup placement or PLAY turn). */
     public PlayerSide getSideToMove() {
         return sideToMove;
     }
 
+    /** Overrides mover (setup transitions, PLAY, restore). */
     public void setSideToMove(PlayerSide sideToMove) {
         this.sideToMove = sideToMove;
     }
@@ -87,6 +91,7 @@ public class Game {
         return matchWinner;
     }
 
+    /** Declares match winner when entering {@link GameState#GAME_OVER}. */
     public void setMatchWinner(PlayerSide matchWinner) {
         this.matchWinner = matchWinner;
     }
@@ -98,6 +103,7 @@ public class Game {
         return ranksMirroredForHomeCheck;
     }
 
+    /** Flips how home ranks are interpreted for {@link HomeTerritory} checks (setup edge cases). */
     public void setRanksMirroredForHomeCheck(boolean ranksMirroredForHomeCheck) {
         this.ranksMirroredForHomeCheck = ranksMirroredForHomeCheck;
     }
@@ -219,8 +225,8 @@ public class Game {
     }
 
     /**
-     * After a successful placement: take another piece of the same type from the tray if any; otherwise the
-     * strongest available type (official order {@link PieceType} enum order). Does nothing if setup is not active.
+     * Chooses the next tray piece for continuous placement UX after {@link #confirmSetupHandPlacement(Position)}: same type
+     * if available, else strongest remaining (official {@link PieceType} order).
      */
     private void beginAutoPickNextInHandAfterPlacement(PlayerSide side, PieceType placedType) {
         if (!isSetupPhaseForSide(side)) {
@@ -334,15 +340,29 @@ public class Game {
         return true;
     }
 
+    /** Rotating presets: {@link SetupPresets#ROTATION_COUNT}. */
+    public static final int CHESS_SETUP_ROTATION_COUNT = SetupPresets.ROTATION_COUNT;
+
     /**
-     * Clears this side’s home rows onto the tray, then places the official multiset in a fixed “chess mapping” layout:
-     * back rank a–h = Horse, Cat, Dog, Camel, Elephant, Dog, Cat, Horse (R,N,B,Q,K…); forward rank = eight rabbits.
-     * Silver uses rabbits on rank 6 (index 6) and the same back rank on rank 7.
+     * Clears this side’s home rows onto the tray, then places the official multiset using {@link SetupPresets}: classic
+     * chess mapping ({@link SetupPresets#classicGold()} / {@link SetupPresets#classicSilver()}).
      *
      * @param side gold or silver (must be in that side’s setup phase)
      * @return {@code false} if the combined tray + home pieces are not exactly sixteen with the legal multiset
      */
     public boolean applyChessMappedSetup(PlayerSide side) {
+        return applyChessMappedSetup(side, -1);
+    }
+
+    /**
+     * Same as {@link #applyChessMappedSetup(PlayerSide)} but {@code presetIndex} selects a rotating layout from
+     * {@link SetupPresets#rotatingGold(int)} / {@link SetupPresets#rotatingSilver(int)} (see {@link SetupPresets}).
+     *
+     * @param presetIndex {@code -1} classic chess; Gold: {@code 0} reversed chess, {@code 1} 99of9, {@code 2} MH,
+     *     {@code 3} HH. Silver: {@code 0} mirror of Gold reversed, {@code 1} Fritzlein only, {@code 2–3} mirrors of Gold
+     *     MH / HH ({@link SetupPresets#mirrorGoldHomeToSilver}).
+     */
+    public boolean applyChessMappedSetup(PlayerSide side, int presetIndex) {
         if (side == null || board == null || !isSetupPhaseForSide(side)) {
             return false;
         }
@@ -356,8 +376,14 @@ public class Game {
             reserveList(side).addAll(pool);
             return false;
         }
-        List<Slot> layout = side == PlayerSide.GOLD ? goldChessSlots() : silverChessSlots();
-        for (Slot slot : layout) {
+        List<SetupPresets.Slot> layout;
+        if (presetIndex < 0) {
+            layout = side == PlayerSide.GOLD ? SetupPresets.classicGold() : SetupPresets.classicSilver();
+        } else {
+            int v = Math.floorMod(presetIndex, CHESS_SETUP_ROTATION_COUNT);
+            layout = side == PlayerSide.GOLD ? SetupPresets.rotatingGold(v) : SetupPresets.rotatingSilver(v);
+        }
+        for (SetupPresets.Slot slot : layout) {
             Piece piece = removeFirstOfType(pool, slot.type());
             if (piece == null) {
                 liftAllFriendlyPiecesFromHomeToReserve(side);
@@ -491,36 +517,6 @@ public class Game {
         trapCapturesByGold.addAll(m.trapCapturesByGold());
         trapCapturesBySilver.clear();
         trapCapturesBySilver.addAll(m.trapCapturesBySilver());
-    }
-
-    private static List<Slot> goldChessSlots() {
-        List<Slot> slots = new ArrayList<>(16);
-        PieceType[] back = {
-                PieceType.HORSE, PieceType.CAT, PieceType.DOG, PieceType.CAMEL,
-                PieceType.ELEPHANT, PieceType.DOG, PieceType.CAT, PieceType.HORSE
-        };
-        for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
-            slots.add(new Slot(Position.of(f, 0), back[f]));
-        }
-        for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
-            slots.add(new Slot(Position.of(f, 1), PieceType.RABBIT));
-        }
-        return slots;
-    }
-
-    private static List<Slot> silverChessSlots() {
-        List<Slot> slots = new ArrayList<>(16);
-        for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
-            slots.add(new Slot(Position.of(f, 6), PieceType.RABBIT));
-        }
-        PieceType[] back = {
-                PieceType.HORSE, PieceType.CAT, PieceType.DOG, PieceType.CAMEL,
-                PieceType.ELEPHANT, PieceType.DOG, PieceType.CAT, PieceType.HORSE
-        };
-        for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
-            slots.add(new Slot(Position.of(f, 7), back[f]));
-        }
-        return slots;
     }
 
     private void liftAllFriendlyPiecesFromHomeToReserve(PlayerSide side) {

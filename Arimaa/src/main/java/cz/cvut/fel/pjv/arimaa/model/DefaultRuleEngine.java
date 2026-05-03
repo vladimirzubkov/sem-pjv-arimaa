@@ -16,7 +16,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Full Arimaa play rules: slides, push/pull, freezing, traps after each step, and game-end detection.
+ * Full Arimaa play rules implementation: slide/push/pull generation, freezing, trap resolution after each step,
+ * notation tokens compatible with {@link cz.cvut.fel.pjv.arimaa.util.ArimaaNotation}. Used as the sole {@link RuleEngine}
+ * implementation in this project.
  */
 public final class DefaultRuleEngine implements RuleEngine {
 

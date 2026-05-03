@@ -6,7 +6,8 @@ import javafx.application.Application;
 import javafx.stage.Stage;
 
 /**
- * JavaFX entry: wires {@link Game} / {@link GameController} / {@link MainController} and shows setup UI.
+ * JavaFX {@link javafx.application.Application}: builds {@link Game}, {@link GameController}, attaches {@link MainController}
+ * to the primary stage (setup + PLAY UI).
  */
 public class JavafxApp extends Application {
 

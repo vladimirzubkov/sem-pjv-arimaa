@@ -5,6 +5,10 @@ package cz.cvut.fel.pjv.arimaa.model;
  */
 public interface RuleEngine {
 
+    /**
+     * Executes a full PLAY turn (1–4 steps), resolves traps, checks goal/freeze/endgame, then switches
+     * {@link Game#getSideToMove()}.
+     */
     void applyMove(Game game, Move move);
 
     /**

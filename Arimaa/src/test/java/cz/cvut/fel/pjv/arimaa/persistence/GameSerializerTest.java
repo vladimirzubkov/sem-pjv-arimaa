@@ -38,7 +38,7 @@ class GameSerializerTest {
 
         String line = ArimaaNotation.formatFullTurn(game.getBoard(), m, "1g");
         assertTrue(c.submitHumanMove(m));
-        c.recordAfterMutation(line);
+        c.recordCommittedPlayTurn(m, line);
 
         GameSerializer ser = new GameSerializer();
         String text = ser.serialize(c);

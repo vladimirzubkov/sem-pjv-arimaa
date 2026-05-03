@@ -6,8 +6,10 @@ import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.GameHistory;
 import cz.cvut.fel.pjv.arimaa.model.GameHistoryEvent;
 import cz.cvut.fel.pjv.arimaa.model.GameMemento;
+import cz.cvut.fel.pjv.arimaa.model.GameState;
 import cz.cvut.fel.pjv.arimaa.model.GameTimeline;
 import cz.cvut.fel.pjv.arimaa.model.Move;
+import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.persistence.GameSerializer;
 
 import java.util.List;
@@ -16,7 +18,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Thin MVC layer between JavaFX views and the domain model.
+ * Thin MVC layer: {@link GameTimeline} for SETUP undo/redo only; {@link PlayTurnHistory} for PLAY half-turns,
+ * scrubbing, and notation; {@link GameHistory} for the event log.
  */
 public class GameController {
 
@@ -24,6 +27,7 @@ public class GameController {
 
     private Game game;
     private final GameTimeline timeline = new GameTimeline();
+    private final PlayTurnHistory playHistory = new PlayTurnHistory();
     private final GameHistory gameHistory = new GameHistory();
 
     public Game getGame() {
@@ -34,19 +38,30 @@ public class GameController {
         this.game = game;
     }
 
+    public GameTimeline getTimeline() {
+        return timeline;
+    }
+
+    public PlayTurnHistory getPlayHistory() {
+        return playHistory;
+    }
+
     /**
-     * Replaces the timeline with a single snapshot of the current game (e.g. after {@link Game#startNewGame()}).
+     * Clears PLAY history and replaces the SETUP timeline with a single snapshot of the current game (e.g. after
+     * {@link Game#startNewGame()}). If the game is already in PLAY or GAME_OVER, bootstraps {@link PlayTurnHistory}
+     * from the current board (interactive match or tests that begin in PLAY).
      */
     public void resetTimeline() {
         if (game != null) {
             timeline.reset(game);
+            playHistory.clear();
+            if (game.getState() == GameState.PLAY || game.getState() == GameState.GAME_OVER) {
+                playHistory.bootstrapAtPlayStart(game);
+            }
         }
         gameHistory.clear();
     }
 
-    /**
-     * Full event log (draft steps, in-turn undo/redo, committed turns) for the current match.
-     */
     public GameHistory getGameHistory() {
         return gameHistory;
     }
@@ -59,65 +74,132 @@ public class GameController {
         gameHistory.clear();
     }
 
-    public GameTimeline getTimeline() {
-        return timeline;
+    /**
+     * Call once when Silver’s setup completes and the model enters PLAY (no-op if not PLAY).
+     */
+    public void enterPlayPhaseBootstrap() {
+        if (game != null && game.getState() == GameState.PLAY && !playHistory.isBootstrapped()) {
+            playHistory.bootstrapAtPlayStart(game);
+        }
     }
 
-    /**
-     * Replays stored notation on top of {@code setup}; restores undo/redo timeline accordingly.
-     *
-     * @return draft steps when the file ended with an unfinished PLAY turn line
-     */
     public GameSerializer.LoadOutcome loadFromTxtGame(GameMemento setup, List<String> moveLines) {
         GameSerializer gs = new GameSerializer();
         return gs.loadIntoController(this, new GameSerializer.ParsedTxtGame(setup, moveLines));
     }
 
-    /**
-     * Records the current game state after a successful mutation (truncates redo branch).
-     */
     public void recordAfterMutation() {
         recordAfterMutation(null);
     }
 
     /**
-     * Records state after mutation; {@code playNotationLineOrNull} is set for completed PLAY turns.
+     * Records a SETUP mutation on the timeline, or a no-op during PLAY (committed PLAY lines use
+     * {@link #recordCommittedPlayTurn(Move, String)}).
      */
     public void recordAfterMutation(String playNotationLineOrNull) {
-        if (game != null) {
-            timeline.recordAfterMutation(game, playNotationLineOrNull);
+        if (game == null) {
+            return;
+        }
+        if (game.getState() == GameState.SETUP_GOLD || game.getState() == GameState.SETUP_SILVER) {
+            timeline.recordAfterMutation(game, null);
+            return;
+        }
+        if (playNotationLineOrNull != null && !playNotationLineOrNull.isBlank()) {
+            throw new IllegalStateException("use recordCommittedPlayTurn during PLAY");
+        }
+    }
+
+    /** After a successful {@link Game#applyMove(Move)} in PLAY (or GAME_OVER from the last apply). */
+    public void recordCommittedPlayTurn(Move submittedMove, String notationLine) {
+        if (game == null) {
+            return;
+        }
+        if (game.getState() != GameState.PLAY && game.getState() != GameState.GAME_OVER) {
+            throw new IllegalStateException("recordCommittedPlayTurn only after PLAY apply");
+        }
+        if (!playHistory.isBootstrapped()) {
+            throw new IllegalStateException("PLAY history not bootstrapped");
+        }
+        playHistory.finalizeCommittedDraft(game, notationLine, submittedMove);
+    }
+
+    /** Applies the current history view (cursor + prefix) to {@link #getGame()}. */
+    public void applyPlayHistoryViewToGame() {
+        if (game != null && playHistory.isBootstrapped()) {
+            playHistory.applyViewToGame(game);
+        }
+    }
+
+    public void restoreTrailingDraftTurnStartForSubmit() {
+        if (game != null && playHistory.isBootstrapped()) {
+            playHistory.restoreTrailingDraftTurnStart(game);
         }
     }
 
     public List<String> notationLinesVisible() {
-        return timeline.notationLinesVisible();
+        if (game != null && playHistory.isBootstrapped()) {
+            return playHistory.committedNotationLinesInOrder();
+        }
+        return List.of();
     }
 
     public String nextPlayNotationPrefix() {
-        return timeline.nextPlayNotationPrefix();
+        if (game != null && playHistory.isBootstrapped()) {
+            return playHistory.nextPlayNotationPrefix();
+        }
+        return "1g";
     }
 
     public boolean canUndo() {
-        return game != null && timeline.canUndo();
+        if (game == null) {
+            return false;
+        }
+        if (game.getState() == GameState.SETUP_GOLD || game.getState() == GameState.SETUP_SILVER) {
+            return timeline.canUndo();
+        }
+        return playHistory.isBootstrapped() && playHistory.canStepViewBack();
     }
 
     public boolean canRedo() {
-        return game != null && timeline.canRedo();
+        if (game == null) {
+            return false;
+        }
+        if (game.getState() == GameState.SETUP_GOLD || game.getState() == GameState.SETUP_SILVER) {
+            return timeline.canRedo();
+        }
+        return playHistory.isBootstrapped() && playHistory.canStepViewForwardWithinHalf();
     }
 
     public boolean undo() {
-        return game != null && timeline.undo(game);
+        if (game == null) {
+            return false;
+        }
+        if (game.getState() == GameState.SETUP_GOLD || game.getState() == GameState.SETUP_SILVER) {
+            return timeline.undo(game);
+        }
+        if (!playHistory.isBootstrapped() || !playHistory.canStepViewBack()) {
+            return false;
+        }
+        playHistory.stepViewBack();
+        playHistory.applyViewToGame(game);
+        return true;
     }
 
     public boolean redo() {
-        return game != null && timeline.redo(game);
+        if (game == null) {
+            return false;
+        }
+        if (game.getState() == GameState.SETUP_GOLD || game.getState() == GameState.SETUP_SILVER) {
+            return timeline.redo(game);
+        }
+        if (!playHistory.isBootstrapped() || !playHistory.canStepViewForwardWithinHalf()) {
+            return false;
+        }
+        playHistory.stepViewForwardWithinHalf();
+        playHistory.applyViewToGame(game);
+        return true;
     }
 
-    /**
-     * Applies a full play-phase turn via {@link Game#applyMove(Move)}.
-     *
-     * @return {@code true} if the move was legal and applied
-     */
     public boolean submitHumanMove(Move move) {
         if (game == null || move == null) {
             return false;

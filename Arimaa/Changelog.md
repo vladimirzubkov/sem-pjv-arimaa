@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.13
+
+- **Skiny:** složka **`default`** (PNG figurky), **`classic`** (SVG); **`FigureSkinDirectoryDiscovery`** — výpis podsložek `images/figure_sets/` jen z **jednoho** classpath URL (`file:` / `jar:` u stejného kořene jako načítání figurek), bez závislosti na ClassGraph (žádné „fantomní“ skiny z jiného modulu / classpath).
+- **Gameplay → Skin:** výchozí **`default`**; výběr položky v menu **bez rozlišení velikosti písmen** v názvu složky.
+- **PLAY — klávesnice:** **Ctrl+Tab** / **Ctrl+Shift+Tab** — přepnutí na jinou **vlastní** figuru i během **tahnutí** nebo **tlačení** (bez cyklování fialových / oranžových cílů).
+- Textový save (`GameMementoTextCodec`): u desky jen **neprázdné řádky `R#`**, bez řádku **`GRID`**; starý formát s `GRID` se už nenačítá; test **`GameMementoTextCodecTest`**.
+- **SETUP / model:** **`SetupPresets`** (šachová a rotující rozestavení, zrcadlení domovských řad), napojení v **`Game`**; test **`SetupPresetsTest`**.
+- **PLAY — historie polů (`PlayTurnHistory`) a načtená partie:** při úpravě draftu se maže zastaralý `notationLineOrNull` ze souboru; řádek **Historie tahů** pro rozpracovaný tah se staví z **kroků** (Ctrl+Z na živém konci zkrátí náhled, ne celý starý text).
+- **Undo / Redo draftu:** `return` po větvi mutace jen po **úspěšném** `pop`; `reconcilePlayPartialWithHistoryView()` drží `playPartialMove` v souladu s historií.
+- **Legální pokračování tahu:** deska už má aplikovaný prefix — náhled obsazení z `simulatePlayPrefix(g, new Move())`, validace přídavku přes `isValidPlaySuffixFromViewHalfStart` (probe od `startSnap` polu).
+- **UI:** status po výběru vlastní figury zmiňuje tahnutí jen při neprázdných fialových cílech.
+- **GameController:** ve fázi PLAY je zdrojem pravdy pro notaci a krokové Zpět/Vpřed **`PlayTurnHistory`** (náhled rozpracovaného tahu, `recordCommittedPlayTurn`, `applyPlayHistoryViewToGame`); **`GameTimeline`** zůstává jen pro SETUP (undo/redo rozestavení).
+- **GameSerializer:** základ TXT zápisu z **`PlayTurnHistory.anchorStartSnap`** (místo heuristiky nad časovou osou); načítání přes **`rebuildFromLoadedGame`** a **`applyPlayHistoryViewToGame`** — stejná cesta jako při interaktivní hře.
+- **GameTimeline:** doplněný Javadoc u `canUndo`, `canRedo`, `undo`, `redo`.
+- Úpravy **`MainController`** (napojení na nový PLAY historický model a UI) v rámci této verze.
+
 ## 0.7.12
 
 - Textový formát uložení a načtení partie (replay notace); rozpracovaný tah po načtení; opravy načítání notace a tahů.
@@ -78,7 +94,7 @@
 
 ## 0.3.3
 
-- **Skin figurek (Gameplay → Skins):** `Default` / `None`; sada SVG v `images/figure_sets/default/` (Gold/Silver), rasterizace přes **Apache Batik** (`batik-transcoder` + `batik-codec`) do `javafx.scene.image.Image` ve třídě `FigureSvgRasterCache` (mezipaměť, super-sampling pro ostřejší zobrazení, PNG s alfou bez vynuceného bílého pozadí). Deska, rezerva a „V ruce“ zobrazují grafiku nebo písmena.
+- **Skin figurek (Gameplay → Skins):** `Default` / `Originál` / `None`; SVG v `images/figure_sets/classic/`, PNG v `images/figure_sets/default/`, rasterizace SVG přes **Apache Batik** do `javafx.scene.image.Image` ve třídě `FigureSvgRasterCache` (mezipaměť, super-sampling; u PNG případný fallback na SVG z `classic/`). Deska, rezerva a „V ruce“ zobrazují grafiku nebo písmena.
 - **Rozestavení — náhled:** při figuře v ruce poloprůhledný náhled (cca 50 %) na domovském poli pod kurzorem, pokud je umístění legální (`Game.isLegalSetupHandPlacementTarget`).
 - **Rozestavení — automatická ruka po umístění:** po `confirmSetupHandPlacement` se z rezervy bere další figura **stejného typu**, jinak první dostupný typ v pořadí síly **E, M, H, D, K, R** (`PieceType`). Ruční výběr z panelu rezervy zůstává.
 - Testy: `FigureSvgRasterCacheTest`, úpravy a doplnění `GameTest`.

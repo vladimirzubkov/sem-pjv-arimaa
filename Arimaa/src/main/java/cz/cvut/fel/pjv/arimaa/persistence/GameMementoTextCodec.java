@@ -10,6 +10,9 @@ import java.util.List;
 
 /**
  * Line-oriented textual snapshot of {@link GameMemento} (board grid, reserves, setup hand, captures).
+ * <p>
+ * Grid rows use {@code R1}…{@code R8} labels; fully empty rows are omitted when encoding. Decoding fills only
+ * rows present in the file; missing ranks stay empty.
  */
 public final class GameMementoTextCodec {
 
@@ -18,14 +21,24 @@ public final class GameMementoTextCodec {
     private GameMementoTextCodec() {
     }
 
+    /** Serializes a memento into editable lines (MAGIC, meta, hand, non-empty {@code R#} rows, reserves, captures). */
     public static List<String> encode(GameMemento m) {
         ArrayList<String> lines = new ArrayList<>();
         lines.add(MAGIC);
         lines.add(metaLine(m));
         lines.add(handLine(m.setupHand()));
-        lines.add("GRID");
         GameMemento.CellSnap[][] grid = m.grid();
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
+            boolean allEmpty = true;
+            for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
+                if (grid[r][f] != null) {
+                    allEmpty = false;
+                    break;
+                }
+            }
+            if (allEmpty) {
+                continue;
+            }
             StringBuilder sb = new StringBuilder(BoardConstants.BOARD_SIZE);
             for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
                 GameMemento.CellSnap c = grid[r][f];
@@ -40,6 +53,7 @@ public final class GameMementoTextCodec {
         return lines;
     }
 
+    /** Parses lines produced by {@link #encode(GameMemento)} back into a {@link GameMemento}. */
     public static GameMemento decode(List<String> lines) {
         if (lines.isEmpty() || !MAGIC.equals(lines.getFirst().trim())) {
             throw new IllegalArgumentException("missing or wrong magic line");
@@ -47,23 +61,17 @@ public final class GameMementoTextCodec {
         int i = 1;
         Meta meta = parseMeta(lines.get(i++));
         GameMemento.CellSnap hand = parseHandLine(lines.get(i++));
-        if (!"GRID".equals(lines.get(i++).trim())) {
-            throw new IllegalArgumentException("GRID expected");
-        }
         GameMemento.CellSnap[][] grid = new GameMemento.CellSnap[BoardConstants.BOARD_SIZE][BoardConstants.BOARD_SIZE];
-        for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
-            String row = lines.get(i++).trim();
-            int space = row.indexOf(' ');
-            if (space < 0) {
-                throw new IllegalArgumentException("bad grid row: " + row);
+        if (i >= lines.size()) {
+            throw new IllegalArgumentException("truncated after HAND");
+        }
+        while (i < lines.size()) {
+            String t = lines.get(i).trim();
+            if (!isSparseGridRowLine(t)) {
+                break;
             }
-            String payload = row.substring(space + 1).trim();
-            if (payload.length() != BoardConstants.BOARD_SIZE) {
-                throw new IllegalArgumentException("grid row width: " + payload);
-            }
-            for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
-                grid[r][f] = decodeCell(payload.charAt(f));
-            }
+            int rowIdx = parseRowLabelIndex(t);
+            fillRowFromLine(grid, rowIdx, lines.get(i++));
         }
         List<GameMemento.CellSnap> goldR = decodeReserveLine(lines.get(i++));
         List<GameMemento.CellSnap> silverR = decodeReserveLine(lines.get(i++));
@@ -81,6 +89,45 @@ public final class GameMementoTextCodec {
                 hand,
                 capG,
                 capS);
+    }
+
+    /** {@code R1} … {@code R8} with whitespace after rank digit; excludes {@code RESERVE_*} lines. */
+    private static boolean isSparseGridRowLine(String trimmed) {
+        if (trimmed.length() < 4 || trimmed.charAt(0) != 'R') {
+            return false;
+        }
+        char d = trimmed.charAt(1);
+        if (d < '1' || d > '8') {
+            return false;
+        }
+        if (trimmed.length() > 3 && Character.isDigit(trimmed.charAt(2))) {
+            return false;
+        }
+        return Character.isWhitespace(trimmed.charAt(2));
+    }
+
+    private static int parseRowLabelIndex(String trimmed) {
+        char d = trimmed.charAt(1);
+        int n = d - '0';
+        if (n < 1 || n > BoardConstants.BOARD_SIZE) {
+            throw new IllegalArgumentException("bad row label: " + trimmed);
+        }
+        return n - 1;
+    }
+
+    private static void fillRowFromLine(GameMemento.CellSnap[][] grid, int rowIndex, String rowLine) {
+        String trimmed = rowLine.trim();
+        int space = trimmed.indexOf(' ');
+        if (space < 0) {
+            throw new IllegalArgumentException("bad grid row: " + rowLine);
+        }
+        String payload = trimmed.substring(space + 1).trim();
+        if (payload.length() != BoardConstants.BOARD_SIZE) {
+            throw new IllegalArgumentException("grid row width: " + payload);
+        }
+        for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
+            grid[rowIndex][f] = decodeCell(payload.charAt(f));
+        }
     }
 
     private record Meta(

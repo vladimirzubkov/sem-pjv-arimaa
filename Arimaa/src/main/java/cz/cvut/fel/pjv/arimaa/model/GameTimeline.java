@@ -107,14 +107,17 @@ public final class GameTimeline {
         return silverNum + "s";
     }
 
+    /** Whether there is a snapshot before the current cursor (setup + committed moves). */
     public boolean canUndo() {
         return pos > 0;
     }
 
+    /** Whether a redo branch exists after the current cursor. */
     public boolean canRedo() {
         return pos < states.size() - 1;
     }
 
+    /** Steps the cursor back and restores {@code game} from the previous memento. */
     public boolean undo(Game game) {
         if (!canUndo()) {
             return false;
@@ -125,6 +128,7 @@ public final class GameTimeline {
         return true;
     }
 
+    /** Steps the cursor forward and restores {@code game} from the next memento. */
     public boolean redo(Game game) {
         if (!canRedo()) {
             return false;

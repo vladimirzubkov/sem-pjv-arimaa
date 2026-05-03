@@ -5,7 +5,7 @@ import cz.cvut.fel.pjv.arimaa.ui.JavafxApp;
 import javafx.application.Application;
 
 /**
- * Entry point for the desktop application (JavaFX).
+ * Entry point for the desktop application (JavaFX): configures logging from CLI args, then hands off to {@link JavafxApp}.
  */
 public final class ArimaaApp {
 

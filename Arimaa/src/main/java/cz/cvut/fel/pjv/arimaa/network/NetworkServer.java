@@ -5,7 +5,9 @@ package cz.cvut.fel.pjv.arimaa.network;
  */
 public interface NetworkServer {
 
+    /** Binds to {@code port} and accepts clients (implementation pending). */
     void listen(int port);
 
+    /** Stops accepting connections and shuts down the server socket. */
     void stop();
 }

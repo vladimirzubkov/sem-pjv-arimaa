@@ -10,6 +10,7 @@ import java.util.List;
  */
 public class MoveGenerator {
 
+    /** Legal compound moves for the side to move (stub returns empty until CP2 implements enumeration). */
     public List<Move> legalMoves(Game game) {
         return Collections.emptyList();
     }

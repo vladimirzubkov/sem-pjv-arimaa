@@ -105,8 +105,8 @@ public final class PlayNotationParser {
     }
 
     /**
-     * Incrementally reconstructs a {@link Move} so that {@link DefaultRuleEngine#buildArimaaNotationBody}
-     * matches {@code tokens}. Trap-removal tokens ({@code …x}) produced by the engine may be omitted from {@code file}.
+     * Reconstructs {@link Move#getSteps()} token-by-token so engine notation matches the saved line (used when loading
+     * {@link GameSerializer} files).
      */
     public static Move parsePlayBody(Game game, List<String> tokens) {
         Move move = new Move();

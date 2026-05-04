@@ -6,7 +6,7 @@ import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.GameHistory;
 import cz.cvut.fel.pjv.arimaa.model.GameHistoryEvent;
 import cz.cvut.fel.pjv.arimaa.model.GameMemento;
-import cz.cvut.fel.pjv.arimaa.model.GameState;
+import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.model.GameTimeline;
 import cz.cvut.fel.pjv.arimaa.model.Move;
 import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;

@@ -4,11 +4,11 @@ import cz.cvut.fel.pjv.arimaa.model.Board;
 import cz.cvut.fel.pjv.arimaa.model.DefaultRuleEngine;
 import cz.cvut.fel.pjv.arimaa.model.Move;
 import cz.cvut.fel.pjv.arimaa.model.Piece;
-import cz.cvut.fel.pjv.arimaa.model.PieceType;
-import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
+import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.model.Step;
-import cz.cvut.fel.pjv.arimaa.model.StepKind;
+import cz.cvut.fel.pjv.arimaa.model.enums.StepKind;
 
 import org.junit.jupiter.api.Test;
 

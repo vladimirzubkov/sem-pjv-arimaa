@@ -1,5 +1,7 @@
 package cz.cvut.fel.pjv.arimaa.model;
 
+import cz.cvut.fel.pjv.arimaa.model.enums.StepKind;
+
 /**
  * One atomic step within a full turn (a turn contains up to four steps in Arimaa).
  */

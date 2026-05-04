@@ -1,4 +1,4 @@
-package cz.cvut.fel.pjv.arimaa.model;
+package cz.cvut.fel.pjv.arimaa.model.enums;
 
 /**
  * High-level lifecycle states of the application and match.

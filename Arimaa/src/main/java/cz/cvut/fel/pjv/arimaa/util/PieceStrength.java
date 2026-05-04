@@ -1,6 +1,6 @@
 package cz.cvut.fel.pjv.arimaa.util;
 
-import cz.cvut.fel.pjv.arimaa.model.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
 
 /**
  * Official Arimaa strength order is reflected by {@link PieceType} declaration order (strongest first).

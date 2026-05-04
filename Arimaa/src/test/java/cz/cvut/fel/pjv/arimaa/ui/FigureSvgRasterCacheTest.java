@@ -1,7 +1,7 @@
 package cz.cvut.fel.pjv.arimaa.ui;
 
-import cz.cvut.fel.pjv.arimaa.model.PieceType;
-import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
+import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import javafx.scene.image.Image;
 import org.junit.jupiter.api.Test;
 

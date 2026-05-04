@@ -1,4 +1,6 @@
-package cz.cvut.fel.pjv.arimaa.model;
+package cz.cvut.fel.pjv.arimaa.model.enums;
+
+import cz.cvut.fel.pjv.arimaa.model.Step;
 
 /**
  * How a {@link Step} mutates the board. Push and pull each use two {@link Step} entries per Arimaa rules.

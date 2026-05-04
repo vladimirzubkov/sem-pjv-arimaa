@@ -1,5 +1,7 @@
 package cz.cvut.fel.pjv.arimaa.model;
 
+import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 
 import java.util.ArrayList;

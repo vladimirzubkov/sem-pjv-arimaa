@@ -1,5 +1,8 @@
 package cz.cvut.fel.pjv.arimaa.model;
 
+import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
+
 /**
  * A piece instance on the board.
  */

@@ -1,5 +1,6 @@
 package cz.cvut.fel.pjv.arimaa.model;
 
+import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;

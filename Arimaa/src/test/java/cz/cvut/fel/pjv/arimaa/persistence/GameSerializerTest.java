@@ -3,11 +3,11 @@ package cz.cvut.fel.pjv.arimaa.persistence;
 import cz.cvut.fel.pjv.arimaa.controller.GameController;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.Move;
-import cz.cvut.fel.pjv.arimaa.model.PieceType;
-import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
+import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.model.Step;
-import cz.cvut.fel.pjv.arimaa.model.StepKind;
+import cz.cvut.fel.pjv.arimaa.model.enums.StepKind;
 import cz.cvut.fel.pjv.arimaa.util.ArimaaNotation;
 import org.junit.jupiter.api.Test;
 

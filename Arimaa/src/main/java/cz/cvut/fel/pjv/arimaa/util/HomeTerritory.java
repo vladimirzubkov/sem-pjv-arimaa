@@ -1,6 +1,6 @@
 package cz.cvut.fel.pjv.arimaa.util;
 
-import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 
 /**

@@ -1,9 +1,9 @@
 package cz.cvut.fel.pjv.arimaa.persistence;
 
 import cz.cvut.fel.pjv.arimaa.model.GameMemento;
-import cz.cvut.fel.pjv.arimaa.model.GameState;
-import cz.cvut.fel.pjv.arimaa.model.PieceType;
-import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
+import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
+import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import org.junit.jupiter.api.Test;
 

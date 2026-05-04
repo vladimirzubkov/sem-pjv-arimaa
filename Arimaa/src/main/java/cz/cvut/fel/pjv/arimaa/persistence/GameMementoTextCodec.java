@@ -1,8 +1,9 @@
 package cz.cvut.fel.pjv.arimaa.persistence;
 
 import cz.cvut.fel.pjv.arimaa.model.GameMemento;
-import cz.cvut.fel.pjv.arimaa.model.PieceType;
-import cz.cvut.fel.pjv.arimaa.model.PlayerSide;
+import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
+import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 
 import java.util.ArrayList;
@@ -131,7 +132,7 @@ public final class GameMementoTextCodec {
     }
 
     private record Meta(
-            cz.cvut.fel.pjv.arimaa.model.GameState state,
+            GameState state,
             PlayerSide side,
             PlayerSide winner,
             boolean mirror) {
@@ -143,7 +144,7 @@ public final class GameMementoTextCodec {
             throw new IllegalArgumentException("META line: " + line);
         }
         return new Meta(
-                cz.cvut.fel.pjv.arimaa.model.GameState.valueOf(p[1]),
+                GameState.valueOf(p[1]),
                 PlayerSide.valueOf(p[2]),
                 "-".equals(p[4]) ? null : PlayerSide.valueOf(p[4]),
                 "1".equals(p[3]));

@@ -1,5 +1,6 @@
 package cz.cvut.fel.pjv.arimaa.model;
 
+import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.persistence.PlayNotationParser;
 
 import java.util.ArrayList;

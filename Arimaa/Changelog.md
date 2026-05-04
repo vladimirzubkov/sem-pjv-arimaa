@@ -15,6 +15,10 @@
 - **GameSerializer:** základ TXT zápisu z **`PlayTurnHistory.anchorStartSnap`** (místo heuristiky nad časovou osou); načítání přes **`rebuildFromLoadedGame`** a **`applyPlayHistoryViewToGame`** — stejná cesta jako při interaktivní hře.
 - **GameTimeline:** doplněný Javadoc u `canUndo`, `canRedo`, `undo`, `redo`.
 - Úpravy **`MainController`** (napojení na nový PLAY historický model a UI) v rámci této verze.
+- **Refaktor UI (bez změny chování):** část logiky vyčleněna z **`MainController`** do **`PlayDraftNotationSupport`** (kopie kroků, probe z mementa, náhled notace, validace sufixu tahu), **`PlayTurnDraftState`** (rozpracovaný PLAY tah), **`BoardGridView`** + **`BoardHostPane`** (mřížka, rámeček souřadnic, kreslení figurek a hover), **`ArimaaSaveLoadSupport`** (uložení / načtení souboru). **`GameController`** zůstává tenkou doménovou vrstvou.
+- **Model:** přesun výčtů **`GameState`**, **`PieceType`**, **`PlayerSide`**, **`StepKind`** do balíčku **`cz.cvut.fel.pjv.arimaa.model.enums`** (importy v modulu a testech).
+- **UI (kosmetika):** hlášky v **`MainController`** a chybové texty v **`ArimaaSaveLoadSupport`** přes **`String.formatted()`** místo konkatenace řetězců.
+- **Další refaktor `MainController` (bez změny chování):** `MainWindowLayoutBuilder` + `MainWindowLayoutResult` (menu, postranní panel, SETUP/PLAY tlačítka), `PlayBoardHighlighter` (PLAY podsvícení), `SetupPhaseUiHandler` / `PlayPhaseUiHandler` (fáze SETUP vs PLAY); dřívější výčet `buildSetupReserveAndPlayButtons` / `buildMenuBar` v controlleru nahrazen builderem.
 
 ## 0.7.12
 

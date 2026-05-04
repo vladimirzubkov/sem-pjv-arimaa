@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.14
+
+- **Gameplay → hráči:** podmenu **Gold — hráč** / **Silver — hráč** — **Člověk** nebo **Počítač — úroveň 0** (`PlayerControllerKind`); výchozí oba lidští.
+- **Počítač úroveň 0:** náhodný **plný legální tah** s upřednostněním variant **bez pádu vlastní figury do pasti** (`DefaultRuleEngine.trapCapturesIfPrefixApplied`); pokud žádná taková není, náhodně z celého seznamu (`RandomTrapAvoidingMoveChooser`).
+- **Model:** `DefaultRuleEngine.enumerateLegalCompleteMoves(Game)` — výpis všech legálních celých tahů (DFS jako `existsLegalTurn`).
+- **JavaFX:** po `refreshAll()` odložený tah počítače (`Platform.runLater`), SETUP — `placeRemainingPiecesRandomly` + `tryCompleteSetup`, PLAY — stejná cesta jako člověk (`submitHumanMove`, `recordCommittedPlayTurn`, historie); blokace vstupu a tlačítek na tahu CPU (setup/play panely, scéna, draft cancel).
+- **Testy:** `RandomTrapAvoidingMoveChooserTest` (lovná past c3, filtr vs. fallback).
+
 ## 0.7.14
 
 - **Model (`Game`):** `setupReserveCountsByType`, `canFillRemainingReserveRandomly` (stejná logika jako před `placeRemainingPiecesRandomly` včetně figury v ruce), `restoredFromMemento` pro probe ze snapshotu.

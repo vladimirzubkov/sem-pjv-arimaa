@@ -2,6 +2,7 @@ package cz.cvut.fel.pjv.arimaa.ui;
 
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
@@ -26,12 +27,14 @@ final class SetupSidePanelController {
     void refreshReserveButtons(Game g) {
         boolean setup = MainUiLayoutPhase.isSetup(g);
         PlayerSide side = g.getSideToMove();
+        boolean cpuTurn =
+                setup && main.playerControllerKind(side) == PlayerControllerKind.COMPUTER_LEVEL_0;
         Map<PieceType, Integer> counts = g.setupReserveCountsByType(side);
         for (PieceType type : PieceType.values()) {
             Button b = main.reserveButtons.get(type);
             int n = counts.getOrDefault(type, 0);
             b.setText(MainController.labelForReserveButton(type, n));
-            b.setDisable(!setup || n == 0);
+            b.setDisable(!setup || n == 0 || cpuTurn);
             if (main.pieceSkinUsesFigureArt() && setup && n > 0) {
                 Image icon = main.figureRasterCache.getRasterized(side, type, RESERVE_ICON_MAX);
                 if (icon != null) {
@@ -56,12 +59,14 @@ final class SetupSidePanelController {
     void refreshSetupActionButtons(Game g) {
         boolean setup = MainUiLayoutPhase.isSetup(g);
         PlayerSide side = g.getSideToMove();
-        main.cancelHandButton.setDisable(!setup || g.getSetupHand() == null);
-        main.chessButton.setDisable(!setup);
-        main.doneButton.setDisable(!setup || !g.allSetupPiecesOnBoard(side));
+        boolean cpuTurn =
+                setup && main.playerControllerKind(side) == PlayerControllerKind.COMPUTER_LEVEL_0;
+        main.cancelHandButton.setDisable(!setup || g.getSetupHand() == null || cpuTurn);
+        main.chessButton.setDisable(!setup || cpuTurn);
+        main.doneButton.setDisable(!setup || !g.allSetupPiecesOnBoard(side) || cpuTurn);
         boolean canRandomFill = setup && g.canFillRemainingReserveRandomly(side);
         boolean canRandomShuffle = setup && g.allSetupPiecesOnBoard(side);
-        main.randomButton.setDisable(!setup || (!canRandomFill && !canRandomShuffle));
+        main.randomButton.setDisable(!setup || (!canRandomFill && !canRandomShuffle) || cpuTurn);
         if (setup) {
             main.randomButton.setText(canRandomShuffle ? "Náhodně rozestavit" : "Náhodně doplnit zbytek");
         }

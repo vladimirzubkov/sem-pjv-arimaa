@@ -207,6 +207,55 @@ public final class DefaultRuleEngine implements RuleEngine {
         return dfsAnyLegalTurn(game, new Move(), root);
     }
 
+    /**
+     * All legal full turns (1–4 steps) from the current position in {@link GameState#PLAY}.
+     *
+     * @return mutable list (may be large); empty if not in PLAY
+     */
+    public static List<Move> enumerateLegalCompleteMoves(Game game) {
+        Objects.requireNonNull(game, "game");
+        if (game.getState() != GameState.PLAY) {
+            return new ArrayList<>();
+        }
+        Map<Position, Piece> root = snapshotOccupancy(game.getBoard());
+        List<Move> out = new ArrayList<>();
+        dfsCollectLegalCompleteMoves(game, new Move(), root, out);
+        return out;
+    }
+
+    private static void dfsCollectLegalCompleteMoves(Game game, Move prefix, Map<Position, Piece> root, List<Move> out) {
+        int len = prefix.getSteps().size();
+        if (len >= 1 && len <= 4) {
+            try {
+                validateSequentialSteps(game, copyMove(prefix), true, root);
+                out.add(copyMove(prefix));
+            } catch (IllegalArgumentException ignored) {
+                // not a complete legal turn at this length
+            }
+        }
+        if (len >= 4) {
+            return;
+        }
+        Map<Position, Piece> occAfter;
+        try {
+            occAfter = validateSequentialSteps(game, copyMove(prefix), false, root);
+        } catch (IllegalArgumentException ex) {
+            return;
+        }
+        for (List<Step> bundle : enumerateStepBundles(occAfter, game.getSideToMove())) {
+            Move extended = copyMove(prefix);
+            for (Step st : bundle) {
+                extended.getSteps().add(copyStep(st));
+            }
+            try {
+                validateSequentialSteps(game, copyMove(extended), false, root);
+            } catch (IllegalArgumentException ex) {
+                continue;
+            }
+            dfsCollectLegalCompleteMoves(game, extended, root, out);
+        }
+    }
+
     private static boolean dfsAnyLegalTurn(Game game, Move prefix, Map<Position, Piece> root) {
         int len = prefix.getSteps().size();
         if (len >= 1 && len <= 4) {

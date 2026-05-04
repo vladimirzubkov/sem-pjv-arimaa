@@ -58,6 +58,9 @@ final class PlayDraftUiCoordinator {
         if (g == null || g.getState() != GameState.PLAY || main.gameController == null) {
             return false;
         }
+        if (main.isComputerControlled(g.getSideToMove())) {
+            return false;
+        }
         if (main.playDraft.partial.getSteps().isEmpty() && main.playDraft.nextFrom == null) {
             return false;
         }

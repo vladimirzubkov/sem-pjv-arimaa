@@ -6,6 +6,7 @@ import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -69,6 +70,9 @@ public final class MainWindowLayoutBuilder {
         main.cancelHandButton.setMaxWidth(Double.MAX_VALUE);
         main.cancelHandButton.setOnAction(e -> {
             Game g = main.game();
+            if (g != null && main.isComputerControlled(g.getSideToMove())) {
+                return;
+            }
             if (g != null) {
                 boolean changed = g.getSetupHand() != null;
                 g.cancelPendingSetupPlacement();
@@ -258,6 +262,45 @@ public final class MainWindowLayoutBuilder {
         menuSkin.getItems().addAll(skinMenuItems);
         menuGameplay.getItems().add(menuSkin);
         menuGameplay.getItems().add(new SeparatorMenuItem());
+
+        Menu menuGoldPlayer = new Menu("Gold — hráč");
+        ToggleGroup goldPlayerGroup = new ToggleGroup();
+        RadioMenuItem goldHuman = new RadioMenuItem("Člověk");
+        goldHuman.setToggleGroup(goldPlayerGroup);
+        goldHuman.setUserData(PlayerControllerKind.HUMAN);
+        RadioMenuItem goldCpu = new RadioMenuItem("Počítač — úroveň 0");
+        goldCpu.setToggleGroup(goldPlayerGroup);
+        goldCpu.setUserData(PlayerControllerKind.COMPUTER_LEVEL_0);
+        goldHuman.setSelected(true);
+        goldPlayerGroup.selectedToggleProperty().addListener((obs, prev, toggled) -> {
+            if (!(toggled instanceof RadioMenuItem r) || !(r.getUserData() instanceof PlayerControllerKind k)) {
+                return;
+            }
+            main.setGoldPlayerKind(k);
+            main.refreshAll();
+        });
+        menuGoldPlayer.getItems().addAll(goldHuman, goldCpu);
+
+        Menu menuSilverPlayer = new Menu("Silver — hráč");
+        ToggleGroup silverPlayerGroup = new ToggleGroup();
+        RadioMenuItem silverHuman = new RadioMenuItem("Člověk");
+        silverHuman.setToggleGroup(silverPlayerGroup);
+        silverHuman.setUserData(PlayerControllerKind.HUMAN);
+        RadioMenuItem silverCpu = new RadioMenuItem("Počítač — úroveň 0");
+        silverCpu.setToggleGroup(silverPlayerGroup);
+        silverCpu.setUserData(PlayerControllerKind.COMPUTER_LEVEL_0);
+        silverHuman.setSelected(true);
+        silverPlayerGroup.selectedToggleProperty().addListener((obs, prev, toggled) -> {
+            if (!(toggled instanceof RadioMenuItem r) || !(r.getUserData() instanceof PlayerControllerKind k)) {
+                return;
+            }
+            main.setSilverPlayerKind(k);
+            main.refreshAll();
+        });
+        menuSilverPlayer.getItems().addAll(silverHuman, silverCpu);
+        menuGameplay.getItems().addAll(menuGoldPlayer, menuSilverPlayer);
+        menuGameplay.getItems().add(new SeparatorMenuItem());
+
         main.forbidCancelAfterTrapItem = new CheckMenuItem(
                 "Po pádu figury do pasti nelze zrušit rozpracovaný tah");
         main.forbidCancelAfterTrapItem.setSelected(false);

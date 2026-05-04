@@ -3,6 +3,7 @@ package cz.cvut.fel.pjv.arimaa.ui;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
@@ -61,6 +62,10 @@ final class PlaySidePanelController {
             return;
         }
         boolean play = MainUiLayoutPhase.isPlay(g);
+        boolean cpuPlay =
+                play
+                        && main.playerControllerKind(g.getSideToMove())
+                                == PlayerControllerKind.COMPUTER_LEVEL_0;
         if (main.playEndTurnButton != null) {
             boolean canEnd =
                     play
@@ -68,7 +73,7 @@ final class PlaySidePanelController {
                             && main.gameController.getPlayHistory().isBootstrapped()
                             && main.gameController.getPlayHistory().isAtEditableDraftTail()
                             && !main.playDraft.partial.getSteps().isEmpty();
-            main.playEndTurnButton.setDisable(!canEnd);
+            main.playEndTurnButton.setDisable(!canEnd || cpuPlay);
         }
         if (main.playCancelTurnButton != null) {
             boolean canCancelNormally =
@@ -77,7 +82,7 @@ final class PlaySidePanelController {
                     main.forbidCancelAfterTrapItem != null
                             && main.forbidCancelAfterTrapItem.isSelected()
                             && main.viewPrefixRemovesPieceViaTrap();
-            main.playCancelTurnButton.setDisable(!canCancelNormally || trapBlocksCancel);
+            main.playCancelTurnButton.setDisable(!canCancelNormally || trapBlocksCancel || cpuPlay);
         }
     }
 

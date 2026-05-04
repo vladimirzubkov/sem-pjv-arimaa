@@ -1,5 +1,6 @@
 package cz.cvut.fel.pjv.arimaa.ui;
 
+import cz.cvut.fel.pjv.arimaa.ai.RandomTrapAvoidingMoveChooser;
 import cz.cvut.fel.pjv.arimaa.controller.GameController;
 import cz.cvut.fel.pjv.arimaa.logging.LoggingSupport;
 import cz.cvut.fel.pjv.arimaa.model.DefaultRuleEngine;
@@ -9,10 +10,12 @@ import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.model.Move;
 import cz.cvut.fel.pjv.arimaa.model.Piece;
 import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
+import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.model.Step;
 import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
+import cz.cvut.fel.pjv.arimaa.util.ArimaaNotation;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -52,6 +55,8 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Random;
 
 /**
  * Primary window: board, setup controls (manual placement, presets via {@link cz.cvut.fel.pjv.arimaa.model.SetupPresets}),
@@ -156,6 +161,11 @@ public class MainController implements BoardViewHost {
     private final PlayDraftUiCoordinator draftUi = new PlayDraftUiCoordinator(this);
     private final SetupPhaseUiHandler setupPhase = new SetupPhaseUiHandler(this);
     private final PlayPhaseUiHandler playPhase = new PlayPhaseUiHandler(this);
+
+    private PlayerControllerKind goldPlayerKind = PlayerControllerKind.HUMAN;
+    private PlayerControllerKind silverPlayerKind = PlayerControllerKind.HUMAN;
+    private final Random computerRandom = new Random();
+    private boolean computerActionPending;
 
     BoardViewOrientation boardOrientation;
 
@@ -277,16 +287,26 @@ public class MainController implements BoardViewHost {
         int modelRank = modelRankFromVisualRow(visualRow, g);
         GameState st = g.getState();
         if (st == GameState.PLAY) {
+            if (isComputerControlled(g.getSideToMove())) {
+                return;
+            }
             playPhase.handlePlayBoardActivation(modelFile, modelRank);
             return;
         }
         if (!MainUiLayoutPhase.isSetup(g)) {
             return;
         }
+        if (isComputerControlled(g.getSideToMove())) {
+            return;
+        }
         setupPhase.onBoardCellClick(modelFile, modelRank);
     }
 
     void onPickReserve(PieceType type) {
+        Game g = game();
+        if (g != null && isComputerControlled(g.getSideToMove())) {
+            return;
+        }
         setupPhase.onPickReserve(type);
     }
 
@@ -313,6 +333,7 @@ public class MainController implements BoardViewHost {
         updateWindowTitle(g);
         refreshHistoryMenus();
         boardGrid.paintHoverOverlay(g);
+        scheduleComputerTurnIfNeeded();
     }
 
     void syncLogLevelMenuSelection() {
@@ -657,6 +678,115 @@ public class MainController implements BoardViewHost {
         statusLabel.setText(text);
     }
 
+    PlayerControllerKind playerControllerKind(PlayerSide side) {
+        return side == PlayerSide.GOLD ? goldPlayerKind : silverPlayerKind;
+    }
+
+    void setGoldPlayerKind(PlayerControllerKind kind) {
+        goldPlayerKind = Objects.requireNonNull(kind, "kind");
+    }
+
+    void setSilverPlayerKind(PlayerControllerKind kind) {
+        silverPlayerKind = Objects.requireNonNull(kind, "kind");
+    }
+
+    boolean isComputerControlled(PlayerSide side) {
+        return playerControllerKind(side) == PlayerControllerKind.COMPUTER_LEVEL_0;
+    }
+
+    private void scheduleComputerTurnIfNeeded() {
+        Game g = game();
+        if (g == null || stage == null || computerActionPending) {
+            return;
+        }
+        if (!shouldOfferComputerStep(g)) {
+            return;
+        }
+        computerActionPending = true;
+        Platform.runLater(() -> {
+            try {
+                runOneComputerStep();
+            } finally {
+                computerActionPending = false;
+            }
+            refreshAll();
+        });
+    }
+
+    private boolean shouldOfferComputerStep(Game g) {
+        return switch (g.getState()) {
+            case SETUP_GOLD -> isComputerControlled(PlayerSide.GOLD);
+            case SETUP_SILVER -> isComputerControlled(PlayerSide.SILVER);
+            case PLAY -> isComputerControlled(g.getSideToMove());
+            default -> false;
+        };
+    }
+
+    private void runOneComputerStep() {
+        Game g = game();
+        if (g == null || gameController == null || !shouldOfferComputerStep(g)) {
+            return;
+        }
+        if (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER) {
+            runComputerSetupStep(g);
+            return;
+        }
+        if (g.getState() == GameState.PLAY) {
+            runComputerPlayStep(g);
+        }
+    }
+
+    private void runComputerSetupStep(Game g) {
+        PlayerSide side = g.getSideToMove();
+        if (!g.placeRemainingPiecesRandomly(side)) {
+            setStatus("Počítač — náhodné rozestavení se nepovedlo.");
+            return;
+        }
+        recordTimeline();
+        if (!g.tryCompleteSetup(side)) {
+            setStatus("Počítač — rozestavení nelze dokončit (pravidla multisetu).");
+            return;
+        }
+        if (g.getState() == GameState.PLAY) {
+            gameController.enterPlayPhaseBootstrap();
+            setStatus("Hra — na tahu %s.".formatted(sideName(g.getSideToMove())));
+        } else {
+            recordTimeline();
+            setStatus("Nová hra — rozestavuje %s.".formatted(sideName(g.getSideToMove())));
+        }
+    }
+
+    private void runComputerPlayStep(Game g) {
+        gameController.restoreTrailingDraftTurnStartForSubmit();
+        Move submit;
+        try {
+            Move chosen = RandomTrapAvoidingMoveChooser.chooseMove(g, computerRandom);
+            submit = PlayDraftNotationSupport.copyMove(chosen);
+        } catch (IllegalStateException ex) {
+            log.warn("computer play: no legal moves ({})", ex.getMessage());
+            setStatus("Počítač — žádný platný tah.");
+            return;
+        }
+        String prefix = gameController.nextPlayNotationPrefix();
+        String notationLine = ArimaaNotation.formatFullTurn(g.getBoard(), submit, prefix);
+        if (!gameController.submitHumanMove(submit)) {
+            log.info("computer play: submit rejected");
+            setStatus("Počítač — tah nebyl přijat.");
+            gameController.applyPlayHistoryViewToGame();
+            return;
+        }
+        gameController.recordCommittedPlayTurn(submit, notationLine);
+        clearPlayTurnUi();
+        syncPlayPartialFromHistory();
+        if (g.getState() == GameState.GAME_OVER) {
+            PlayerSide w = g.getMatchWinner();
+            setStatus(w == null ? "Konec hry." : "Konec hry — vyhrál %s.".formatted(sideName(w)));
+        } else {
+            setStatus("Tah počítače proveden.");
+        }
+        appendHistory(new GameHistoryEvent.TurnCommitted(notationLine));
+    }
+
     Game game() {
         return gameController != null ? gameController.getGame() : null;
     }
@@ -746,16 +876,28 @@ public class MainController implements BoardViewHost {
 
     /** Same as tlačítko „Náhodně …“ — náhodné doplnění nebo přeřazení na domovských řadách. */
     void performRandomSetupPlacementAction() {
+        Game g = game();
+        if (g != null && isComputerControlled(g.getSideToMove())) {
+            return;
+        }
         setupPhase.performRandomSetupPlacementAction();
     }
 
     /** Same as „Šachová rozestavení“ — rotates among reversed / symmetric / MH / HH presets. */
     void applyChessMappedSetupFromUi() {
+        Game g = game();
+        if (g != null && isComputerControlled(g.getSideToMove())) {
+            return;
+        }
         setupPhase.applyChessMappedSetupFromUi();
     }
 
     /** Same as „Hotovo (ukončit rozestavení)“. */
     void tryCompleteSetupFromUi() {
+        Game g = game();
+        if (g != null && isComputerControlled(g.getSideToMove())) {
+            return;
+        }
         setupPhase.tryCompleteSetupFromUi();
     }
 
@@ -806,10 +948,20 @@ public class MainController implements BoardViewHost {
      * {@link PlayTurnHistory#isViewOnTrailingDraftHalf()}).
      */
     void handlePlayBoardActivation(int modelFile, int modelRank) {
+        Game g = game();
+        if (g != null
+                && g.getState() == GameState.PLAY
+                && isComputerControlled(g.getSideToMove())) {
+            return;
+        }
         playPhase.handlePlayBoardActivation(modelFile, modelRank);
     }
 
     void tryEndPlayTurn() {
+        Game g = game();
+        if (g != null && isComputerControlled(g.getSideToMove())) {
+            return;
+        }
         playPhase.tryEndPlayTurn();
     }
 

@@ -35,4 +35,13 @@ public class Step {
     public void setKind(StepKind kind) {
         this.kind = kind;
     }
+
+    /** Independent copy (positions and kind). */
+    public static Step copyOf(Step s) {
+        Step t = new Step();
+        t.setFrom(s.getFrom());
+        t.setTo(s.getTo());
+        t.setKind(s.getKind());
+        return t;
+    }
 }

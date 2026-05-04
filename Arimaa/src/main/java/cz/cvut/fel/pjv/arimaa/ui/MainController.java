@@ -12,10 +12,8 @@ import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.model.Step;
-import cz.cvut.fel.pjv.arimaa.model.PlayHalfTurn;
 import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
-import cz.cvut.fel.pjv.arimaa.util.HomeTerritory;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.application.Platform;
@@ -62,14 +60,11 @@ import java.util.Map;
  * Undo / redo: menu Tah (Ctrl+Z / Ctrl+Y) and timeline / draft stack.
  * Gameplay → Skin: subfolders of {@code images/figure_sets/} (see {@link FigureSvgRasterCache#discoverSkinDirectoryNames()}).
  */
-public class MainController {
+public class MainController implements BoardViewHost {
 
     private static final Logger log = LoggerFactory.getLogger(MainController.class);
 
-    private static final double RESERVE_ICON_MAX = 26;
     private static final double HAND_ICON_MAX = 28;
-    private static final double CAPTURE_ICON_MAX = 36;
-
     GameController gameController;
 
     Stage stage;
@@ -78,8 +73,36 @@ public class MainController {
     /** Pixel size of the framed board (coordinates + frame); used for scaling. */
     private double framedOuterSize = 1.0;
 
-    void setFramedOuterSize(double outer) {
+    @Override
+    public void setFramedOuterSize(double outer) {
         framedOuterSize = outer;
+    }
+
+    @Override
+    public void registerFileCoordLabels(int fileIndex, Label top, Label bottom) {
+        fileCoordLabelsTop[fileIndex] = top;
+        fileCoordLabelsBottom[fileIndex] = bottom;
+    }
+
+    @Override
+    public void registerRankCoordLabels(int visualRow, Label left, Label right) {
+        rankCoordLabelsLeft[visualRow] = left;
+        rankCoordLabelsRight[visualRow] = right;
+    }
+
+    @Override
+    public FigureSvgRasterCache figureRasterCache() {
+        return figureRasterCache;
+    }
+
+    @Override
+    public Integer getHoverFileIndex() {
+        return hoverFileIndex;
+    }
+
+    @Override
+    public Integer getHoverVisualRow() {
+        return hoverVisualRow;
     }
 
     final Label statusLabel = new Label();
@@ -126,6 +149,10 @@ public class MainController {
     /** In {@link GameState#PLAY}: draft steps and cursors ({@link PlayTurnDraftState}). */
     final PlayTurnDraftState playDraft = new PlayTurnDraftState();
 
+    private final MainUiViewModel uiViewModel = new MainUiViewModel();
+    private SetupSidePanelController setupSidePanel;
+    private PlaySidePanelController playSidePanel;
+
     private final PlayDraftUiCoordinator draftUi = new PlayDraftUiCoordinator(this);
     private final SetupPhaseUiHandler setupPhase = new SetupPhaseUiHandler(this);
     private final PlayPhaseUiHandler playPhase = new PlayPhaseUiHandler(this);
@@ -144,10 +171,11 @@ public class MainController {
     final FlowPane goldCapturesPane = new FlowPane(4, 4);
     final FlowPane silverCapturesPane = new FlowPane(4, 4);
     boolean suppressHistoryListEvents;
-    private final ObservableList<String> notationHistoryItems = FXCollections.observableArrayList();
+    final ObservableList<String> notationHistoryItems = FXCollections.observableArrayList();
     final ListView<String> notationHistoryList = new ListView<>(notationHistoryItems);
 
-    boolean pieceSkinUsesFigureArt() {
+    @Override
+    public boolean pieceSkinUsesFigureArt() {
         return figureSkinFolder != null;
     }
 
@@ -173,6 +201,10 @@ public class MainController {
 
         MainWindowLayoutBuilder.MainWindowLayoutResult layout =
                 MainWindowLayoutBuilder.buildSidePanelAndMenus(this);
+
+        setupSidePanel = new SetupSidePanelController(this);
+        playSidePanel = new PlaySidePanelController(this);
+        uiViewModel.bindSidePanelVisibility(this);
 
         ScrollPane scroll = new ScrollPane(layout.sidePanel());
         scroll.setFitToWidth(true);
@@ -214,7 +246,8 @@ public class MainController {
         syncLogToFileMenuSelection();
     }
 
-    void setHoverCell(int fileIndex, int visualRow) {
+    @Override
+    public void setHoverCell(int fileIndex, int visualRow) {
         hoverFileIndex = fileIndex;
         hoverVisualRow = visualRow;
         if (boardGrid != null) {
@@ -222,7 +255,8 @@ public class MainController {
         }
     }
 
-    void clearHoverCellIf(int fileIndex, int visualRow) {
+    @Override
+    public void clearHoverCellIf(int fileIndex, int visualRow) {
         if (hoverFileIndex != null && hoverFileIndex == fileIndex
                 && hoverVisualRow != null && hoverVisualRow == visualRow) {
             hoverFileIndex = null;
@@ -233,7 +267,8 @@ public class MainController {
         }
     }
 
-    void onBoardCellClick(int fileIndex, int visualRow) {
+    @Override
+    public void onBoardCellClick(int fileIndex, int visualRow) {
         Game g = game();
         if (g == null || g.getBoard() == null) {
             return;
@@ -245,7 +280,7 @@ public class MainController {
             playPhase.handlePlayBoardActivation(modelFile, modelRank);
             return;
         }
-        if (st != GameState.SETUP_GOLD && st != GameState.SETUP_SILVER) {
+        if (!MainUiLayoutPhase.isSetup(g)) {
             return;
         }
         setupPhase.onBoardCellClick(modelFile, modelRank);
@@ -257,24 +292,23 @@ public class MainController {
 
     void refreshAll() {
         Game g = game();
-        if (g != null && g.getState() != GameState.PLAY) {
+        uiViewModel.syncFromGame(g);
+        if (g != null && !MainUiLayoutPhase.isPlay(g)) {
             clearPlayTurnUi();
         }
         if (g == null || stage == null) {
             notationHistoryItems.clear();
-            refreshNotationPanelVisibility(null);
             return;
         }
         updateRankCoordLabels(g);
         updateFileCoordLabels(g);
         boardGrid.paintBoard(g);
         paintPlayHighlights(g);
-        refreshReserveButtons(g);
-        refreshActionButtons(g);
-        refreshSetupSectionVisibility(g);
-        refreshCapturedPanel(g);
-        refreshNotationPanelVisibility(g);
-        refreshNotationHistory();
+        setupSidePanel.refreshReserveButtons(g);
+        setupSidePanel.refreshSetupActionButtons(g);
+        playSidePanel.refreshPlayActionButtons(g);
+        playSidePanel.refreshCapturedPanel(g);
+        playSidePanel.refreshNotationHistory();
         refreshHandLabel(g);
         updateWindowTitle(g);
         refreshHistoryMenus();
@@ -313,7 +347,8 @@ public class MainController {
         }
     }
 
-    int modelRankFromVisualRow(int visualRow, Game g) {
+    @Override
+    public int modelRankFromVisualRow(int visualRow, Game g) {
         return boardOrientation.modelRankFromVisualRow(visualRow, g);
     }
 
@@ -322,7 +357,8 @@ public class MainController {
     }
 
     /** Maps grid column from left ({@code 0}) to model file index ({@code a} = {@code 0}). */
-    int modelFileFromVisualCol(int visualCol, Game g) {
+    @Override
+    public int modelFileFromVisualCol(int visualCol, Game g) {
         return boardOrientation.modelFileFromVisualCol(visualCol, g);
     }
 
@@ -356,7 +392,7 @@ public class MainController {
 
     private void paintPlayHighlights(Game g) {
         boardGrid.refreshAllSquareDecorations(g);
-        if (g == null || g.getState() != GameState.PLAY || playDraft.nextFrom == null) {
+        if (g == null || !MainUiLayoutPhase.isPlay(g) || playDraft.nextFrom == null) {
             return;
         }
         PlayTargetBundle targets = playTargetBundle(g);
@@ -375,234 +411,61 @@ public class MainController {
         return (BoardGridView.CellData) boardGrid.cells[visualRow][visualCol].getUserData();
     }
 
-    private void refreshReserveButtons(Game g) {
-        boolean setup = g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER;
-        PlayerSide side = g.getSideToMove();
-        Map<PieceType, Integer> counts = countReserve(g, side);
-        for (PieceType type : PieceType.values()) {
-            Button b = reserveButtons.get(type);
-            int n = counts.getOrDefault(type, 0);
-            b.setText(labelForReserveButton(type, n));
-            b.setDisable(!setup || n == 0);
-            if (pieceSkinUsesFigureArt() && setup && n > 0) {
-                Image icon = figureRasterCache.getRasterized(side, type, RESERVE_ICON_MAX);
-                if (icon != null) {
-                    ImageView iv = new ImageView(icon);
-                    iv.setFitWidth(RESERVE_ICON_MAX);
-                    iv.setFitHeight(RESERVE_ICON_MAX);
-                    iv.setPreserveRatio(true);
-                    iv.setSmooth(true);
-                    b.setGraphic(iv);
-                    b.setContentDisplay(ContentDisplay.LEFT);
-                } else {
-                    b.setGraphic(null);
-                    b.setContentDisplay(ContentDisplay.LEFT);
-                }
-            } else {
-                b.setGraphic(null);
-                b.setContentDisplay(ContentDisplay.LEFT);
-            }
-        }
-    }
-
-    private void refreshActionButtons(Game g) {
-        boolean setup = g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER;
-        boolean play = g.getState() == GameState.PLAY;
-        PlayerSide side = g.getSideToMove();
-        cancelHandButton.setDisable(!setup || g.getSetupHand() == null);
-        chessButton.setDisable(!setup);
-        doneButton.setDisable(!setup || !g.allSetupPiecesOnBoard(side));
-        boolean canRandomFill = setup && reserveSizesMatchEmptyHome(g, side);
-        boolean canRandomShuffle = setup && g.allSetupPiecesOnBoard(side);
-        randomButton.setDisable(!setup || (!canRandomFill && !canRandomShuffle));
-        if (setup) {
-            randomButton.setText(canRandomShuffle ? "Náhodně rozestavit" : "Náhodně doplnit zbytek");
-        }
-        if (playEndTurnButton != null) {
-            boolean canEnd = play
-                    && gameController != null
-                    && gameController.getPlayHistory().isBootstrapped()
-                    && gameController.getPlayHistory().isAtEditableDraftTail()
-                    && !playDraft.partial.getSteps().isEmpty();
-            playEndTurnButton.setDisable(!canEnd);
-        }
-        if (playCancelTurnButton != null) {
-            boolean canCancelNormally = play
-                    && (!playDraft.partial.getSteps().isEmpty() || playDraft.nextFrom != null);
-            boolean trapBlocksCancel = forbidCancelAfterTrapItem != null
-                    && forbidCancelAfterTrapItem.isSelected()
-                    && partialTurnAnyTrapRemoval(g);
-            playCancelTurnButton.setDisable(!canCancelNormally || trapBlocksCancel);
-        }
-    }
-
     /**
-     * Same condition as {@link Game#placeRemainingPiecesRandomly(PlayerSide)} needs to succeed.
+     * Whether the displayed PLAY prefix removes a piece via trap (for gameplay / cancel rules).
      */
-    private static boolean reserveSizesMatchEmptyHome(Game g, PlayerSide side) {
-        List<Piece> res = g.getSetupReserveSnapshot(side);
-        int empty = 0;
-        for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
-            for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
-                Position p = Position.of(f, r);
-                if (HomeTerritory.contains(side, p, g.isRanksMirroredForHomeCheck()) && g.getBoard().isEmpty(p)) {
-                    empty++;
-                }
-            }
-        }
-        return !res.isEmpty() && res.size() == empty;
-    }
-
-    private void refreshSetupSectionVisibility(Game g) {
-        boolean setup = g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER;
-        reserveBox.setVisible(setup);
-        reserveBox.setManaged(setup);
-        cancelHandButton.setVisible(setup);
-        cancelHandButton.setManaged(setup);
-        randomButton.setVisible(setup);
-        randomButton.setManaged(setup);
-        chessButton.setVisible(setup);
-        chessButton.setManaged(setup);
-        doneButton.setVisible(setup);
-        doneButton.setManaged(setup);
-    }
-
-    private void refreshCapturedPanel(Game g) {
-        boolean show = g.getState() == GameState.PLAY || g.getState() == GameState.GAME_OVER;
-        capturesBox.setVisible(show);
-        capturesBox.setManaged(show);
-        if (!show) {
-            return;
-        }
-        fillCaptureFlow(goldCapturesPane, g, PlayerSide.GOLD);
-        fillCaptureFlow(silverCapturesPane, g, PlayerSide.SILVER);
-    }
-
-    private void refreshNotationPanelVisibility(Game g) {
-        boolean show = g != null && (g.getState() == GameState.PLAY || g.getState() == GameState.GAME_OVER);
-        notationBox.setVisible(show);
-        notationBox.setManaged(show);
-    }
-
-    private void refreshNotationHistory() {
-        if (gameController == null) {
-            notationHistoryItems.clear();
-            return;
-        }
-        List<String> lines = buildNotationHistoryLines();
-        suppressHistoryListEvents = true;
-        notationHistoryItems.setAll(lines);
-        PlayTurnHistory ph = gameController.getPlayHistory();
-        if (ph.isBootstrapped()) {
-            List<Integer> vis = ph.visibleHalfIndicesForDisplay(true);
-            int sel = vis.indexOf(ph.viewHalfIndex());
-            if (sel >= 0) {
-                notationHistoryList.getSelectionModel().select(sel);
-            } else {
-                notationHistoryList.getSelectionModel().clearSelection();
-            }
-        }
-        suppressHistoryListEvents = false;
-    }
-
-    private void fillCaptureFlow(FlowPane pane, Game g, PlayerSide capturer) {
-        pane.getChildren().clear();
-        List<PieceType> types = effectiveTrapCapturesForDisplay(g, capturer);
-        if (types.isEmpty()) {
-            pane.getChildren().add(new Label("—"));
-            return;
-        }
-        PlayerSide victimSide = capturer == PlayerSide.GOLD ? PlayerSide.SILVER : PlayerSide.GOLD;
-        for (PieceType t : types) {
-            if (pieceSkinUsesFigureArt()) {
-                Image img = figureRasterCache.getRasterized(victimSide, t, CAPTURE_ICON_MAX);
-                if (img != null) {
-                    ImageView iv = new ImageView(img);
-                    iv.setFitWidth(CAPTURE_ICON_MAX);
-                    iv.setFitHeight(CAPTURE_ICON_MAX);
-                    iv.setPreserveRatio(true);
-                    iv.setSmooth(true);
-                    pane.getChildren().add(iv);
-                } else {
-                    pane.getChildren().add(new Label(abbrevType(t)));
-                }
-            } else {
-                pane.getChildren().add(new Label(abbrevType(t)));
-            }
-        }
-    }
-
-    /**
-     * Whether the currently displayed move prefix (history scrub position) removes at least one piece via trap
-     * (any colour), evaluated from that half-turn’s start snapshot.
-     */
-    boolean partialTurnAnyTrapRemoval(Game g) {
-        if (g.getState() != GameState.PLAY || gameController == null || !gameController.getPlayHistory().isBootstrapped()) {
+    boolean viewPrefixRemovesPieceViaTrap() {
+        Game g = game();
+        if (g == null || gameController == null) {
             return false;
         }
-        PlayTurnHistory ph = gameController.getPlayHistory();
-        if (ph.appliedPrefixSteps() <= 0) {
-            return false;
-        }
-        PlayHalfTurn ht = ph.halfAt(ph.viewHalfIndex());
-        Game probe = PlayDraftNotationSupport.probeGameFromMemento(ht.startSnap());
-        Move m = new Move();
-        for (int i = 0; i < ph.appliedPrefixSteps(); i++) {
-            m.getSteps().add(PlayDraftNotationSupport.copyStep(ht.steps().get(i)));
-        }
-        DefaultRuleEngine.TrapCapturePreview p = DefaultRuleEngine.trapCapturesIfPrefixApplied(probe, m);
-        return !p.byGold().isEmpty() || !p.bySilver().isEmpty();
+        return gameController.getPlayHistory().viewPrefixRemovesPieceViaTrap(g);
     }
 
     /** Gameplay option: block cancel / draft undo·redo while this holds. */
-    private boolean draftEditsBlockedByTrapMenuOption(Game g) {
+    private boolean draftEditsBlockedByTrapMenuOption() {
         return forbidCancelAfterTrapItem != null
                 && forbidCancelAfterTrapItem.isSelected()
-                && partialTurnAnyTrapRemoval(g);
-    }
-
-    /**
-     * Trap captures for the position currently in {@link Game} (already includes the displayed prefix after
-     * {@link GameController#applyPlayHistoryViewToGame()}). No second simulation — that used to double-count.
-     */
-    private List<PieceType> effectiveTrapCapturesForDisplay(Game g, PlayerSide capturer) {
-        return new ArrayList<>(g.getTrapCapturesSnapshot(capturer));
+                && viewPrefixRemovesPieceViaTrap();
     }
 
     private void refreshHandLabel(Game g) {
         if (g.getState() == GameState.PLAY) {
             reconcilePlayPartialWithHistoryView();
-            handLabel.setGraphic(null);
-            handLabel.setContentDisplay(ContentDisplay.LEFT);
             int n = playDraft.partial.getSteps().size();
             String mover = sideName(g.getSideToMove());
-            handLabel.setText(
+            String text =
                     n == 0
                             ? "Tah (%s): žádné kroky (vyberte figuru)".formatted(mover)
-                            : "Tah (%s): %d krok(ů)".formatted(mover, n));
+                            : "Tah (%s): %d krok(ů)".formatted(mover, n);
+            updateHandLabel(null, text);
             return;
         }
         Piece h = g.getSetupHand();
         if (h == null) {
-            handLabel.setGraphic(null);
-            handLabel.setContentDisplay(ContentDisplay.LEFT);
-            handLabel.setText("V ruce: —");
+            updateHandLabel(null, "V ruce: —");
             return;
         }
-        String text = "V ruce: %s (%s)".formatted(abbrev(h), sideName(h.getSide()));
+        String text =
+                "V ruce: %s (%s)"
+                        .formatted(String.valueOf(h.getType().notationChar()), sideName(h.getSide()));
         if (pieceSkinUsesFigureArt()) {
             Image hi = figureRasterCache.getRasterized(h.getSide(), h.getType(), HAND_ICON_MAX);
-            if (hi != null) {
-                handPieceGraphic.setImage(hi);
-                handPieceGraphic.setFitWidth(HAND_ICON_MAX);
-                handPieceGraphic.setFitHeight(HAND_ICON_MAX);
-                handLabel.setGraphic(handPieceGraphic);
-                handLabel.setContentDisplay(ContentDisplay.LEFT);
-                handLabel.setText(text);
-                return;
-            }
+            updateHandLabel(hi, text);
+        } else {
+            updateHandLabel(null, text);
         }
-        handLabel.setGraphic(null);
+    }
+
+    private void updateHandLabel(Image imageOrNull, String text) {
+        if (imageOrNull != null) {
+            handPieceGraphic.setImage(imageOrNull);
+            handPieceGraphic.setFitWidth(HAND_ICON_MAX);
+            handPieceGraphic.setFitHeight(HAND_ICON_MAX);
+            handLabel.setGraphic(handPieceGraphic);
+        } else {
+            handLabel.setGraphic(null);
+        }
         handLabel.setContentDisplay(ContentDisplay.LEFT);
         handLabel.setText(text);
     }
@@ -662,23 +525,26 @@ public class MainController {
         if (g == null || gameController == null) {
             undo = false;
             redo = false;
-        } else if (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER) {
-            undo = gameController.canUndo();
-            redo = gameController.canRedo();
-        } else if (g.getState() == GameState.PLAY) {
-            boolean trapLock = draftEditsBlockedByTrapMenuOption(g);
-            boolean canDraftMutationUndo =
-                    !trapLock
-                            && isTrailingDraftAtLiveEnd()
-                            && gameController.getPlayHistory().trailingUncommittedStepCount() > 0;
-            boolean canNavUndo = !trapLock && gameController.canUndo();
-            undo = canDraftMutationUndo || canNavUndo;
-            boolean canDraftMutationRedo = !trapLock && isTrailingDraftAtLiveEnd() && !draftUi.draftRedoSteps.isEmpty();
-            boolean canNavRedo = !trapLock && gameController.canRedo();
-            redo = canDraftMutationRedo || canNavRedo || (!trapLock && draftUi.hasCancelledDraftSnapshot());
         } else {
-            undo = false;
-            redo = false;
+            GameUiPhaseSnapshot phase = GameUiPhaseSnapshot.from(g);
+            if (phase.setup()) {
+                undo = gameController.canUndo();
+                redo = gameController.canRedo();
+            } else if (phase.play()) {
+                boolean trapLock = draftEditsBlockedByTrapMenuOption();
+                boolean canDraftMutationUndo =
+                        !trapLock
+                                && isTrailingDraftAtLiveEnd()
+                                && gameController.getPlayHistory().trailingUncommittedStepCount() > 0;
+                boolean canNavUndo = !trapLock && gameController.canUndo();
+                undo = canDraftMutationUndo || canNavUndo;
+                boolean canDraftMutationRedo = !trapLock && isTrailingDraftAtLiveEnd() && !draftUi.draftRedoSteps.isEmpty();
+                boolean canNavRedo = !trapLock && gameController.canRedo();
+                redo = canDraftMutationRedo || canNavRedo || (!trapLock && draftUi.hasCancelledDraftSnapshot());
+            } else {
+                undo = false;
+                redo = false;
+            }
         }
         if (undoMenuItem != null) {
             undoMenuItem.setDisable(!undo);
@@ -715,15 +581,15 @@ public class MainController {
         if (g == null || gameController == null) {
             return;
         }
-        if (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER) {
+        if (MainUiLayoutPhase.isSetup(g)) {
             if (gameController.undo()) {
                 setStatus("Zpět — vrácen předchozí stav.");
                 refreshAll();
             }
             return;
         }
-        if (g.getState() == GameState.PLAY) {
-            if (draftEditsBlockedByTrapMenuOption(g)) {
+        if (MainUiLayoutPhase.isPlay(g)) {
+            if (draftEditsBlockedByTrapMenuOption()) {
                 setStatus("Nelze vrátit krok — v rozpracovaném tahu padla figura do pasti (Gameplay).");
                 return;
             }
@@ -755,17 +621,17 @@ public class MainController {
         if (g == null || gameController == null) {
             return;
         }
-        if (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER) {
+        if (MainUiLayoutPhase.isSetup(g)) {
             if (gameController.redo()) {
                 setStatus("Vpřed — obnoven stav.");
                 refreshAll();
             }
             return;
         }
-        if (g.getState() != GameState.PLAY) {
+        if (!MainUiLayoutPhase.isPlay(g)) {
             return;
         }
-        if (draftEditsBlockedByTrapMenuOption(g)) {
+        if (draftEditsBlockedByTrapMenuOption()) {
             setStatus("Nelze vpřed — rozpracovaný tah obsahuje pád do pasti (Gameplay).");
             return;
         }
@@ -869,6 +735,10 @@ public class MainController {
                 gameController.getPlayHistory(), game(), gameController::nextPlayNotationPrefix);
     }
 
+    List<String> buildNotationHistoryLinesForSidePanel() {
+        return buildNotationHistoryLines();
+    }
+
     void clearPlayTurnUi() {
         playDraft.clearPartialAndTurnPositions();
         draftUi.clearForNewTurnUi();
@@ -900,7 +770,8 @@ public class MainController {
         return draftUi.tryCancelPlayDraftFromUi();
     }
 
-    Piece effectivePieceAt(Game g, Position pos) {
+    @Override
+    public Piece effectivePieceAt(Game g, Position pos) {
         return g.getBoard().getPiece(pos);
     }
 
@@ -942,31 +813,8 @@ public class MainController {
         playPhase.tryEndPlayTurn();
     }
 
-    private static Map<PieceType, Integer> countReserve(Game g, PlayerSide side) {
-        Map<PieceType, Integer> m = new EnumMap<>(PieceType.class);
-        for (Piece p : g.getSetupReserveSnapshot(side)) {
-            m.merge(p.getType(), 1, Integer::sum);
-        }
-        return m;
-    }
-
     static String labelForReserveButton(PieceType type, int count) {
-        return "%s × %d".formatted(abbrevType(type), count);
-    }
-
-    public static String abbrev(Piece p) {
-        return abbrevType(p.getType());
-    }
-
-    private static String abbrevType(PieceType t) {
-        return switch (t) {
-            case ELEPHANT -> "E";
-            case CAMEL -> "M";
-            case HORSE -> "H";
-            case DOG -> "D";
-            case CAT -> "K";
-            case RABBIT -> "R";
-        };
+        return "%s × %d".formatted(String.valueOf(type.notationChar()), count);
     }
 
     static String sideName(PlayerSide s) {

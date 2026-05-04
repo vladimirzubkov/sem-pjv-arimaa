@@ -540,6 +540,26 @@ class GameTest {
         return n;
     }
 
+    @Test
+    void canFillRemainingReserveRandomly_trueBeforeFill_falseAfterSuccessfulFill() {
+        Game game = new Game();
+        game.startNewGame();
+        assertTrue(game.canFillRemainingReserveRandomly(PlayerSide.GOLD));
+        assertTrue(game.placeRemainingPiecesRandomly(PlayerSide.GOLD));
+        assertFalse(game.canFillRemainingReserveRandomly(PlayerSide.GOLD));
+        assertTrue(game.getSetupReserveSnapshot(PlayerSide.GOLD).isEmpty());
+    }
+
+    @Test
+    void setupReserveCountsByType_sumsToReserveSizeAtStart() {
+        Game game = new Game();
+        game.startNewGame();
+        Map<PieceType, Integer> m = game.setupReserveCountsByType(PlayerSide.GOLD);
+        int sum = m.values().stream().mapToInt(Integer::intValue).sum();
+        assertEquals(game.getSetupReserveSnapshot(PlayerSide.GOLD).size(), sum);
+        assertEquals(8, m.get(PieceType.RABBIT).intValue());
+    }
+
     private static void assertReserveMultiset(List<Piece> reserve, PlayerSide expectedSide) {
         assertEquals(16, reserve.size());
         for (Piece p : reserve) {

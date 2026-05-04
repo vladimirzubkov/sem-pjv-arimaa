@@ -317,6 +317,24 @@ public final class PlayTurnHistory {
         }
     }
 
+    /**
+     * Whether the scrubbed prefix on the viewed half-turn removes at least one piece via trap (any colour), evaluated
+     * from that half-turn’s start snapshot.
+     */
+    public boolean viewPrefixRemovesPieceViaTrap(Game game) {
+        if (game == null || game.getState() != GameState.PLAY || !isBootstrapped() || appliedPrefixSteps <= 0) {
+            return false;
+        }
+        PlayHalfTurn ht = halfAt(viewHalfIndex);
+        Game probe = Game.restoredFromMemento(ht.startSnap());
+        Move m = new Move();
+        for (int i = 0; i < appliedPrefixSteps; i++) {
+            m.getSteps().add(PlayHalfTurn.copyStep(ht.steps().get(i)));
+        }
+        DefaultRuleEngine.TrapCapturePreview p = DefaultRuleEngine.trapCapturesIfPrefixApplied(probe, m);
+        return !p.byGold().isEmpty() || !p.bySilver().isEmpty();
+    }
+
     public List<String> committedNotationLinesInOrder() {
         ArrayList<String> out = new ArrayList<>();
         for (int h = 1; h < halfTurns.size(); h++) {

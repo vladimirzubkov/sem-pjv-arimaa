@@ -63,7 +63,7 @@ final class PlayDraftUiCoordinator {
         }
         boolean trapBlocksCancel = main.forbidCancelAfterTrapItem != null
                 && main.forbidCancelAfterTrapItem.isSelected()
-                && main.partialTurnAnyTrapRemoval(g);
+                && main.gameController.getPlayHistory().viewPrefixRemovesPieceViaTrap(g);
         if (trapBlocksCancel) {
             main.setStatus("Nelze zrušit rozpracovaný tah — v rozpracovaném tahu padla figura do pasti (Gameplay).");
             return false;

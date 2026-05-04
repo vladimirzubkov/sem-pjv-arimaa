@@ -76,11 +76,7 @@ public final class PlayHalfTurn {
     }
 
     public static Step copyStep(Step s) {
-        Step t = new Step();
-        t.setFrom(s.getFrom());
-        t.setTo(s.getTo());
-        t.setKind(s.getKind());
-        return t;
+        return Step.copyOf(s);
     }
 
     public static Move copyMove(Move src) {

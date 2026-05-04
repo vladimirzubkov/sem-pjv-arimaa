@@ -33,18 +33,11 @@ public final class PlayDraftNotationSupport {
     }
 
     public static Step copyStep(Step s) {
-        Step t = new Step();
-        t.setFrom(s.getFrom());
-        t.setTo(s.getTo());
-        t.setKind(s.getKind());
-        return t;
+        return Step.copyOf(s);
     }
 
     public static Game probeGameFromMemento(GameMemento m) {
-        Game g = new Game();
-        g.startNewGame();
-        g.restoreMemento(m);
-        return g;
+        return Game.restoredFromMemento(m);
     }
 
     /**

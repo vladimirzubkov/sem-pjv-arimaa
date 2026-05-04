@@ -3,6 +3,7 @@ package cz.cvut.fel.pjv.arimaa.ui;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.model.Piece;
+import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
@@ -26,7 +27,7 @@ import javafx.scene.text.Font;
 import javafx.scene.transform.Scale;
 
 /**
- * 8×8 board cells, coordinate frame, scaling host, and piece/hover painting. Wired to {@link MainController} for
+ * 8×8 board cells, coordinate frame, scaling host, and piece/hover painting. Wired via {@link BoardViewHost} for
  * game state and orientation mapping (same package).
  */
 public final class BoardGridView {
@@ -52,11 +53,11 @@ public final class BoardGridView {
             ImageView hoverImage,
             Label hoverLabel) {}
 
-    private final MainController main;
+    private final BoardViewHost host;
     final StackPane[][] cells = new StackPane[BoardConstants.BOARD_SIZE][BoardConstants.BOARD_SIZE];
 
-    public BoardGridView(MainController main) {
-        this.main = main;
+    public BoardGridView(BoardViewHost host) {
+        this.host = host;
         for (int row = 0; row < BoardConstants.BOARD_SIZE; row++) {
             for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
                 cells[row][col] = createCell(col, row);
@@ -151,13 +152,13 @@ public final class BoardGridView {
         final int vr = visualRow;
         cell.hoverProperty().addListener((obs, was, hovering) -> {
             if (Boolean.TRUE.equals(hovering)) {
-                main.setHoverCell(fi, vr);
+                host.setHoverCell(fi, vr);
             } else {
-                main.clearHoverCellIf(fi, vr);
+                host.clearHoverCellIf(fi, vr);
             }
         });
 
-        cell.setOnMouseClicked(e -> main.onBoardCellClick(fi, vr));
+        cell.setOnMouseClicked(e -> host.onBoardCellClick(fi, vr));
         return cell;
     }
 
@@ -205,8 +206,7 @@ public final class BoardGridView {
         for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
             Label top = coordLabel(String.valueOf((char) ('a' + f)), CELL, COORD, true);
             Label bottom = coordLabel(String.valueOf((char) ('a' + f)), CELL, COORD, true);
-            main.fileCoordLabelsTop[f] = top;
-            main.fileCoordLabelsBottom[f] = bottom;
+            host.registerFileCoordLabels(f, top, bottom);
             surface.add(top, f + 1, 0);
             surface.add(bottom, f + 1, 9);
         }
@@ -214,8 +214,7 @@ public final class BoardGridView {
             int gridRow = visualRow + 1;
             Label left = coordLabel("8", COORD, CELL, false);
             Label right = coordLabel("8", COORD, CELL, false);
-            main.rankCoordLabelsLeft[visualRow] = left;
-            main.rankCoordLabelsRight[visualRow] = right;
+            host.registerRankCoordLabels(visualRow, left, right);
             surface.add(left, 0, gridRow);
             surface.add(right, 9, gridRow);
         }
@@ -238,7 +237,7 @@ public final class BoardGridView {
         framed.setPrefSize(outer, outer);
         framed.setMaxSize(outer, outer);
         StackPane.setMargin(surface, new Insets(FRAME_INSET));
-        main.setFramedOuterSize(outer);
+        host.setFramedOuterSize(outer);
         return framed;
     }
 
@@ -247,16 +246,16 @@ public final class BoardGridView {
             for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
                 StackPane cell = cells[row][col];
                 CellData data = (CellData) cell.getUserData();
-                int mf = main.modelFileFromVisualCol(data.fileIndex(), g);
-                int mr = main.modelRankFromVisualRow(row, g);
+                int mf = host.modelFileFromVisualCol(data.fileIndex(), g);
+                int mr = host.modelRankFromVisualRow(row, g);
                 Position pos = Position.of(mf, mr);
-                Piece p = main.effectivePieceAt(g, pos);
-                if (!main.pieceSkinUsesFigureArt()) {
+                Piece p = host.effectivePieceAt(g, pos);
+                if (!host.pieceSkinUsesFigureArt()) {
                     data.pieceImage().setImage(null);
                     data.pieceImage().setVisible(false);
                     data.pieceLabel().setVisible(true);
                     data.pieceLabel().setMouseTransparent(false);
-                    data.pieceLabel().setText(p == null ? "" : MainController.abbrev(p));
+                    data.pieceLabel().setText(p == null ? "" : String.valueOf(p.getType().notationChar()));
                     data.pieceLabel().setTextFill(p == null ? Color.BLACK
                             : (p.getSide() == PlayerSide.GOLD ? Color.color(0.55, 0.35, 0.05) : Color.color(0.25, 0.25, 0.35)));
                 } else {
@@ -267,7 +266,7 @@ public final class BoardGridView {
                         data.pieceLabel().setVisible(false);
                         data.pieceLabel().setMouseTransparent(true);
                     } else {
-                        Image img = main.figureRasterCache.getRasterized(p.getSide(), p.getType(), PIECE_IMAGE_MAX);
+                        Image img = host.figureRasterCache().getRasterized(p.getSide(), p.getType(), PIECE_IMAGE_MAX);
                         data.pieceImage().setImage(img);
                         boolean showImg = img != null;
                         data.pieceImage().setVisible(showImg);
@@ -276,7 +275,7 @@ public final class BoardGridView {
                             data.pieceLabel().setVisible(false);
                             data.pieceLabel().setMouseTransparent(true);
                         } else {
-                            data.pieceLabel().setText(MainController.abbrev(p));
+                            data.pieceLabel().setText(String.valueOf(p.getType().notationChar()));
                             data.pieceLabel().setVisible(true);
                             data.pieceLabel().setMouseTransparent(false);
                             data.pieceLabel().setTextFill(p.getSide() == PlayerSide.GOLD
@@ -306,31 +305,33 @@ public final class BoardGridView {
                 GameState st = g.getState();
                 boolean setup = st == GameState.SETUP_GOLD || st == GameState.SETUP_SILVER;
                 Piece hand = g.getSetupHand();
-                int mf = main.modelFileFromVisualCol(data.fileIndex(), g);
-                int mr = main.modelRankFromVisualRow(data.visualRow(), g);
+                int mf = host.modelFileFromVisualCol(data.fileIndex(), g);
+                int mr = host.modelRankFromVisualRow(data.visualRow(), g);
                 Position pos = Position.of(mf, mr);
+                Integer hfi = host.getHoverFileIndex();
+                Integer hvr = host.getHoverVisualRow();
                 boolean overHere = setup && hand != null
-                        && main.hoverFileIndex != null && main.hoverVisualRow != null
-                        && data.fileIndex() == main.hoverFileIndex && data.visualRow() == main.hoverVisualRow;
+                        && hfi != null && hvr != null
+                        && data.fileIndex() == hfi && data.visualRow() == hvr;
                 boolean show = overHere && g.isLegalSetupHandPlacementTarget(pos);
                 if (!show) {
                     hImg.setVisible(false);
                     hLbl.setVisible(false);
                     continue;
                 }
-                if (main.pieceSkinUsesFigureArt()) {
-                    Image im = main.figureRasterCache.getRasterized(hand.getSide(), hand.getType(), PIECE_IMAGE_MAX);
+                if (host.pieceSkinUsesFigureArt()) {
+                    Image im = host.figureRasterCache().getRasterized(hand.getSide(), hand.getType(), PIECE_IMAGE_MAX);
                     hImg.setImage(im);
                     hImg.setOpacity(0.5);
                     hImg.setVisible(im != null);
-                    hLbl.setText(im == null ? MainController.abbrev(hand) : "");
+                    hLbl.setText(im == null ? String.valueOf(hand.getType().notationChar()) : "");
                     hLbl.setTextFill(hand.getSide() == PlayerSide.GOLD
                             ? Color.color(0.55, 0.35, 0.05)
                             : Color.color(0.25, 0.25, 0.35));
                     hLbl.setVisible(im == null);
                 } else {
                     hImg.setVisible(false);
-                    hLbl.setText(MainController.abbrev(hand));
+                    hLbl.setText(String.valueOf(hand.getType().notationChar()));
                     hLbl.setTextFill(hand.getSide() == PlayerSide.GOLD
                             ? Color.color(0.55, 0.35, 0.05)
                             : Color.color(0.25, 0.25, 0.35));
@@ -345,8 +346,8 @@ public final class BoardGridView {
             for (int col = 0; col < BoardConstants.BOARD_SIZE; col++) {
                 StackPane cell = cells[visualRow][col];
                 CellData data = (CellData) cell.getUserData();
-                int mf = main.modelFileFromVisualCol(col, g);
-                int mr = main.modelRankFromVisualRow(visualRow, g);
+                int mf = host.modelFileFromVisualCol(col, g);
+                int mr = host.modelRankFromVisualRow(visualRow, g);
                 Position pos = Position.of(mf, mr);
                 Rectangle bg = data.background();
                 Color baseFill;

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.14
+
+- **Model (`Game`):** `setupReserveCountsByType`, `canFillRemainingReserveRandomly` (stejná logika jako před `placeRemainingPiecesRandomly` včetně figury v ruce), `restoredFromMemento` pro probe ze snapshotu.
+- **`Step.copyOf` / `PlayHalfTurn.copyStep`:** jedna cesta kopírování kroku.
+- **`PlayTurnHistory`:** `viewPrefixRemovesPieceViaTrap(Game)` — detekce pádu do pasti v náhledu prefixu (místo logiky v `MainController`).
+- **UI:** `BoardViewHost` + `BoardGridView(BoardViewHost)` — deska nezávislá na konkrétní třídě `MainController`.
+- **UI:** `SetupSidePanelController`, `PlaySidePanelController` — rezerva / setup tlačítka vs. zajatí, notace, PLAY tlačítka.
+- **UI:** `MainUiViewModel` + JavaFX bind (`visible`/`managed`) pro blok rezervy, setup ovládání, zajaté a historii tahů; `MainUiLayoutPhase`, `GameUiPhaseSnapshot` pro opakované větve podle fáze.
+- **`MainController`:** `refreshAll()` zůstává centrálním přepočtem (deska, souřadnice, podsvícení, stav), delegace na panely a VM místo starších `refreshReserve*` / ruční viditelnosti tam, kde stačí binding.
+- **Testy:** `GameTest` pro `canFillRemainingReserveRandomly` a `setupReserveCountsByType`; **`PieceTypeTest`** pro `PieceType.notationChar()`.
+- **Model (`PieceType`):** jednopísmenné značky v souladu s UI (rezerva, deska, zajatí).
+- Refaktor bez zamýšlené změny chování hry a UI.
+
 ## 0.7.13
 
 - **Skiny:** složka **`default`** (PNG figurky), **`classic`** (SVG); **`FigureSkinDirectoryDiscovery`** — výpis podsložek `images/figure_sets/` jen z **jednoho** classpath URL (`file:` / `jar:` u stejného kořene jako načítání figurek), bez závislosti na ClassGraph (žádné „fantomní“ skiny z jiného modulu / classpath).
@@ -18,6 +31,7 @@
 - **Refaktor UI (bez změny chování):** část logiky vyčleněna z **`MainController`** do **`PlayDraftNotationSupport`** (kopie kroků, probe z mementa, náhled notace, validace sufixu tahu), **`PlayTurnDraftState`** (rozpracovaný PLAY tah), **`BoardGridView`** + **`BoardHostPane`** (mřížka, rámeček souřadnic, kreslení figurek a hover), **`ArimaaSaveLoadSupport`** (uložení / načtení souboru). **`GameController`** zůstává tenkou doménovou vrstvou.
 - **Model:** přesun výčtů **`GameState`**, **`PieceType`**, **`PlayerSide`**, **`StepKind`** do balíčku **`cz.cvut.fel.pjv.arimaa.model.enums`** (importy v modulu a testech).
 - **UI (kosmetika):** hlášky v **`MainController`** a chybové texty v **`ArimaaSaveLoadSupport`** přes **`String.formatted()`** místo konkatenace řetězců.
+- **Model / UI:** **`PieceType.notationChar()`** — jedna latinská písmena na typ (deska, rezerva, zajatí); **`BoardGridView`** už nevolá `MainController` jen kvůli zkratce; popisek „V ruce“ přes **`updateHandLabel`**; test **`PieceTypeTest`**.
 - **Další refaktor `MainController` (bez změny chování):** `MainWindowLayoutBuilder` + `MainWindowLayoutResult` (menu, postranní panel, SETUP/PLAY tlačítka), `PlayBoardHighlighter` (PLAY podsvícení), `SetupPhaseUiHandler` / `PlayPhaseUiHandler` (fáze SETUP vs PLAY); dřívější výčet `buildSetupReserveAndPlayButtons` / `buildMenuBar` v controlleru nahrazen builderem.
 
 ## 0.7.12

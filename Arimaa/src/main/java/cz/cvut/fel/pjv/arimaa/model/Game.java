@@ -168,6 +168,47 @@ public class Game {
     }
 
     /**
+     * Counts pieces still in {@code side}'s tray during setup (same multiset as {@link #getSetupReserveSnapshot}).
+     */
+    public Map<PieceType, Integer> setupReserveCountsByType(PlayerSide side) {
+        Objects.requireNonNull(side, "side");
+        Map<PieceType, Integer> m = new EnumMap<>(PieceType.class);
+        for (Piece p : getSetupReserveSnapshot(side)) {
+            m.merge(p.getType(), 1, Integer::sum);
+        }
+        return m;
+    }
+
+    /**
+     * Whether {@link #placeRemainingPiecesRandomly(PlayerSide)} can succeed right now: setup phase for {@code side},
+     * non-empty effective reserve after the same hand-cancel rule as that method, and matching empty home squares.
+     */
+    public boolean canFillRemainingReserveRandomly(PlayerSide side) {
+        if (side == null || board == null || !isSetupPhaseForSide(side)) {
+            return false;
+        }
+        int remaining = reserveList(side).size();
+        if (setupHand != null && setupHand.getSide() == side) {
+            remaining++;
+        }
+        if (remaining <= 0) {
+            return false;
+        }
+        return remaining == listEmptyHomeSquares(side).size();
+    }
+
+    /**
+     * New game with default start state, then {@link #restoreMemento(GameMemento)} (for notation / replay probes).
+     */
+    public static Game restoredFromMemento(GameMemento m) {
+        Objects.requireNonNull(m, "m");
+        Game g = new Game();
+        g.startNewGame();
+        g.restoreMemento(m);
+        return g;
+    }
+
+    /**
      * Picks one piece of {@code type} from the reserve into {@link #setupHand}. Returns any prior hand piece to the tray.
      */
     public boolean beginPlacingPieceFromReserve(PlayerSide side, PieceType type) {

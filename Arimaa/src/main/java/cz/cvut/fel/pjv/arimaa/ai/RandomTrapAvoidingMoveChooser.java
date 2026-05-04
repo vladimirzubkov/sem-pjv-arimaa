@@ -5,16 +5,18 @@ import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.Move;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Random;
 
 /**
- * Level-0 computer: uniform random among legal turns that do not trap-remove own pieces; if none, among all legal turns.
+ * Level-0 computer: randomized DFS for one legal turn, preferring moves that do not trap-remove own pieces; falls back
+ * to any sampled legal turn after several attempts.
  */
 public final class RandomTrapAvoidingMoveChooser {
+
+    /** Attempts to sample a trap-safe move before accepting a trap-loss move. */
+    public static final int TRAP_SAFE_SAMPLE_ATTEMPTS = 64;
 
     private RandomTrapAvoidingMoveChooser() {}
 
@@ -30,18 +32,19 @@ public final class RandomTrapAvoidingMoveChooser {
     public static Move chooseMove(Game game, Random random) {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(random, "random");
-        List<Move> legal = DefaultRuleEngine.enumerateLegalCompleteMoves(game);
-        if (legal.isEmpty()) {
-            throw new IllegalStateException("no legal complete moves");
-        }
         PlayerSide mover = game.getSideToMove();
-        List<Move> safe = new ArrayList<>();
-        for (Move m : legal) {
+        Optional<Move> fallback = Optional.empty();
+        for (int i = 0; i < TRAP_SAFE_SAMPLE_ATTEMPTS; i++) {
+            Optional<Move> sampled = DefaultRuleEngine.sampleRandomLegalCompleteMove(game, random);
+            if (sampled.isEmpty()) {
+                break;
+            }
+            Move m = sampled.get();
+            fallback = Optional.of(m);
             if (!losesOwnPieceToTrap(mover, DefaultRuleEngine.trapCapturesIfPrefixApplied(game, m))) {
-                safe.add(m);
+                return m;
             }
         }
-        List<Move> pool = safe.isEmpty() ? legal : safe;
-        return pool.get(random.nextInt(pool.size()));
+        return fallback.orElseThrow(() -> new IllegalStateException("no legal complete moves"));
     }
 }

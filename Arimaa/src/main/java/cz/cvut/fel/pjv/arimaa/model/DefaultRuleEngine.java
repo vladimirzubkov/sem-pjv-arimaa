@@ -10,10 +10,13 @@ import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import cz.cvut.fel.pjv.arimaa.util.PieceStrength;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Random;
 import java.util.function.Consumer;
 
 import org.slf4j.Logger;
@@ -221,6 +224,68 @@ public final class DefaultRuleEngine implements RuleEngine {
         List<Move> out = new ArrayList<>();
         dfsCollectLegalCompleteMoves(game, new Move(), root, out);
         return out;
+    }
+
+    /**
+     * One legal full turn sampled by randomized DFS (shuffled step bundles at each depth). Tries extending the
+     * prefix before accepting a complete turn, so multi-step turns are not skipped whenever a one-step completion
+     * exists. Not uniformly random over all legal turns. Empty if not in {@link GameState#PLAY} or no legal turn exists.
+     */
+    public static Optional<Move> sampleRandomLegalCompleteMove(Game game, Random rnd) {
+        Objects.requireNonNull(game, "game");
+        Objects.requireNonNull(rnd, "rnd");
+        if (game.getState() != GameState.PLAY) {
+            return Optional.empty();
+        }
+        Map<Position, Piece> root = snapshotOccupancy(game.getBoard());
+        return dfsSampleRandomLegalCompleteMove(game, new Move(), root, rnd);
+    }
+
+    private static Optional<Move> dfsSampleRandomLegalCompleteMove(Game game, Move prefix, Map<Position, Piece> root, Random rnd) {
+        int len = prefix.getSteps().size();
+        if (len > 4) {
+            return Optional.empty();
+        }
+        if (len == 4) {
+            try {
+                validateSequentialSteps(game, copyMove(prefix), true, root);
+                return Optional.of(copyMove(prefix));
+            } catch (IllegalArgumentException ignored) {
+                return Optional.empty();
+            }
+        }
+        Map<Position, Piece> occAfter;
+        try {
+            occAfter = validateSequentialSteps(game, copyMove(prefix), false, root);
+        } catch (IllegalArgumentException ex) {
+            return Optional.empty();
+        }
+        List<List<Step>> bundles = new ArrayList<>(enumerateStepBundles(occAfter, game.getSideToMove()));
+        Collections.shuffle(bundles, rnd);
+        for (List<Step> bundle : bundles) {
+            Move extended = copyMove(prefix);
+            for (Step st : bundle) {
+                extended.getSteps().add(copyStep(st));
+            }
+            try {
+                validateSequentialSteps(game, copyMove(extended), false, root);
+            } catch (IllegalArgumentException ex) {
+                continue;
+            }
+            Optional<Move> fromChild = dfsSampleRandomLegalCompleteMove(game, extended, root, rnd);
+            if (fromChild.isPresent()) {
+                return fromChild;
+            }
+        }
+        if (len >= 1) {
+            try {
+                validateSequentialSteps(game, copyMove(prefix), true, root);
+                return Optional.of(copyMove(prefix));
+            } catch (IllegalArgumentException ignored) {
+                return Optional.empty();
+            }
+        }
+        return Optional.empty();
     }
 
     private static void dfsCollectLegalCompleteMoves(Game game, Move prefix, Map<Position, Piece> root, List<Move> out) {

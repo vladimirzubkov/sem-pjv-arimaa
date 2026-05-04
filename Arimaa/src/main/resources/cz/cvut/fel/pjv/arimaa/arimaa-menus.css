@@ -1,0 +1,10 @@
+/* Jednotné odsazení 10 px vlevo/vpravo: horní lišta a okraj popup menu.
+ * Řádky (.menu-item, CheckMenuItem, CustomMenuItem…) — výchozí Modena, bez vlastních paddingů a bez translate. */
+
+.menu-bar .menu-button {
+    -fx-padding: 4px 10px 4px 10px;
+}
+
+.context-menu {
+    -fx-padding: 4px 10px 4px 10px;
+}

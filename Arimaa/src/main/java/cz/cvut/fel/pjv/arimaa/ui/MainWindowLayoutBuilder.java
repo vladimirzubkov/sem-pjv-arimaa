@@ -7,11 +7,13 @@ import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
+import javafx.beans.binding.Bindings;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.CustomMenuItem;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
@@ -19,6 +21,7 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.Slider;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -26,12 +29,14 @@ import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.CornerRadii;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Builds the side panel, menus, and setup/play control nodes for {@link MainController#attachToStage(javafx.stage.Stage)}.
@@ -263,7 +268,7 @@ public final class MainWindowLayoutBuilder {
         menuGameplay.getItems().add(menuSkin);
         menuGameplay.getItems().add(new SeparatorMenuItem());
 
-        Menu menuGoldPlayer = new Menu("Gold — hráč");
+        Menu menuGoldPlayer = new Menu("Gold hráč");
         ToggleGroup goldPlayerGroup = new ToggleGroup();
         RadioMenuItem goldHuman = new RadioMenuItem("Člověk");
         goldHuman.setToggleGroup(goldPlayerGroup);
@@ -277,11 +282,11 @@ public final class MainWindowLayoutBuilder {
                 return;
             }
             main.setGoldPlayerKind(k);
-            main.refreshAll();
+            Platform.runLater(main::refreshAll);
         });
         menuGoldPlayer.getItems().addAll(goldHuman, goldCpu);
 
-        Menu menuSilverPlayer = new Menu("Silver — hráč");
+        Menu menuSilverPlayer = new Menu("Silver hráč");
         ToggleGroup silverPlayerGroup = new ToggleGroup();
         RadioMenuItem silverHuman = new RadioMenuItem("Člověk");
         silverHuman.setToggleGroup(silverPlayerGroup);
@@ -295,21 +300,62 @@ public final class MainWindowLayoutBuilder {
                 return;
             }
             main.setSilverPlayerKind(k);
-            main.refreshAll();
+            Platform.runLater(main::refreshAll);
         });
         menuSilverPlayer.getItems().addAll(silverHuman, silverCpu);
         menuGameplay.getItems().addAll(menuGoldPlayer, menuSilverPlayer);
         menuGameplay.getItems().add(new SeparatorMenuItem());
 
+        Slider computerStepDelaySlider = new Slider(0, 2000, main.getComputerStepDelayMs());
+        computerStepDelaySlider.setFocusTraversable(false);
+        computerStepDelaySlider.setShowTickMarks(true);
+        computerStepDelaySlider.setMajorTickUnit(500);
+        computerStepDelaySlider.setMinorTickCount(0);
+        computerStepDelaySlider.setBlockIncrement(50);
+        computerStepDelaySlider.setSnapToTicks(false);
+        computerStepDelaySlider.setMaxWidth(100);
+        Label computerDelayCaption = new Label("Pauza tahu počítače na krok:");
+        computerDelayCaption.setFocusTraversable(false);
+        Label computerDelayValueLabel = new Label();
+        computerDelayValueLabel.setFocusTraversable(false);
+        /* Fixed width for longest "2.00 s"; left-aligned so gap after slider matches delayRowGap (no dead space as with right align). */
+        final double delayValueCellWidth = 52;
+        computerDelayValueLabel.setMinWidth(delayValueCellWidth);
+        computerDelayValueLabel.setPrefWidth(delayValueCellWidth);
+        computerDelayValueLabel.setMaxWidth(delayValueCellWidth);
+        computerDelayValueLabel.setAlignment(Pos.CENTER_LEFT);
+        /* CustomMenuItem content is outside the usual menu-item label subtree; Modena leaves label text
+         * effectively invisible until hover. Explicit fill keeps captions readable. */
+        Color menuCustomItemText = Color.color(0.13, 0.13, 0.13);
+        computerDelayCaption.setTextFill(menuCustomItemText);
+        computerDelayValueLabel.setTextFill(menuCustomItemText);
+        computerDelayValueLabel.textProperty()
+                .bind(Bindings.createStringBinding(
+                        () -> String.format(
+                                Locale.US,
+                                "%.2f s",
+                                computerStepDelaySlider.getValue() / 1000.0),
+                        computerStepDelaySlider.valueProperty()));
+        computerStepDelaySlider.valueProperty().addListener((obs, o, n) -> main.setComputerStepDelayMs(n.doubleValue()));
+        final int delayRowGap = 8;
+        HBox computerDelayRow = new HBox(delayRowGap, computerDelayCaption, computerStepDelaySlider, computerDelayValueLabel);
+        computerDelayRow.setAlignment(Pos.CENTER_LEFT);
+        computerDelayRow.setFocusTraversable(false);
+        CustomMenuItem computerDelayMenuItem = new CustomMenuItem(computerDelayRow);
+        computerDelayMenuItem.setHideOnClick(false);
+        computerDelayMenuItem.setMnemonicParsing(false);
+        menuGameplay.getItems().add(computerDelayMenuItem);
+        menuGameplay.getItems().add(new SeparatorMenuItem());
+
         main.forbidCancelAfterTrapItem = new CheckMenuItem(
                 "Po pádu figury do pasti nelze zrušit rozpracovaný tah");
         main.forbidCancelAfterTrapItem.setSelected(false);
-        main.forbidCancelAfterTrapItem.selectedProperty().addListener((obs, prev, now) -> main.refreshAll());
+        main.forbidCancelAfterTrapItem.selectedProperty().addListener((obs, prev, now) -> Platform.runLater(main::refreshAll));
         menuGameplay.getItems().add(main.forbidCancelAfterTrapItem);
 
         main.rotateBoardToMoverItem = new CheckMenuItem("Otáčet desku — hráč na tahu dole");
         main.rotateBoardToMoverItem.setSelected(false);
-        main.rotateBoardToMoverItem.selectedProperty().addListener((obs, prev, now) -> main.refreshAll());
+        main.rotateBoardToMoverItem.selectedProperty().addListener((obs, prev, now) -> Platform.runLater(main::refreshAll));
         menuGameplay.getItems().add(main.rotateBoardToMoverItem);
 
         Menu menuLog = new Menu("Log");

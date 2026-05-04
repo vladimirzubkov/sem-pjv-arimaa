@@ -2,6 +2,7 @@ package cz.cvut.fel.pjv.arimaa.ai;
 
 import cz.cvut.fel.pjv.arimaa.model.DefaultRuleEngine;
 import cz.cvut.fel.pjv.arimaa.model.Game;
+import cz.cvut.fel.pjv.arimaa.model.GameMemento;
 import cz.cvut.fel.pjv.arimaa.model.Move;
 import cz.cvut.fel.pjv.arimaa.model.Piece;
 import cz.cvut.fel.pjv.arimaa.model.Position;
@@ -12,8 +13,11 @@ import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -65,6 +69,38 @@ class RandomTrapAvoidingMoveChooserTest {
                 .toList();
         assertFalse(safe.isEmpty());
         assertTrue(safe.size() < all.size());
+    }
+
+    @Test
+    void sampleRandomLegalCompleteMove_returnsApplicableFullTurn() {
+        Game g = playOnEmptyBoard(PlayerSide.GOLD);
+        g.getBoard().setPiece(Position.fromAlgebraic("a1"), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        Optional<Move> opt = DefaultRuleEngine.sampleRandomLegalCompleteMove(g, new Random(123));
+        assertTrue(opt.isPresent());
+        Move mv = opt.get();
+        assertFalse(mv.getSteps().isEmpty());
+        Game probe = Game.restoredFromMemento(GameMemento.fromGame(g));
+        assertDoesNotThrow(() -> probe.applyMove(mv));
+    }
+
+    @Test
+    void sampleRandomLegalCompleteMove_oftenMultiStepFromStandardOpening() {
+        Game g = new Game();
+        g.startNewGame();
+        assertTrue(g.applyChessMappedSetup(PlayerSide.GOLD));
+        assertTrue(g.tryCompleteSetup(PlayerSide.GOLD));
+        assertTrue(g.applyChessMappedSetup(PlayerSide.SILVER));
+        assertTrue(g.tryCompleteSetup(PlayerSide.SILVER));
+        assertEquals(GameState.PLAY, g.getState());
+        int multiStep = 0;
+        for (int seed = 0; seed < 400; seed++) {
+            Optional<Move> opt = DefaultRuleEngine.sampleRandomLegalCompleteMove(g, new Random(seed));
+            assertTrue(opt.isPresent());
+            if (opt.get().getSteps().size() > 1) {
+                multiStep++;
+            }
+        }
+        assertTrue(multiStep >= 30, "sampler should explore extensions, not stop at one-step completions only");
     }
 
     @Test

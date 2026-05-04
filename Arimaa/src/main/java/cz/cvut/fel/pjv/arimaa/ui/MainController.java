@@ -3,9 +3,9 @@ package cz.cvut.fel.pjv.arimaa.ui;
 import cz.cvut.fel.pjv.arimaa.ai.RandomTrapAvoidingMoveChooser;
 import cz.cvut.fel.pjv.arimaa.controller.GameController;
 import cz.cvut.fel.pjv.arimaa.logging.LoggingSupport;
-import cz.cvut.fel.pjv.arimaa.model.DefaultRuleEngine;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.GameHistoryEvent;
+import cz.cvut.fel.pjv.arimaa.model.GameMemento;
 import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.model.Move;
 import cz.cvut.fel.pjv.arimaa.model.Piece;
@@ -15,8 +15,10 @@ import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.model.Step;
 import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
+import cz.cvut.fel.pjv.arimaa.model.PlayHalfTurn;
 import cz.cvut.fel.pjv.arimaa.util.ArimaaNotation;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
+import javafx.animation.PauseTransition;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.application.Platform;
@@ -46,6 +48,8 @@ import javafx.stage.Stage;
 
 import ch.qos.logback.classic.Level;
 
+import javafx.util.Duration;
+
 import java.io.File;
 
 import org.slf4j.Logger;
@@ -54,9 +58,13 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Primary window: board, setup controls (manual placement, presets via {@link cz.cvut.fel.pjv.arimaa.model.SetupPresets}),
@@ -166,6 +174,14 @@ public class MainController implements BoardViewHost {
     private PlayerControllerKind silverPlayerKind = PlayerControllerKind.HUMAN;
     private final Random computerRandom = new Random();
     private boolean computerActionPending;
+    private final ExecutorService computerMoveExecutor =
+            Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "arimaa-computer-move");
+                t.setDaemon(true);
+                return t;
+            });
+    /** Delay between animated computer steps (ms), 0–2000 from Gameplay menu. */
+    private double computerStepDelayMs = 1000.0;
 
     BoardViewOrientation boardOrientation;
 
@@ -242,6 +258,11 @@ public class MainController implements BoardViewHost {
 
         Scene scene = new Scene(root, 920, 640);
         scene.setFill(Color.rgb(236, 236, 238));
+        scene.getStylesheets()
+                .add(Objects.requireNonNull(
+                                MainController.class.getResource("/cz/cvut/fel/pjv/arimaa/arimaa-menus.css"),
+                                "classpath:/cz/cvut/fel/pjv/arimaa/arimaa-menus.css")
+                        .toExternalForm());
         PlaySceneKeyHandler.install(scene, this);
         primaryStage.setTitle("Arimaa – rozestavení");
         primaryStage.setScene(scene);
@@ -694,6 +715,14 @@ public class MainController implements BoardViewHost {
         return playerControllerKind(side) == PlayerControllerKind.COMPUTER_LEVEL_0;
     }
 
+    public double getComputerStepDelayMs() {
+        return computerStepDelayMs;
+    }
+
+    public void setComputerStepDelayMs(double ms) {
+        computerStepDelayMs = Math.max(0, Math.min(2000, ms));
+    }
+
     private void scheduleComputerTurnIfNeeded() {
         Game g = game();
         if (g == null || stage == null || computerActionPending) {
@@ -703,13 +732,55 @@ public class MainController implements BoardViewHost {
             return;
         }
         computerActionPending = true;
-        Platform.runLater(() -> {
+        if (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER) {
+            Platform.runLater(() -> {
+                try {
+                    Game g2 = game();
+                    if (g2 != null && shouldOfferComputerStep(g2)) {
+                        runComputerSetupStep(g2);
+                    }
+                } finally {
+                    computerActionPending = false;
+                }
+                refreshAll();
+            });
+            return;
+        }
+        if (g.getState() != GameState.PLAY || gameController == null) {
+            computerActionPending = false;
+            return;
+        }
+        PlayTurnHistory ph = gameController.getPlayHistory();
+        if (!ph.isBootstrapped()) {
+            computerActionPending = false;
+            return;
+        }
+        PlayHalfTurn last = ph.halfAt(ph.halfTurnsUnmodifiable().size() - 1);
+        if (last.committed()) {
+            computerActionPending = false;
+            return;
+        }
+        final GameMemento startSnap = last.startSnap();
+        computerMoveExecutor.execute(() -> {
             try {
-                runOneComputerStep();
-            } finally {
-                computerActionPending = false;
+                Game probe = Game.restoredFromMemento(startSnap);
+                Move chosen = RandomTrapAvoidingMoveChooser.chooseMove(probe, computerRandom);
+                Platform.runLater(() -> beginComputerPlayAnimation(chosen));
+            } catch (IllegalStateException ex) {
+                log.warn("computer play: no legal moves ({})", ex.getMessage());
+                Platform.runLater(() -> {
+                    computerActionPending = false;
+                    setStatus("Počítač — žádný platný tah.");
+                    refreshAll();
+                });
+            } catch (Exception ex) {
+                log.warn("computer play: move selection failed", ex);
+                Platform.runLater(() -> {
+                    computerActionPending = false;
+                    setStatus("Počítač — výběr tahu selhal.");
+                    refreshAll();
+                });
             }
-            refreshAll();
         });
     }
 
@@ -722,24 +793,27 @@ public class MainController implements BoardViewHost {
         };
     }
 
-    private void runOneComputerStep() {
-        Game g = game();
-        if (g == null || gameController == null || !shouldOfferComputerStep(g)) {
-            return;
-        }
-        if (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER) {
-            runComputerSetupStep(g);
-            return;
-        }
-        if (g.getState() == GameState.PLAY) {
-            runComputerPlayStep(g);
-        }
-    }
-
+    /**
+     * Fills the mover's home from reserve: with probability {@code 0.2} applies one chess-mapped preset
+     * ({@link Game#applyChessMappedSetup(PlayerSide, int)} — classic or one of {@link Game#CHESS_SETUP_ROTATION_COUNT}
+     * rotating layouts), otherwise {@link Game#placeRemainingPiecesRandomly(PlayerSide)}. If the preset fails,
+     * falls back to random placement.
+     */
     private void runComputerSetupStep(Game g) {
         PlayerSide side = g.getSideToMove();
-        if (!g.placeRemainingPiecesRandomly(side)) {
-            setStatus("Počítač — náhodné rozestavení se nepovedlo.");
+        boolean placed;
+        if (ThreadLocalRandom.current().nextDouble() < 0.2) {
+            int r = ThreadLocalRandom.current().nextInt(Game.CHESS_SETUP_ROTATION_COUNT + 1);
+            int preset = (r == Game.CHESS_SETUP_ROTATION_COUNT) ? -1 : r;
+            placed = g.applyChessMappedSetup(side, preset);
+            if (!placed) {
+                placed = g.placeRemainingPiecesRandomly(side);
+            }
+        } else {
+            placed = g.placeRemainingPiecesRandomly(side);
+        }
+        if (!placed) {
+            setStatus("Počítač — rozestavení se nepovedlo.");
             return;
         }
         recordTimeline();
@@ -756,35 +830,81 @@ public class MainController implements BoardViewHost {
         }
     }
 
-    private void runComputerPlayStep(Game g) {
-        gameController.restoreTrailingDraftTurnStartForSubmit();
-        Move submit;
-        try {
-            Move chosen = RandomTrapAvoidingMoveChooser.chooseMove(g, computerRandom);
-            submit = PlayDraftNotationSupport.copyMove(chosen);
-        } catch (IllegalStateException ex) {
-            log.warn("computer play: no legal moves ({})", ex.getMessage());
-            setStatus("Počítač — žádný platný tah.");
+    private void beginComputerPlayAnimation(Move chosen) {
+        Game g = game();
+        if (g == null
+                || gameController == null
+                || g.getState() != GameState.PLAY
+                || !isComputerControlled(g.getSideToMove())) {
+            computerActionPending = false;
+            refreshAll();
             return;
         }
-        String prefix = gameController.nextPlayNotationPrefix();
-        String notationLine = ArimaaNotation.formatFullTurn(g.getBoard(), submit, prefix);
-        if (!gameController.submitHumanMove(submit)) {
-            log.info("computer play: submit rejected");
-            setStatus("Počítač — tah nebyl přijat.");
-            gameController.applyPlayHistoryViewToGame();
+        int n = chosen.getSteps().size();
+        if (n == 0) {
+            finishComputerPlayCommit(chosen);
             return;
         }
-        gameController.recordCommittedPlayTurn(submit, notationLine);
-        clearPlayTurnUi();
+        animateComputerPlayStep(chosen, 1, n);
+    }
+
+    private void animateComputerPlayStep(Move full, int k, int n) {
+        Game g = game();
+        if (g == null || gameController == null) {
+            computerActionPending = false;
+            refreshAll();
+            return;
+        }
+        PlayTurnHistory ph = gameController.getPlayHistory();
+        int tailIdx = ph.halfTurnsUnmodifiable().size() - 1;
+        if (k == 1) {
+            gameController.restoreTrailingDraftTurnStartForSubmit();
+            ph.replaceTrailingDraftStepsFromMove(full);
+        }
+        ph.setViewPrefix(tailIdx, k);
+        gameController.applyPlayHistoryViewToGame();
         syncPlayPartialFromHistory();
-        if (g.getState() == GameState.GAME_OVER) {
-            PlayerSide w = g.getMatchWinner();
-            setStatus(w == null ? "Konec hry." : "Konec hry — vyhrál %s.".formatted(sideName(w)));
+        refreshAll();
+        long delayMs = Math.round(Math.max(0, Math.min(2000, computerStepDelayMs)));
+        PauseTransition pause = new PauseTransition(Duration.millis(delayMs));
+        if (k < n) {
+            pause.setOnFinished(e -> animateComputerPlayStep(full, k + 1, n));
         } else {
-            setStatus("Tah počítače proveden.");
+            pause.setOnFinished(e -> finishComputerPlayCommit(full));
         }
-        appendHistory(new GameHistoryEvent.TurnCommitted(notationLine));
+        pause.play();
+    }
+
+    private void finishComputerPlayCommit(Move full) {
+        try {
+            Game g = game();
+            if (g == null || gameController == null) {
+                return;
+            }
+            gameController.restoreTrailingDraftTurnStartForSubmit();
+            Move submit = PlayDraftNotationSupport.copyMove(full);
+            String prefix = gameController.nextPlayNotationPrefix();
+            String notationLine = ArimaaNotation.formatFullTurn(g.getBoard(), submit, prefix);
+            if (!gameController.submitHumanMove(submit)) {
+                log.info("computer play: submit rejected");
+                setStatus("Počítač — tah nebyl přijat.");
+                gameController.applyPlayHistoryViewToGame();
+                return;
+            }
+            gameController.recordCommittedPlayTurn(submit, notationLine);
+            clearPlayTurnUi();
+            syncPlayPartialFromHistory();
+            if (g.getState() == GameState.GAME_OVER) {
+                PlayerSide w = g.getMatchWinner();
+                setStatus(w == null ? "Konec hry." : "Konec hry — vyhrál %s.".formatted(sideName(w)));
+            } else {
+                setStatus("Tah počítače proveden.");
+            }
+            appendHistory(new GameHistoryEvent.TurnCommitted(notationLine));
+        } finally {
+            computerActionPending = false;
+        }
+        refreshAll();
     }
 
     Game game() {
@@ -808,7 +928,7 @@ public class MainController implements BoardViewHost {
 
     /**
      * {@link GameController#applyPlayHistoryViewToGame()} already applied {@link PlayTurnDraftState#partial} to {@code g}'s
-     * board — do not pass the full draft again to {@link DefaultRuleEngine#isValidPlayPrefix(Game, Move)} on {@code g}
+     * board — do not pass the full draft again to {@code DefaultRuleEngine.isValidPlayPrefix} on {@code g}
      * (that would re-apply steps). Validate {@code appended} as the next leg(s) from the viewed half-turn start.
      */
     boolean isValidPlaySuffixFromViewHalfStart(Game g, List<Step> appended) {

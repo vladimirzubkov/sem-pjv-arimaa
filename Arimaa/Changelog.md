@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.15
+
+- **Počítač úroveň 0:** výběr tahu **náhodným DFS** (`DefaultRuleEngine.sampleRandomLegalCompleteMove`) místo výpisu všech tahů; opakované vzorkování kvůli **pastem** (`RandomTrapAvoidingMoveChooser`). **Oprava DFS:** nejdřív se zkouší **prodloužení** prefixu, teprve pak přijme jednokrokový **celý** tah (dříve se často brala jen jedna noha).
+- **PLAY:** výpočet tahu CPU na **vlákně** (`ExecutorService`), animace **krok za krokem** přes `PlayTurnHistory.setViewPrefix` + `applyPlayHistoryViewToGame` a `PauseTransition`, potom jeden `submitHumanMove`.
+- **SETUP (Počítač):** s **20%** pravděpodobností jedno ze **šachových** rozestavení (`applyChessMappedSetup` — klasické nebo jedna z **4** rotujících variant), jinak `placeRemainingPiecesRandomly`; při neúspěchu presetu náhradně náhodné doplnění.
+- **Gameplay:** posuvník **Pauza tahu počítače na krok** (0–2000 ms, **výchozí 1000 ms**); zobrazení v **sekundách** se **dvěma** desetinnými místy, **max. šířka posuvníku 100 px**, **fixní šířka** pole pro hodnotu (šířka menu se nemění); zarovnání řádku s ostatními položkami; **oprava menu:** odložené `refreshAll` po přepnutí hráčů / některých položek; u posuvníku **`setFocusTraversable(false)`** a `CustomMenuItem.setMnemonicParsing(false)` — menší riziko „zaseknutého“ zvýraznění.
+- **JavaFX (menu):** `arimaa-menus.css` — jednotné odsazení **10 px** vlevo/vpravo u horní lišty (`.menu-bar .menu-button`) a u okraje popupu (`.context-menu`); řádky uvnitř popupu — výchozí Modena (bez dodatečných stylů na jednotlivé položky).
+- **Testy:** `sampleRandomLegalCompleteMove_returnsApplicableFullTurn`, `sampleRandomLegalCompleteMove_oftenMultiStepFromStandardOpening` v `RandomTrapAvoidingMoveChooserTest`.
+
 ## 0.8.14
 
 - **Gameplay → hráči:** podmenu **Gold — hráč** / **Silver — hráč** — **Člověk** nebo **Počítač — úroveň 0** (`PlayerControllerKind`); výchozí oba lidští.

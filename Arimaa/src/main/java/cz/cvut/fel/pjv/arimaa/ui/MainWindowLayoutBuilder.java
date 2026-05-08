@@ -21,6 +21,7 @@ import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Slider;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -138,6 +139,7 @@ public final class MainWindowLayoutBuilder {
             if (idx >= vis.size()) {
                 return;
             }
+            main.cancelComputerPlayForHistoryScrub();
             ph.navigateToVisibleLine(idx, true);
             main.gameController.applyPlayHistoryViewToGame();
             main.syncPlayPartialFromHistory();
@@ -167,11 +169,15 @@ public final class MainWindowLayoutBuilder {
 
         main.statusLabel.setWrapText(true);
         main.statusLabel.setMaxWidth(240);
+        main.playersAssignmentLabel.setWrapText(true);
+        main.playersAssignmentLabel.setMaxWidth(240);
         main.setStatus("Rozestavte Gold; pak Hotovo. Silver totéž.");
 
         VBox sidePanel = new VBox(10,
                 new Label("Stav:"),
                 main.statusLabel,
+                new Label("Hráči:"),
+                main.playersAssignmentLabel,
                 main.handLabel,
                 spacer(8),
                 main.capturesBox,
@@ -223,7 +229,8 @@ public final class MainWindowLayoutBuilder {
         main.redoMenuItem.setOnAction(e -> main.performRedo());
         menuTah.getItems().addAll(main.undoMenuItem, main.redoMenuItem);
 
-        Menu menuGameplay = new Menu("Gameplay");
+        Menu menuGameplay = new Menu("Ga_meplay");
+        menuGameplay.setMnemonicParsing(true);
         Menu menuSkin = new Menu("Skin");
         ToggleGroup skinToggleGroup = new ToggleGroup();
         RadioMenuItem skinNoneItem = new RadioMenuItem("None");
@@ -271,14 +278,25 @@ public final class MainWindowLayoutBuilder {
         menuGameplay.getItems().add(menuSkin);
         menuGameplay.getItems().add(new SeparatorMenuItem());
 
-        Menu menuGoldPlayer = new Menu("Gold hráč");
+        Menu menuGoldPlayer = new Menu("G_old hráč");
+        menuGoldPlayer.setMnemonicParsing(true);
         ToggleGroup goldPlayerGroup = new ToggleGroup();
-        RadioMenuItem goldHuman = new RadioMenuItem("Člověk");
+        RadioMenuItem goldHuman = new RadioMenuItem("Č_lověk");
+        goldHuman.setMnemonicParsing(true);
         goldHuman.setToggleGroup(goldPlayerGroup);
         goldHuman.setUserData(PlayerControllerKind.HUMAN);
-        RadioMenuItem goldCpu = new RadioMenuItem("Počítač — úroveň 0");
-        goldCpu.setToggleGroup(goldPlayerGroup);
-        goldCpu.setUserData(PlayerControllerKind.COMPUTER_LEVEL_0);
+        RadioMenuItem goldCpu0 = new RadioMenuItem("Počítač — úroveň _0");
+        goldCpu0.setMnemonicParsing(true);
+        goldCpu0.setToggleGroup(goldPlayerGroup);
+        goldCpu0.setUserData(PlayerControllerKind.COMPUTER_LEVEL_0);
+        RadioMenuItem goldCpu1 = new RadioMenuItem("Počítač — úroveň _1");
+        goldCpu1.setMnemonicParsing(true);
+        goldCpu1.setToggleGroup(goldPlayerGroup);
+        goldCpu1.setUserData(PlayerControllerKind.COMPUTER_LEVEL_1);
+        RadioMenuItem goldCpu2 = new RadioMenuItem("Počítač — úroveň _2");
+        goldCpu2.setMnemonicParsing(true);
+        goldCpu2.setToggleGroup(goldPlayerGroup);
+        goldCpu2.setUserData(PlayerControllerKind.COMPUTER_LEVEL_2);
         goldHuman.setSelected(true);
         goldPlayerGroup.selectedToggleProperty().addListener((obs, prev, toggled) -> {
             if (!(toggled instanceof RadioMenuItem r) || !(r.getUserData() instanceof PlayerControllerKind k)) {
@@ -287,16 +305,27 @@ public final class MainWindowLayoutBuilder {
             main.setGoldPlayerKind(k);
             Platform.runLater(main::refreshAll);
         });
-        menuGoldPlayer.getItems().addAll(goldHuman, goldCpu);
+        menuGoldPlayer.getItems().addAll(goldHuman, goldCpu0, goldCpu1, goldCpu2);
 
-        Menu menuSilverPlayer = new Menu("Silver hráč");
+        Menu menuSilverPlayer = new Menu("S_ilver hráč");
+        menuSilverPlayer.setMnemonicParsing(true);
         ToggleGroup silverPlayerGroup = new ToggleGroup();
-        RadioMenuItem silverHuman = new RadioMenuItem("Člověk");
+        RadioMenuItem silverHuman = new RadioMenuItem("Č_lověk");
+        silverHuman.setMnemonicParsing(true);
         silverHuman.setToggleGroup(silverPlayerGroup);
         silverHuman.setUserData(PlayerControllerKind.HUMAN);
-        RadioMenuItem silverCpu = new RadioMenuItem("Počítač — úroveň 0");
-        silverCpu.setToggleGroup(silverPlayerGroup);
-        silverCpu.setUserData(PlayerControllerKind.COMPUTER_LEVEL_0);
+        RadioMenuItem silverCpu0 = new RadioMenuItem("Počítač — úroveň _0");
+        silverCpu0.setMnemonicParsing(true);
+        silverCpu0.setToggleGroup(silverPlayerGroup);
+        silverCpu0.setUserData(PlayerControllerKind.COMPUTER_LEVEL_0);
+        RadioMenuItem silverCpu1 = new RadioMenuItem("Počítač — úroveň _1");
+        silverCpu1.setMnemonicParsing(true);
+        silverCpu1.setToggleGroup(silverPlayerGroup);
+        silverCpu1.setUserData(PlayerControllerKind.COMPUTER_LEVEL_1);
+        RadioMenuItem silverCpu2 = new RadioMenuItem("Počítač — úroveň _2");
+        silverCpu2.setMnemonicParsing(true);
+        silverCpu2.setToggleGroup(silverPlayerGroup);
+        silverCpu2.setUserData(PlayerControllerKind.COMPUTER_LEVEL_2);
         silverHuman.setSelected(true);
         silverPlayerGroup.selectedToggleProperty().addListener((obs, prev, toggled) -> {
             if (!(toggled instanceof RadioMenuItem r) || !(r.getUserData() instanceof PlayerControllerKind k)) {
@@ -305,17 +334,16 @@ public final class MainWindowLayoutBuilder {
             main.setSilverPlayerKind(k);
             Platform.runLater(main::refreshAll);
         });
-        menuSilverPlayer.getItems().addAll(silverHuman, silverCpu);
+        menuSilverPlayer.getItems().addAll(silverHuman, silverCpu0, silverCpu1, silverCpu2);
         menuGameplay.getItems().addAll(menuGoldPlayer, menuSilverPlayer);
         menuGameplay.getItems().add(new SeparatorMenuItem());
 
-        Slider computerStepDelaySlider =
-                new Slider(
-                        MainController.MIN_COMPUTER_STEP_DELAY_MS,
+        /* Slider 0–MAX ms; model clamps to MIN_COMPUTER_STEP_DELAY_MS via MainController.setComputerStepDelayMs. */
+        Slider computerStepDelaySlider = new Slider(0, MainController.MAX_COMPUTER_STEP_DELAY_MS, 0);
+        computerStepDelaySlider.setValue(
+                Math.min(
                         MainController.MAX_COMPUTER_STEP_DELAY_MS,
-                        Math.max(
-                                MainController.MIN_COMPUTER_STEP_DELAY_MS,
-                                Math.min(MainController.MAX_COMPUTER_STEP_DELAY_MS, main.getComputerStepDelayMs())));
+                        Math.max(0, main.getComputerStepDelayMs())));
         computerStepDelaySlider.setFocusTraversable(false);
         computerStepDelaySlider.setShowTickMarks(true);
         computerStepDelaySlider.setMajorTickUnit(500);
@@ -325,9 +353,14 @@ public final class MainWindowLayoutBuilder {
         computerStepDelaySlider.setMaxWidth(100);
         Label computerDelayCaption = new Label("Pauza tahu počítače na krok:");
         computerDelayCaption.setFocusTraversable(false);
+        Label computerDelayHint = new Label("Jen prodleva animace kroků tahu počítače (úrovně 1–2 mají fixní hloubku hledání).");
+        computerDelayHint.setFocusTraversable(false);
+        computerDelayHint.setWrapText(true);
+        computerDelayHint.setMaxWidth(280);
+        computerDelayHint.setStyle("-fx-font-size: 10px;");
         Label computerDelayValueLabel = new Label();
         computerDelayValueLabel.setFocusTraversable(false);
-        /* Fixed width for longest "2.00 s"; left-aligned so gap after slider matches delayRowGap (no dead space as with right align). */
+        /* Fixed width for longest "2.00 s"; left-aligned so gap after slider matches delayRowGap. */
         final double delayValueCellWidth = 52;
         computerDelayValueLabel.setMinWidth(delayValueCellWidth);
         computerDelayValueLabel.setPrefWidth(delayValueCellWidth);
@@ -337,21 +370,41 @@ public final class MainWindowLayoutBuilder {
          * effectively invisible until hover. Explicit fill keeps captions readable. */
         Color menuCustomItemText = Color.color(0.13, 0.13, 0.13);
         computerDelayCaption.setTextFill(menuCustomItemText);
+        computerDelayHint.setTextFill(menuCustomItemText);
         computerDelayValueLabel.setTextFill(menuCustomItemText);
         computerDelayValueLabel.textProperty()
                 .bind(Bindings.createStringBinding(
-                        () -> String.format(
-                                Locale.US,
-                                "%.2f s",
-                                computerStepDelaySlider.getValue() / 1000.0),
+                        () ->
+                                String.format(
+                                        Locale.US,
+                                        "%.2f s",
+                                        Math.max(
+                                                        MainController.MIN_COMPUTER_STEP_DELAY_MS,
+                                                        computerStepDelaySlider.getValue())
+                                                / 1000.0),
                         computerStepDelaySlider.valueProperty()));
-        computerStepDelaySlider.valueProperty().addListener((obs, o, n) -> main.setComputerStepDelayMs(n.doubleValue()));
+        computerStepDelaySlider
+                .valueProperty()
+                .addListener(
+                        (obs, o, n) -> {
+                            main.setComputerStepDelayMs(n.doubleValue());
+                            double clamped = main.getComputerStepDelayMs();
+                            if (Math.abs(computerStepDelaySlider.getValue() - clamped) > 0.5) {
+                                computerStepDelaySlider.setValue(clamped);
+                            }
+                        });
         main.setComputerStepDelayMs(computerStepDelaySlider.getValue());
+        computerStepDelaySlider.setValue(main.getComputerStepDelayMs());
         final int delayRowGap = 8;
         HBox computerDelayRow = new HBox(delayRowGap, computerDelayCaption, computerStepDelaySlider, computerDelayValueLabel);
         computerDelayRow.setAlignment(Pos.CENTER_LEFT);
         computerDelayRow.setFocusTraversable(false);
-        CustomMenuItem computerDelayMenuItem = new CustomMenuItem(computerDelayRow);
+        VBox computerDelayBlock = new VBox(4, computerDelayHint, computerDelayRow);
+        computerDelayBlock.setFocusTraversable(false);
+        Tooltip.install(
+                computerDelayBlock,
+                new Tooltip("Nastaví pauzu mezi jednotlivými kroky při animaci tahu počítače (0,1–2,0 s)."));
+        CustomMenuItem computerDelayMenuItem = new CustomMenuItem(computerDelayBlock);
         computerDelayMenuItem.setHideOnClick(false);
         computerDelayMenuItem.setMnemonicParsing(false);
         menuGameplay.getItems().add(computerDelayMenuItem);

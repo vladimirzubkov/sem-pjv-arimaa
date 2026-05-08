@@ -3,7 +3,6 @@ package cz.cvut.fel.pjv.arimaa.ui;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
-import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import javafx.application.Platform;
 import javafx.scene.control.Button;
@@ -74,10 +73,7 @@ final class PlaySidePanelController {
             return;
         }
         boolean play = MainUiLayoutPhase.isPlay(g);
-        boolean cpuPlay =
-                play
-                        && main.playerControllerKind(g.getSideToMove())
-                                == PlayerControllerKind.COMPUTER_LEVEL_0;
+        boolean cpuPlay = play && main.isComputerControlled(g.getSideToMove());
         if (main.playEndTurnButton != null) {
             boolean canEnd =
                     play

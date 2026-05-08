@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.19
+
+- **Gameplay / hráči:** tři úrovně počítače (**0** — náhodný tah s filtrem pastí, **1** — greedy podle heuristiky z **náhodně vzorkovaných** legálních tahů (bez výpisu všech tahů) + časový limit ~2,5 s, **2** — minimax + alpha-beta: max. **2** celé tahy při ≤28 kořenových tazích, jinak hloubka **1**; **horní limit ~3,5 s** na jeden výběr tahu; řazení potomků podle délky tahu kvůli cutům); posuvník **jen pauza animace** kroků tahu PC (**0,1–2,0 s**, výchozí 1 s); heuristika upřednostňuje **vývoj silnějších figur** (ne jen králíci), SETUP CPU zkouší **šachová rozestavení** (náhodné pořadí presetů) a teprve pak náhodné doplnění.
+- **Panel Stav:** blok **Hráči** — `Gold` / `Silver` jako člověk nebo počítač s úrovní (`PlayerControllerKind.assignmentDescriptionCs`).
+- **Model:** `PlayerControllerKind.COMPUTER_LEVEL_1/2`, `isComputer()`, rozšířené `MainController.isComputerControlled`; výběr tahu přes `ComputerPlayMove.selectPlayMove` (`HeuristicEvaluation`, `GreedyComputerMove`, `AlphaBetaComputerMove`).
+- **Testy:** `CpuAiEvaluationAndMoveTest` (heuristika, greedy/alpha-beta na šachovém rozestavení, odmítnutí HUMAN u `ComputerPlayMove`).
+- **Gameplay / hráči / úroveň 0:** Alt mnemoniky v menu; svislý rozsah slideru prodlevy kroků CPU a zobrazená hodnota s dolním limitem (`MainWindowLayoutBuilder`).
+- **Historie tahů:** Zpět/Vpřed i po skončení partie (**GAME_OVER**, `MainUiLayoutPhase.isPlayOrGameOver`); po `refreshAll` obnova statusu a štítku výhry u „ruky“ (`MainController`).
+- **Historie tahů:** po výběru řádku správný náhled na aktuální draft (poslední řádek v listu i prázdný tah); tah PC jen při náhledu na koncovém draftu, při změně výběru přerušení animace/výběru PC.
+
 ## 0.8.18
 
 - **Gameplay:** volba **Zobrazit jednotlivé kroky počítače při tahu** — při animaci tahu PC se poslední řádek v „Historie tahů“ prodlužuje podle již provedených kroků (`appliedPrefixSteps`); vypnuto = celý rozpracovaný tah v notaci najednou.

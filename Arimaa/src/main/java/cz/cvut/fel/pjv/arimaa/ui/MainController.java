@@ -1,6 +1,6 @@
 package cz.cvut.fel.pjv.arimaa.ui;
 
-import cz.cvut.fel.pjv.arimaa.ai.RandomTrapAvoidingMoveChooser;
+import cz.cvut.fel.pjv.arimaa.ai.ComputerPlayMove;
 import cz.cvut.fel.pjv.arimaa.controller.GameController;
 import cz.cvut.fel.pjv.arimaa.logging.LoggingSupport;
 import cz.cvut.fel.pjv.arimaa.model.Game;
@@ -61,6 +61,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
@@ -132,6 +133,8 @@ public class MainController implements BoardViewHost {
     }
 
     final Label statusLabel = new Label();
+    /** Gold/Silver controller summary (human vs CPU level). */
+    final Label playersAssignmentLabel = new Label();
     private BoardGridView boardGrid;
     ArimaaSaveLoadSupport saveLoad;
     final Map<PieceType, Button> reserveButtons = new EnumMap<>(PieceType.class);
@@ -205,7 +208,7 @@ public class MainController implements BoardViewHost {
                 t.setDaemon(true);
                 return t;
             });
-    /** Delay between animated computer steps (ms), 100–2000 from Gameplay menu. */
+    /** Delay between animated computer steps (ms), clamped 100–2000 from Gameplay menu. */
     private double computerStepDelayMs = 1000.0;
 
     BoardViewOrientation boardOrientation;
@@ -372,7 +375,14 @@ public class MainController implements BoardViewHost {
         setupPhase.onPickReserve(type);
     }
 
+    private void refreshPlayersAssignmentLabel() {
+        playersAssignmentLabel.setText(
+                "Gold: %s%nSilver: %s"
+                        .formatted(goldPlayerKind.assignmentDescriptionCs(), silverPlayerKind.assignmentDescriptionCs()));
+    }
+
     void refreshAll() {
+        refreshPlayersAssignmentLabel();
         Game g = game();
         uiViewModel.syncFromGame(g);
         if (g != null && MainUiLayoutPhase.isSetup(g)) {
@@ -400,11 +410,25 @@ public class MainController implements BoardViewHost {
         boardGrid.paintHoverOverlay(g);
         updateComputerPauseOverlay();
         scheduleComputerTurnIfNeeded();
+        if (g.getState() == GameState.GAME_OVER) {
+            PlayerSide w = g.getMatchWinner();
+            setStatus(w == null ? "Konec hry." : "Konec hry — vyhrál %s.".formatted(sideName(w)));
+        }
     }
 
     /** {@code true} while automated computer move (executor or animated steps) holds {@link #computerActionPending}. */
     public boolean isComputerPlayPending() {
         return computerActionPending;
+    }
+
+    /**
+     * Stops CPU step animation and invalidates any in-flight executor callback so scrubbing „Historie tahů“ cannot race
+     * with automated play.
+     */
+    void cancelComputerPlayForHistoryScrub() {
+        computerPlayInvalidateGen.incrementAndGet();
+        stopComputerPlayTurnTimelineIfAny();
+        computerActionPending = false;
     }
 
     void syncLogLevelMenuSelection() {
@@ -522,6 +546,15 @@ public class MainController implements BoardViewHost {
     }
 
     private void refreshHandLabel(Game g) {
+        if (g.getState() == GameState.GAME_OVER) {
+            PlayerSide w = g.getMatchWinner();
+            String text =
+                    w == null
+                            ? "Konec hry."
+                            : "Výhra: %s".formatted(sideName(w));
+            updateHandLabel(null, text);
+            return;
+        }
         if (g.getState() == GameState.PLAY) {
             reconcilePlayPartialWithHistoryView();
             int n = playDraft.partial.getSteps().size();
@@ -624,7 +657,7 @@ public class MainController implements BoardViewHost {
             if (phase.setup()) {
                 undo = gameController.canUndo();
                 redo = gameController.canRedo();
-            } else if (phase.play()) {
+            } else if (MainUiLayoutPhase.isPlayOrGameOver(g)) {
                 boolean trapLock = draftEditsBlockedByTrapMenuOption();
                 boolean canDraftMutationUndo =
                         !trapLock
@@ -682,7 +715,7 @@ public class MainController implements BoardViewHost {
             }
             return;
         }
-        if (MainUiLayoutPhase.isPlay(g)) {
+        if (MainUiLayoutPhase.isPlayOrGameOver(g)) {
             if (draftEditsBlockedByTrapMenuOption()) {
                 setStatus("Nelze vrátit krok — v rozpracovaném tahu padla figura do pasti (Gameplay).");
                 return;
@@ -722,7 +755,7 @@ public class MainController implements BoardViewHost {
             }
             return;
         }
-        if (!MainUiLayoutPhase.isPlay(g)) {
+        if (!MainUiLayoutPhase.isPlayOrGameOver(g)) {
             return;
         }
         if (draftEditsBlockedByTrapMenuOption()) {
@@ -764,7 +797,7 @@ public class MainController implements BoardViewHost {
     }
 
     boolean isComputerControlled(PlayerSide side) {
-        return playerControllerKind(side) == PlayerControllerKind.COMPUTER_LEVEL_0;
+        return playerControllerKind(side).isComputer();
     }
 
     public double getComputerStepDelayMs() {
@@ -813,6 +846,10 @@ public class MainController implements BoardViewHost {
             computerActionPending = false;
             return;
         }
+        if (!ph.isViewOnTrailingDraftHalf()) {
+            computerActionPending = false;
+            return;
+        }
         PlayHalfTurn last = ph.halfAt(ph.halfTurnsUnmodifiable().size() - 1);
         if (last.committed()) {
             computerActionPending = false;
@@ -823,7 +860,8 @@ public class MainController implements BoardViewHost {
             final long execToken = computerPlayInvalidateGen.get();
             try {
                 Game probe = Game.restoredFromMemento(startSnap);
-                Move chosen = RandomTrapAvoidingMoveChooser.chooseMove(probe, computerRandom);
+                PlayerControllerKind cpuKind = playerControllerKind(probe.getSideToMove());
+                Move chosen = ComputerPlayMove.selectPlayMove(cpuKind, probe, computerRandom);
                 Platform.runLater(() -> {
                     long genNow = computerPlayInvalidateGen.get();
                     if (genNow != execToken) {
@@ -900,7 +938,8 @@ public class MainController implements BoardViewHost {
     }
 
     /**
-     * Toggles autoplay pause for the side to move when it is {@link PlayerControllerKind#COMPUTER_LEVEL_0}; bound to
+     * Toggles autoplay pause for the side to move when it is any {@link PlayerControllerKind#isComputer() computer}
+     * level; bound to
      * Space from {@link PlaySceneKeyHandler}.
      */
     public void toggleComputerAutoplayPauseFromKeyboard() {
@@ -933,22 +972,25 @@ public class MainController implements BoardViewHost {
     }
 
     /**
-     * Fills the mover's home from reserve: with probability {@code 0.2} applies one chess-mapped preset
-     * ({@link Game#applyChessMappedSetup(PlayerSide, int)} — classic or one of {@link Game#CHESS_SETUP_ROTATION_COUNT}
-     * rotating layouts), otherwise {@link Game#placeRemainingPiecesRandomly(PlayerSide)}. If the preset fails,
-     * falls back to random placement.
+     * Fills the mover's home from reserve: tries chess-mapped presets (classic {@code -1} and rotations) in random
+     * order, then {@link Game#placeRemainingPiecesRandomly(PlayerSide)} if none apply.
      */
     private void runComputerSetupStep(Game g) {
         PlayerSide side = g.getSideToMove();
-        boolean placed;
-        if (ThreadLocalRandom.current().nextDouble() < 0.2) {
-            int r = ThreadLocalRandom.current().nextInt(Game.CHESS_SETUP_ROTATION_COUNT + 1);
-            int preset = (r == Game.CHESS_SETUP_ROTATION_COUNT) ? -1 : r;
-            placed = g.applyChessMappedSetup(side, preset);
-            if (!placed) {
-                placed = g.placeRemainingPiecesRandomly(side);
+        List<Integer> presets = new ArrayList<>();
+        presets.add(-1);
+        for (int i = 0; i < Game.CHESS_SETUP_ROTATION_COUNT; i++) {
+            presets.add(i);
+        }
+        Collections.shuffle(presets, ThreadLocalRandom.current());
+        boolean placed = false;
+        for (int preset : presets) {
+            if (g.applyChessMappedSetup(side, preset)) {
+                placed = true;
+                break;
             }
-        } else {
+        }
+        if (!placed) {
             placed = g.placeRemainingPiecesRandomly(side);
         }
         if (!placed) {

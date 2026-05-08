@@ -23,7 +23,15 @@ public final class MainUiLayoutPhase {
         return g != null && g.getState() == GameState.GAME_OVER;
     }
 
-    public static boolean showCapturesAndNotationHistory(Game g) {
+    /**
+     * After setup: live play or finished match — same coarse phase as notation / captures panel and play-history scrubbing
+     * (undo/redo steps within recorded half-turns).
+     */
+    public static boolean isPlayOrGameOver(Game g) {
         return g != null && (g.getState() == GameState.PLAY || g.getState() == GameState.GAME_OVER);
+    }
+
+    public static boolean showCapturesAndNotationHistory(Game g) {
+        return isPlayOrGameOver(g);
     }
 }

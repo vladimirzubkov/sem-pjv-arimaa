@@ -2,7 +2,6 @@ package cz.cvut.fel.pjv.arimaa.ui;
 
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
-import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextInputControl;
@@ -28,7 +27,7 @@ public final class PlaySceneKeyHandler {
             }
             Game g = main.game();
             if (g != null && (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER)) {
-                if (main.playerControllerKind(g.getSideToMove()) == PlayerControllerKind.COMPUTER_LEVEL_0) {
+                if (main.isComputerControlled(g.getSideToMove())) {
                     if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
                         main.toggleComputerAutoplayPauseFromKeyboard();
                         e.consume();
@@ -64,7 +63,7 @@ public final class PlaySceneKeyHandler {
             if (g == null || g.getState() != GameState.PLAY) {
                 return;
             }
-            if (main.playerControllerKind(g.getSideToMove()) == PlayerControllerKind.COMPUTER_LEVEL_0) {
+            if (main.isComputerControlled(g.getSideToMove())) {
                 if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
                     main.toggleComputerAutoplayPauseFromKeyboard();
                     e.consume();

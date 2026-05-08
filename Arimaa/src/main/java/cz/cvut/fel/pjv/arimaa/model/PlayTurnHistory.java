@@ -97,6 +97,13 @@ public final class PlayTurnHistory {
                 out.add(h);
             }
         }
+        if (includeNonEmptyDraft && !halfTurns.isEmpty()) {
+            int tailIdx = halfTurns.size() - 1;
+            PlayHalfTurn tail = halfTurns.get(tailIdx);
+            if (!tail.committed() && !out.contains(tailIdx)) {
+                out.add(tailIdx);
+            }
+        }
         return out;
     }
 
@@ -105,7 +112,18 @@ public final class PlayTurnHistory {
         if (visibleIndex < 0 || visibleIndex >= vis.size()) {
             return;
         }
-        navigateToEndOfHalf(vis.get(visibleIndex));
+        int halfIndex = vis.get(visibleIndex);
+        PlayHalfTurn ht = halfTurns.get(halfIndex);
+        if (ht.committed()) {
+            if (halfIndex + 1 < halfTurns.size()) {
+                viewHalfIndex = halfIndex + 1;
+                appliedPrefixSteps = 0;
+            } else {
+                navigateToEndOfHalf(halfIndex);
+            }
+        } else {
+            navigateToEndOfHalf(halfIndex);
+        }
     }
 
     public void navigateToEndOfHalf(int halfIndex) {

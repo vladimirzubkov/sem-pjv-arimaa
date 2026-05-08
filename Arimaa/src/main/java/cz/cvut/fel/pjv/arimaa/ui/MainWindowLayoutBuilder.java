@@ -363,6 +363,14 @@ public final class MainWindowLayoutBuilder {
         main.forbidCancelAfterTrapItem.selectedProperty().addListener((obs, prev, now) -> Platform.runLater(main::refreshAll));
         menuGameplay.getItems().add(main.forbidCancelAfterTrapItem);
 
+        main.showComputerTurnStepsInNotationItem =
+                new CheckMenuItem("Zobrazit jednotlivé kroky počítače při tahu");
+        main.showComputerTurnStepsInNotationItem.setSelected(false);
+        main.showComputerTurnStepsInNotationItem
+                .selectedProperty()
+                .addListener((obs, prev, now) -> Platform.runLater(main::refreshAll));
+        menuGameplay.getItems().add(main.showComputerTurnStepsInNotationItem);
+
         main.rotateBoardToMoverItem = new CheckMenuItem("Otáčet desku — hráč na tahu dole");
         main.rotateBoardToMoverItem.setSelected(false);
         main.rotateBoardToMoverItem.selectedProperty().addListener((obs, prev, now) -> Platform.runLater(main::refreshAll));

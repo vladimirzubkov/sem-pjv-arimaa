@@ -158,6 +158,8 @@ public class MainController implements BoardViewHost {
 
     /** When selected, draft cancel / in-turn Undo·Redo are disabled after any trap removal in the current prefix. */
     CheckMenuItem forbidCancelAfterTrapItem;
+    /** Gameplay: during computer PLAY turn animation, grow the last notation line step-by-step (prefix length). */
+    CheckMenuItem showComputerTurnStepsInNotationItem;
 
     /** Home square currently hovered during setup (ghost placement); both null if none. Visual row 0 = top of board. */
     Integer hoverFileIndex;
@@ -1147,7 +1149,12 @@ public class MainController implements BoardViewHost {
             return new ArrayList<>();
         }
         return PlayDraftNotationSupport.buildNotationHistoryLines(
-                gameController.getPlayHistory(), game(), gameController::nextPlayNotationPrefix);
+                gameController.getPlayHistory(),
+                game(),
+                gameController::nextPlayNotationPrefix,
+                showComputerTurnStepsInNotationItem != null
+                        && showComputerTurnStepsInNotationItem.isSelected(),
+                isComputerPlayPending());
     }
 
     List<String> buildNotationHistoryLinesForSidePanel() {

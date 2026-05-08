@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.18
+
+- **Gameplay:** volba **Zobrazit jednotlivé kroky počítače při tahu** — při animaci tahu PC se poslední řádek v „Historie tahů“ prodlužuje podle již provedených kroků (`appliedPrefixSteps`); vypnuto = celý rozpracovaný tah v notaci najednou.
+
 ## 0.8.17
 
 - Minimální pauza mezi kroky animace tahu počítače 100 ms (slider + clamp).

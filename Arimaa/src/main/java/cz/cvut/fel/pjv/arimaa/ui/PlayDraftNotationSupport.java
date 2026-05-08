@@ -112,13 +112,27 @@ public final class PlayDraftNotationSupport {
         return DefaultRuleEngine.isValidPlayPrefix(probe, full);
     }
 
+    /**
+     * One visible line per half-turn; committed lines use stored notation. For the trailing draft, builds a partial
+     * line from steps on the half-turn.
+     *
+     * @param showCpuStepsProgressively when {@code true} and {@code computerMovePending}, the last visible draft line
+     *     uses only the first {@link PlayTurnHistory#appliedPrefixSteps()} steps (matches board during CPU step
+     *     animation); otherwise all draft steps are shown in that line.
+     */
     public static List<String> buildNotationHistoryLines(
-            PlayTurnHistory ph, Game g, Supplier<String> notationPrefix) {
+            PlayTurnHistory ph,
+            Game g,
+            Supplier<String> notationPrefix,
+            boolean showCpuStepsProgressively,
+            boolean computerMovePending) {
         ArrayList<String> lines = new ArrayList<>();
         if (g == null || ph == null || !ph.isBootstrapped()) {
             return lines;
         }
-        for (int h : ph.visibleHalfIndicesForDisplay(true)) {
+        List<Integer> visible = ph.visibleHalfIndicesForDisplay(true);
+        for (int i = 0; i < visible.size(); i++) {
+            int h = visible.get(i);
             PlayHalfTurn ht = ph.halfAt(h);
             if (ht.committed()) {
                 String n = ht.notationLineOrNull();
@@ -132,8 +146,15 @@ public final class PlayDraftNotationSupport {
                 } else {
                     Game probe = probeGameFromMemento(ht.startSnap());
                     Move m = new Move();
-                    for (Step s : ht.steps()) {
-                        m.getSteps().add(copyStep(s));
+                    int total = ht.steps().size();
+                    int toCopy = total;
+                    if (showCpuStepsProgressively
+                            && computerMovePending
+                            && i == visible.size() - 1) {
+                        toCopy = Math.min(Math.max(0, ph.appliedPrefixSteps()), total);
+                    }
+                    for (int si = 0; si < toCopy; si++) {
+                        m.getSteps().add(copyStep(ht.steps().get(si)));
                     }
                     String prefix = notationPrefix.get();
                     lines.add(ArimaaNotation.formatPartialTurnLine(probe.getBoard(), m, prefix));

@@ -18,7 +18,9 @@ import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.model.PlayHalfTurn;
 import cz.cvut.fel.pjv.arimaa.util.ArimaaNotation;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
-import javafx.animation.PauseTransition;
+import javafx.animation.Animation;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.application.Platform;
@@ -48,10 +50,10 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 import ch.qos.logback.classic.Level;
 
-import javafx.util.Duration;
 
 import java.io.File;
 
@@ -82,6 +84,13 @@ public class MainController implements BoardViewHost {
     private static final Logger log = LoggerFactory.getLogger(MainController.class);
 
     private static final double HAND_ICON_MAX = 28;
+
+    /** Minimum pause between animated computer steps (ms); enforced by UI slider and {@link #setComputerStepDelayMs}. */
+    public static final double MIN_COMPUTER_STEP_DELAY_MS = 100.0;
+
+    /** Maximum pause between animated computer steps (ms). */
+    public static final double MAX_COMPUTER_STEP_DELAY_MS = 2000.0;
+
     GameController gameController;
 
     Stage stage;
@@ -178,19 +187,15 @@ public class MainController implements BoardViewHost {
     private PlayerControllerKind silverPlayerKind = PlayerControllerKind.HUMAN;
     private final Random computerRandom = new Random();
     private boolean computerActionPending;
-    /** When true, do not start new computer setup / choose-move work; PLAY animation can be resumed from {@link #computerAnimResumeFull}. */
+    /** When true, do not start new computer setup / choose-move work; PLAY step animation uses {@link #computerPlayTurnTimeline} pause/play. */
     private boolean computerAutoplayPaused;
-    /** Incremented when pausing or when the mover is no longer CPU — invalidates in-flight {@code runLater} from {@link #computerMoveExecutor}. */
+    /** Incremented when pausing without an active step timeline (move selection) or when clearing autoplay — invalidates in-flight {@code runLater} from {@link #computerMoveExecutor}. */
     private final AtomicLong computerPlayInvalidateGen = new AtomicLong();
-    private PauseTransition computerStepPause;
-    /** Last step index applied to the board during CPU step animation (for pause / resume). */
-    private Move computerAnimStashFull;
-    private int computerAnimStashKShown;
-    private int computerAnimStashN;
-    /** After pause mid-animation: continue this move from {@code computerAnimResumeNextK}. If nextK &gt; n, call {@link #finishComputerPlayCommit}. */
-    private Move computerAnimResumeFull;
-    private Integer computerAnimResumeNextK;
-    private Integer computerAnimResumeN;
+    /**
+     * One JavaFX {@link Timeline} per computer PLAY turn: step previews at cumulative delays, then commit. Delays do not
+     * use a background scheduler, so step timing cannot race FX-thread state the way chained {@code ScheduledFuture}s can.
+     */
+    private Timeline computerPlayTurnTimeline;
     private Label computerPauseOverlay;
     private final ExecutorService computerMoveExecutor =
             Executors.newSingleThreadExecutor(r -> {
@@ -198,7 +203,7 @@ public class MainController implements BoardViewHost {
                 t.setDaemon(true);
                 return t;
             });
-    /** Delay between animated computer steps (ms), 0–2000 from Gameplay menu. */
+    /** Delay between animated computer steps (ms), 100–2000 from Gameplay menu. */
     private double computerStepDelayMs = 1000.0;
 
     BoardViewOrientation boardOrientation;
@@ -368,14 +373,14 @@ public class MainController implements BoardViewHost {
     void refreshAll() {
         Game g = game();
         uiViewModel.syncFromGame(g);
-        if (g != null && !MainUiLayoutPhase.isPlay(g)) {
+        if (g != null && MainUiLayoutPhase.isSetup(g)) {
             clearPlayTurnUi();
         }
         if (g == null || stage == null) {
             notationHistoryItems.clear();
             return;
         }
-        if (!shouldOfferComputerStep(g)) {
+        if (!shouldOfferComputerStep(g) && !computerActionPending) {
             clearComputerAutoplayPauseState();
         }
         updateRankCoordLabels(g);
@@ -393,6 +398,11 @@ public class MainController implements BoardViewHost {
         boardGrid.paintHoverOverlay(g);
         updateComputerPauseOverlay();
         scheduleComputerTurnIfNeeded();
+    }
+
+    /** {@code true} while automated computer move (executor or animated steps) holds {@link #computerActionPending}. */
+    public boolean isComputerPlayPending() {
+        return computerActionPending;
     }
 
     void syncLogLevelMenuSelection() {
@@ -760,7 +770,7 @@ public class MainController implements BoardViewHost {
     }
 
     public void setComputerStepDelayMs(double ms) {
-        computerStepDelayMs = Math.max(0, Math.min(2000, ms));
+        computerStepDelayMs = Math.max(MIN_COMPUTER_STEP_DELAY_MS, Math.min(MAX_COMPUTER_STEP_DELAY_MS, ms));
     }
 
     private void scheduleComputerTurnIfNeeded() {
@@ -813,7 +823,8 @@ public class MainController implements BoardViewHost {
                 Game probe = Game.restoredFromMemento(startSnap);
                 Move chosen = RandomTrapAvoidingMoveChooser.chooseMove(probe, computerRandom);
                 Platform.runLater(() -> {
-                    if (computerPlayInvalidateGen.get() != execToken) {
+                    long genNow = computerPlayInvalidateGen.get();
+                    if (genNow != execToken) {
                         computerActionPending = false;
                         refreshAll();
                         return;
@@ -829,6 +840,7 @@ public class MainController implements BoardViewHost {
                 log.warn("computer play: no legal moves ({})", ex.getMessage());
                 Platform.runLater(() -> {
                     if (computerPlayInvalidateGen.get() != execToken) {
+                        computerActionPending = false;
                         return;
                     }
                     computerActionPending = false;
@@ -839,6 +851,7 @@ public class MainController implements BoardViewHost {
                 log.warn("computer play: move selection failed", ex);
                 Platform.runLater(() -> {
                     if (computerPlayInvalidateGen.get() != execToken) {
+                        computerActionPending = false;
                         return;
                     }
                     computerActionPending = false;
@@ -858,25 +871,19 @@ public class MainController implements BoardViewHost {
         };
     }
 
-    private void stopComputerStepPauseIfAny() {
-        if (computerStepPause != null) {
-            computerStepPause.stop();
-            computerStepPause = null;
+    private void stopComputerPlayTurnTimelineIfAny() {
+        Timeline t = computerPlayTurnTimeline;
+        if (t != null) {
+            t.stop();
+            computerPlayTurnTimeline = null;
         }
-    }
-
-    private void clearComputerAnimStashAndResume() {
-        computerAnimStashFull = null;
-        computerAnimResumeFull = null;
-        computerAnimResumeNextK = null;
-        computerAnimResumeN = null;
     }
 
     private void clearComputerAutoplayPauseState() {
         computerAutoplayPaused = false;
         computerPlayInvalidateGen.incrementAndGet();
-        stopComputerStepPauseIfAny();
-        clearComputerAnimStashAndResume();
+        stopComputerPlayTurnTimelineIfAny();
+        computerActionPending = false;
         updateComputerPauseOverlay();
     }
 
@@ -904,29 +911,18 @@ public class MainController implements BoardViewHost {
         }
         computerAutoplayPaused = !computerAutoplayPaused;
         if (computerAutoplayPaused) {
-            computerPlayInvalidateGen.incrementAndGet();
-            stopComputerStepPauseIfAny();
-            if (computerAnimStashFull != null) {
-                computerAnimResumeFull = PlayDraftNotationSupport.copyMove(computerAnimStashFull);
-                computerAnimResumeNextK = computerAnimStashKShown + 1;
-                computerAnimResumeN = computerAnimStashN;
+            if (computerPlayTurnTimeline != null) {
+                computerPlayTurnTimeline.pause();
+            } else {
+                computerPlayInvalidateGen.incrementAndGet();
+                stopComputerPlayTurnTimelineIfAny();
             }
-            computerAnimStashFull = null;
             setStatus("Pauza — mezerník pokračuje.");
         } else {
             setStatus("Pokračuje tah počítače.");
-            if (computerAnimResumeFull != null) {
-                Move full = PlayDraftNotationSupport.copyMove(computerAnimResumeFull);
-                int nextK = computerAnimResumeNextK;
-                int nn = computerAnimResumeN;
-                computerAnimResumeFull = null;
-                computerAnimResumeNextK = null;
-                computerAnimResumeN = null;
-                if (nextK > nn) {
-                    finishComputerPlayCommit(full);
-                } else {
-                    animateComputerPlayStep(full, nextK, nn);
-                }
+            if (computerPlayTurnTimeline != null
+                    && computerPlayTurnTimeline.getStatus() == Animation.Status.PAUSED) {
+                computerPlayTurnTimeline.play();
             } else {
                 refreshAll();
             }
@@ -972,7 +968,7 @@ public class MainController implements BoardViewHost {
     }
 
     private void beginComputerPlayAnimation(Move chosen) {
-        clearComputerAnimStashAndResume();
+        stopComputerPlayTurnTimelineIfAny();
         Game g = game();
         if (g == null
                 || gameController == null
@@ -992,13 +988,21 @@ public class MainController implements BoardViewHost {
             finishComputerPlayCommit(chosen);
             return;
         }
-        animateComputerPlayStep(chosen, 1, n);
+        long delayMs =
+                Math.round(Math.max(MIN_COMPUTER_STEP_DELAY_MS, Math.min(MAX_COMPUTER_STEP_DELAY_MS, computerStepDelayMs)));
+        buildAndStartComputerPlayTurnTimeline(chosen, n, delayMs);
     }
 
-    private void animateComputerPlayStep(Move full, int k, int n) {
-        stopComputerStepPauseIfAny();
+    /**
+     * Applies step {@code k} of {@code n} of computer move {@code full} to play history view and game model.
+     *
+     * @param refreshUi when {@code true}, runs {@link #refreshAll()}; when {@code false}, only updates model/history
+     *     view state. {@link #finishComputerPlayCommit} ends with a full {@link #refreshAll()}.
+     */
+    private void applyComputerPlayStepView(Move full, int k, int n, boolean refreshUi) {
         Game g = game();
         if (g == null || gameController == null) {
+            stopComputerPlayTurnTimelineIfAny();
             computerActionPending = false;
             refreshAll();
             return;
@@ -1012,19 +1016,27 @@ public class MainController implements BoardViewHost {
         ph.setViewPrefix(tailIdx, k);
         gameController.applyPlayHistoryViewToGame();
         syncPlayPartialFromHistory();
-        refreshAll();
-        computerAnimStashFull = PlayDraftNotationSupport.copyMove(full);
-        computerAnimStashKShown = k;
-        computerAnimStashN = n;
-        long delayMs = Math.round(Math.max(0, Math.min(2000, computerStepDelayMs)));
-        PauseTransition pause = new PauseTransition(Duration.millis(delayMs));
-        computerStepPause = pause;
-        if (k < n) {
-            pause.setOnFinished(e -> animateComputerPlayStep(full, k + 1, n));
-        } else {
-            pause.setOnFinished(e -> finishComputerPlayCommit(full));
+        if (refreshUi) {
+            refreshAll();
         }
-        pause.play();
+    }
+
+    private void buildAndStartComputerPlayTurnTimeline(Move full, int n, long delayMs) {
+        stopComputerPlayTurnTimelineIfAny();
+        Timeline tl = new Timeline();
+        for (int k = 1; k <= n; k++) {
+            final int fk = k;
+            tl.getKeyFrames()
+                    .add(new KeyFrame(Duration.millis((fk - 1L) * delayMs), e -> applyComputerPlayStepView(full, fk, n, true)));
+        }
+        tl.getKeyFrames().add(new KeyFrame(Duration.millis((long) n * delayMs), e -> finishComputerPlayCommit(full)));
+        tl.setOnFinished(e -> {
+            if (computerPlayTurnTimeline == tl) {
+                computerPlayTurnTimeline = null;
+            }
+        });
+        computerPlayTurnTimeline = tl;
+        tl.play();
     }
 
     private void finishComputerPlayCommit(Move full) {
@@ -1054,8 +1066,7 @@ public class MainController implements BoardViewHost {
             }
             appendHistory(new GameHistoryEvent.TurnCommitted(notationLine));
         } finally {
-            stopComputerStepPauseIfAny();
-            clearComputerAnimStashAndResume();
+            stopComputerPlayTurnTimelineIfAny();
             computerActionPending = false;
         }
         refreshAll();

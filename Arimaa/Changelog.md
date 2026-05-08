@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.17
+
+- Minimální pauza mezi kroky animace tahu počítače 100 ms (slider + clamp).
+- Historie tahů: výběr řádku funguje i ve stavu GAME_OVER
+  (showCapturesAndNotationHistory místo jen PLAY).
+- refreshNotationHistory: auto-scroll ListView jen při computerActionPending,
+  aby šlo listovat historii po partii.
+- clearPlayTurnUi jen ve fázi SETUP.
+
 ## 0.8.16
 
 - **Počítač na tahu:** **mezerník** zapne/vypne **pauzu** automatické činnosti (SETUP i PLAY); po pauze uprostřed krokované animace tahu PC pokračuje **stejný** tah; zrušení pauzy bez rozpracované animace znovu spustí plánování tahu. **Invalidace** běžícího výběru tahu na vlákně přes `AtomicLong` při pauze / přepnutí hráče z PC na člověka. **Overlay** „Pauza — mezerník pokračuje“ nad deskou (`StackPane` v `MainController.attachToStage`).

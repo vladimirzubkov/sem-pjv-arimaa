@@ -5,6 +5,7 @@ import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
+import javafx.application.Platform;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
@@ -55,6 +56,17 @@ final class PlaySidePanelController {
             }
         }
         main.suppressHistoryListEvents = false;
+        if (main.isComputerPlayPending()) {
+            Platform.runLater(
+                    () -> {
+                        int i = main.notationHistoryList.getSelectionModel().getSelectedIndex();
+                        if (i >= 0 && i < main.notationHistoryItems.size()) {
+                            main.notationHistoryList.scrollTo(i);
+                        } else if (!main.notationHistoryItems.isEmpty()) {
+                            main.notationHistoryList.scrollTo(main.notationHistoryItems.size() - 1);
+                        }
+                    });
+        }
     }
 
     void refreshPlayActionButtons(Game g) {

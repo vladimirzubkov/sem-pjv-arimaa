@@ -4,7 +4,6 @@ import ch.qos.logback.classic.Level;
 import cz.cvut.fel.pjv.arimaa.logging.LoggingSupport;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
-import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
 import javafx.beans.binding.Bindings;
@@ -119,11 +118,15 @@ public final class MainWindowLayoutBuilder {
         main.notationHistoryList.setStyle("-fx-font-family: Consolas; -fx-font-size: 11px;");
         main.notationHistoryList.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
         main.notationHistoryList.getSelectionModel().selectedIndexProperty().addListener((obs, o, n) -> {
-            if (main.suppressHistoryListEvents || n == null || n.intValue() < 0 || main.gameController == null) {
+            if (main.suppressHistoryListEvents
+                    || n == null
+                    || n.intValue() < 0
+                    || main.gameController == null
+                    || main.isComputerPlayPending()) {
                 return;
             }
             Game g = main.game();
-            if (g == null || g.getState() != GameState.PLAY) {
+            if (!MainUiLayoutPhase.showCapturesAndNotationHistory(g)) {
                 return;
             }
             PlayTurnHistory ph = main.gameController.getPlayHistory();
@@ -306,7 +309,13 @@ public final class MainWindowLayoutBuilder {
         menuGameplay.getItems().addAll(menuGoldPlayer, menuSilverPlayer);
         menuGameplay.getItems().add(new SeparatorMenuItem());
 
-        Slider computerStepDelaySlider = new Slider(0, 2000, main.getComputerStepDelayMs());
+        Slider computerStepDelaySlider =
+                new Slider(
+                        MainController.MIN_COMPUTER_STEP_DELAY_MS,
+                        MainController.MAX_COMPUTER_STEP_DELAY_MS,
+                        Math.max(
+                                MainController.MIN_COMPUTER_STEP_DELAY_MS,
+                                Math.min(MainController.MAX_COMPUTER_STEP_DELAY_MS, main.getComputerStepDelayMs())));
         computerStepDelaySlider.setFocusTraversable(false);
         computerStepDelaySlider.setShowTickMarks(true);
         computerStepDelaySlider.setMajorTickUnit(500);
@@ -337,6 +346,7 @@ public final class MainWindowLayoutBuilder {
                                 computerStepDelaySlider.getValue() / 1000.0),
                         computerStepDelaySlider.valueProperty()));
         computerStepDelaySlider.valueProperty().addListener((obs, o, n) -> main.setComputerStepDelayMs(n.doubleValue()));
+        main.setComputerStepDelayMs(computerStepDelaySlider.getValue());
         final int delayRowGap = 8;
         HBox computerDelayRow = new HBox(delayRowGap, computerDelayCaption, computerStepDelaySlider, computerDelayValueLabel);
         computerDelayRow.setAlignment(Pos.CENTER_LEFT);

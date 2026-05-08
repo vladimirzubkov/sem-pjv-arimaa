@@ -22,6 +22,7 @@ import javafx.animation.PauseTransition;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.application.Platform;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
@@ -35,7 +36,9 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.CornerRadii;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -65,6 +68,7 @@ import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Primary window: board, setup controls (manual placement, presets via {@link cz.cvut.fel.pjv.arimaa.model.SetupPresets}),
@@ -174,6 +178,20 @@ public class MainController implements BoardViewHost {
     private PlayerControllerKind silverPlayerKind = PlayerControllerKind.HUMAN;
     private final Random computerRandom = new Random();
     private boolean computerActionPending;
+    /** When true, do not start new computer setup / choose-move work; PLAY animation can be resumed from {@link #computerAnimResumeFull}. */
+    private boolean computerAutoplayPaused;
+    /** Incremented when pausing or when the mover is no longer CPU — invalidates in-flight {@code runLater} from {@link #computerMoveExecutor}. */
+    private final AtomicLong computerPlayInvalidateGen = new AtomicLong();
+    private PauseTransition computerStepPause;
+    /** Last step index applied to the board during CPU step animation (for pause / resume). */
+    private Move computerAnimStashFull;
+    private int computerAnimStashKShown;
+    private int computerAnimStashN;
+    /** After pause mid-animation: continue this move from {@code computerAnimResumeNextK}. If nextK &gt; n, call {@link #finishComputerPlayCommit}. */
+    private Move computerAnimResumeFull;
+    private Integer computerAnimResumeNextK;
+    private Integer computerAnimResumeN;
+    private Label computerPauseOverlay;
     private final ExecutorService computerMoveExecutor =
             Executors.newSingleThreadExecutor(r -> {
                 Thread t = new Thread(r, "arimaa-computer-move");
@@ -245,12 +263,27 @@ public class MainController implements BoardViewHost {
         boardHost.setMinHeight(0);
         boardHost.setMaxWidth(Double.MAX_VALUE);
         boardHost.setMaxHeight(Double.MAX_VALUE);
-        HBox.setHgrow(boardHost, Priority.ALWAYS);
+
+        computerPauseOverlay = new Label("Pauza — mezerník pokračuje");
+        computerPauseOverlay.setAlignment(Pos.CENTER);
+        computerPauseOverlay.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        computerPauseOverlay.setWrapText(true);
+        computerPauseOverlay.setMouseTransparent(true);
+        computerPauseOverlay.setVisible(false);
+        computerPauseOverlay.setManaged(false);
+        computerPauseOverlay.setTextFill(Color.WHITE);
+        computerPauseOverlay.setPadding(new Insets(16, 24, 16, 24));
+        computerPauseOverlay.setBackground(new Background(new BackgroundFill(
+                Color.color(0, 0, 0, 0.42), CornerRadii.EMPTY, Insets.EMPTY)));
+
+        StackPane boardStack = new StackPane();
+        boardStack.getChildren().addAll(boardHost, computerPauseOverlay);
+        HBox.setHgrow(boardStack, Priority.ALWAYS);
 
         HBox body = new HBox();
         body.setFillHeight(true);
         body.setAlignment(Pos.CENTER);
-        body.getChildren().addAll(boardHost, scroll);
+        body.getChildren().addAll(boardStack, scroll);
 
         BorderPane root = new BorderPane();
         root.setTop(layout.menuBar());
@@ -258,11 +291,12 @@ public class MainController implements BoardViewHost {
 
         Scene scene = new Scene(root, 920, 640);
         scene.setFill(Color.rgb(236, 236, 238));
-        scene.getStylesheets()
-                .add(Objects.requireNonNull(
-                                MainController.class.getResource("/cz/cvut/fel/pjv/arimaa/arimaa-menus.css"),
-                                "classpath:/cz/cvut/fel/pjv/arimaa/arimaa-menus.css")
-                        .toExternalForm());
+        String menuCssUrl = Objects.requireNonNull(
+                        MainController.class.getResource("/cz/cvut/fel/pjv/arimaa/arimaa-menus.css"),
+                        "classpath:/cz/cvut/fel/pjv/arimaa/arimaa-menus.css")
+                .toExternalForm();
+        scene.getStylesheets().add(menuCssUrl);
+        DevMenuCssHotReload.installIfEnabled(scene, menuCssUrl);
         PlaySceneKeyHandler.install(scene, this);
         primaryStage.setTitle("Arimaa – rozestavení");
         primaryStage.setScene(scene);
@@ -341,6 +375,9 @@ public class MainController implements BoardViewHost {
             notationHistoryItems.clear();
             return;
         }
+        if (!shouldOfferComputerStep(g)) {
+            clearComputerAutoplayPauseState();
+        }
         updateRankCoordLabels(g);
         updateFileCoordLabels(g);
         boardGrid.paintBoard(g);
@@ -354,6 +391,7 @@ public class MainController implements BoardViewHost {
         updateWindowTitle(g);
         refreshHistoryMenus();
         boardGrid.paintHoverOverlay(g);
+        updateComputerPauseOverlay();
         scheduleComputerTurnIfNeeded();
     }
 
@@ -534,6 +572,7 @@ public class MainController implements BoardViewHost {
         Game g = game();
         if (g != null) {
             log.info("user action: new game");
+            clearComputerAutoplayPauseState();
             clearPlayTurnUi();
             setupPhase.resetChessPresetRotation();
             g.startNewGame();
@@ -549,6 +588,7 @@ public class MainController implements BoardViewHost {
      * After a successful load the controller already restored the final position; refresh the UI.
      */
     void playbackLoadedHistory() {
+        clearComputerAutoplayPauseState();
         syncPlayPartialFromHistory();
         refreshAll();
         setStatus("Hra načtena ze souboru.");
@@ -725,10 +765,16 @@ public class MainController implements BoardViewHost {
 
     private void scheduleComputerTurnIfNeeded() {
         Game g = game();
-        if (g == null || stage == null || computerActionPending) {
+        if (g == null || stage == null) {
+            return;
+        }
+        if (computerActionPending) {
             return;
         }
         if (!shouldOfferComputerStep(g)) {
+            return;
+        }
+        if (computerAutoplayPaused) {
             return;
         }
         computerActionPending = true;
@@ -736,7 +782,7 @@ public class MainController implements BoardViewHost {
             Platform.runLater(() -> {
                 try {
                     Game g2 = game();
-                    if (g2 != null && shouldOfferComputerStep(g2)) {
+                    if (g2 != null && shouldOfferComputerStep(g2) && !computerAutoplayPaused) {
                         runComputerSetupStep(g2);
                     }
                 } finally {
@@ -762,13 +808,29 @@ public class MainController implements BoardViewHost {
         }
         final GameMemento startSnap = last.startSnap();
         computerMoveExecutor.execute(() -> {
+            final long execToken = computerPlayInvalidateGen.get();
             try {
                 Game probe = Game.restoredFromMemento(startSnap);
                 Move chosen = RandomTrapAvoidingMoveChooser.chooseMove(probe, computerRandom);
-                Platform.runLater(() -> beginComputerPlayAnimation(chosen));
+                Platform.runLater(() -> {
+                    if (computerPlayInvalidateGen.get() != execToken) {
+                        computerActionPending = false;
+                        refreshAll();
+                        return;
+                    }
+                    if (computerAutoplayPaused) {
+                        computerActionPending = false;
+                        refreshAll();
+                        return;
+                    }
+                    beginComputerPlayAnimation(chosen);
+                });
             } catch (IllegalStateException ex) {
                 log.warn("computer play: no legal moves ({})", ex.getMessage());
                 Platform.runLater(() -> {
+                    if (computerPlayInvalidateGen.get() != execToken) {
+                        return;
+                    }
                     computerActionPending = false;
                     setStatus("Počítač — žádný platný tah.");
                     refreshAll();
@@ -776,6 +838,9 @@ public class MainController implements BoardViewHost {
             } catch (Exception ex) {
                 log.warn("computer play: move selection failed", ex);
                 Platform.runLater(() -> {
+                    if (computerPlayInvalidateGen.get() != execToken) {
+                        return;
+                    }
                     computerActionPending = false;
                     setStatus("Počítač — výběr tahu selhal.");
                     refreshAll();
@@ -791,6 +856,82 @@ public class MainController implements BoardViewHost {
             case PLAY -> isComputerControlled(g.getSideToMove());
             default -> false;
         };
+    }
+
+    private void stopComputerStepPauseIfAny() {
+        if (computerStepPause != null) {
+            computerStepPause.stop();
+            computerStepPause = null;
+        }
+    }
+
+    private void clearComputerAnimStashAndResume() {
+        computerAnimStashFull = null;
+        computerAnimResumeFull = null;
+        computerAnimResumeNextK = null;
+        computerAnimResumeN = null;
+    }
+
+    private void clearComputerAutoplayPauseState() {
+        computerAutoplayPaused = false;
+        computerPlayInvalidateGen.incrementAndGet();
+        stopComputerStepPauseIfAny();
+        clearComputerAnimStashAndResume();
+        updateComputerPauseOverlay();
+    }
+
+    private void updateComputerPauseOverlay() {
+        if (computerPauseOverlay == null) {
+            return;
+        }
+        Game g = game();
+        boolean show = g != null && computerAutoplayPaused && shouldOfferComputerStep(g);
+        computerPauseOverlay.setVisible(show);
+        computerPauseOverlay.setManaged(show);
+    }
+
+    /**
+     * Toggles autoplay pause for the side to move when it is {@link PlayerControllerKind#COMPUTER_LEVEL_0}; bound to
+     * Space from {@link PlaySceneKeyHandler}.
+     */
+    public void toggleComputerAutoplayPauseFromKeyboard() {
+        Game g = game();
+        if (g == null || g.getState() == GameState.GAME_OVER) {
+            return;
+        }
+        if (!shouldOfferComputerStep(g)) {
+            return;
+        }
+        computerAutoplayPaused = !computerAutoplayPaused;
+        if (computerAutoplayPaused) {
+            computerPlayInvalidateGen.incrementAndGet();
+            stopComputerStepPauseIfAny();
+            if (computerAnimStashFull != null) {
+                computerAnimResumeFull = PlayDraftNotationSupport.copyMove(computerAnimStashFull);
+                computerAnimResumeNextK = computerAnimStashKShown + 1;
+                computerAnimResumeN = computerAnimStashN;
+            }
+            computerAnimStashFull = null;
+            setStatus("Pauza — mezerník pokračuje.");
+        } else {
+            setStatus("Pokračuje tah počítače.");
+            if (computerAnimResumeFull != null) {
+                Move full = PlayDraftNotationSupport.copyMove(computerAnimResumeFull);
+                int nextK = computerAnimResumeNextK;
+                int nn = computerAnimResumeN;
+                computerAnimResumeFull = null;
+                computerAnimResumeNextK = null;
+                computerAnimResumeN = null;
+                if (nextK > nn) {
+                    finishComputerPlayCommit(full);
+                } else {
+                    animateComputerPlayStep(full, nextK, nn);
+                }
+            } else {
+                refreshAll();
+            }
+        }
+        updateComputerPauseOverlay();
     }
 
     /**
@@ -831,11 +972,17 @@ public class MainController implements BoardViewHost {
     }
 
     private void beginComputerPlayAnimation(Move chosen) {
+        clearComputerAnimStashAndResume();
         Game g = game();
         if (g == null
                 || gameController == null
                 || g.getState() != GameState.PLAY
                 || !isComputerControlled(g.getSideToMove())) {
+            computerActionPending = false;
+            refreshAll();
+            return;
+        }
+        if (computerAutoplayPaused) {
             computerActionPending = false;
             refreshAll();
             return;
@@ -849,6 +996,7 @@ public class MainController implements BoardViewHost {
     }
 
     private void animateComputerPlayStep(Move full, int k, int n) {
+        stopComputerStepPauseIfAny();
         Game g = game();
         if (g == null || gameController == null) {
             computerActionPending = false;
@@ -865,8 +1013,12 @@ public class MainController implements BoardViewHost {
         gameController.applyPlayHistoryViewToGame();
         syncPlayPartialFromHistory();
         refreshAll();
+        computerAnimStashFull = PlayDraftNotationSupport.copyMove(full);
+        computerAnimStashKShown = k;
+        computerAnimStashN = n;
         long delayMs = Math.round(Math.max(0, Math.min(2000, computerStepDelayMs)));
         PauseTransition pause = new PauseTransition(Duration.millis(delayMs));
+        computerStepPause = pause;
         if (k < n) {
             pause.setOnFinished(e -> animateComputerPlayStep(full, k + 1, n));
         } else {
@@ -902,6 +1054,8 @@ public class MainController implements BoardViewHost {
             }
             appendHistory(new GameHistoryEvent.TurnCommitted(notationLine));
         } finally {
+            stopComputerStepPauseIfAny();
+            clearComputerAnimStashAndResume();
             computerActionPending = false;
         }
         refreshAll();

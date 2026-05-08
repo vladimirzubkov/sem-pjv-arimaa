@@ -19,7 +19,7 @@ public final class PlaySceneKeyHandler {
     /**
      * Capture phase: Esc (cancel draft), arrows / WASD (when a piece is selected), Tab / Shift+Tab (pull targets, else push
      * targets, else own pieces), Ctrl+Tab / Ctrl+Shift+Tab (always own pieces; e.g. during push), Space (complete pull), Enter;
-     * SETUP: Space / Ctrl+Space / Ctrl+Enter.
+     * SETUP: Space / Ctrl+Space / Ctrl+Enter; when the mover is the computer: Space toggles autoplay pause.
      */
     public static void install(Scene scene, MainController main) {
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
@@ -29,6 +29,10 @@ public final class PlaySceneKeyHandler {
             Game g = main.game();
             if (g != null && (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER)) {
                 if (main.playerControllerKind(g.getSideToMove()) == PlayerControllerKind.COMPUTER_LEVEL_0) {
+                    if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
+                        main.toggleComputerAutoplayPauseFromKeyboard();
+                        e.consume();
+                    }
                     return;
                 }
                 if (e.getCode() == KeyCode.SPACE && e.isControlDown() && !e.isAltDown()) {
@@ -61,6 +65,10 @@ public final class PlaySceneKeyHandler {
                 return;
             }
             if (main.playerControllerKind(g.getSideToMove()) == PlayerControllerKind.COMPUTER_LEVEL_0) {
+                if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
+                    main.toggleComputerAutoplayPauseFromKeyboard();
+                    e.consume();
+                }
                 return;
             }
             if (e.getCode() == KeyCode.ESCAPE) {

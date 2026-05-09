@@ -7,8 +7,7 @@
 - **Model:** `PlayerControllerKind.COMPUTER_LEVEL_1/2`, `isComputer()`, rozšířené `MainController.isComputerControlled`; výběr tahu přes `ComputerPlayMove.selectPlayMove` (`HeuristicEvaluation`, `GreedyComputerMove`, `AlphaBetaComputerMove`).
 - **Testy:** `CpuAiEvaluationAndMoveTest` (heuristika, greedy/alpha-beta na šachovém rozestavení, odmítnutí HUMAN u `ComputerPlayMove`).
 - **Gameplay / hráči / úroveň 0:** Alt mnemoniky v menu; svislý rozsah slideru prodlevy kroků CPU a zobrazená hodnota s dolním limitem (`MainWindowLayoutBuilder`).
-- **Historie tahů:** Zpět/Vpřed i po skončení partie (**GAME_OVER**, `MainUiLayoutPhase.isPlayOrGameOver`); po `refreshAll` obnova statusu a štítku výhry u „ruky“ (`MainController`).
-- **Historie tahů:** po výběru řádku správný náhled na aktuální draft (poslední řádek v listu i prázdný tah); tah PC jen při náhledu na koncovém draftu, při změně výběru přerušení animace/výběru PC.
+- **Historie tahů:** Zpět/Vpřed i po skončení partie (**GAME_OVER**, `MainUiLayoutPhase.isPlayOrGameOver`); po `refreshAll` obnova statusu a štítku výhry u „ruky“ (`MainController`). **Oprava (list + tah PC):** po výběru dokončeného řádku náhled na začátek následujícího polotahu / aktuální draft (v listu je vždy i prázdný rozpracovaný řádek); tah počítače se plánuje jen při náhledu na koncovém draftu; při změně výběru řádku přerušení animace nebo async výběru tahu PC (`cancelComputerPlayForHistoryScrub`).
 
 ## 0.8.18
 

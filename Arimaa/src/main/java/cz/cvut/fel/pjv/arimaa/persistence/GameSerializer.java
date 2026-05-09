@@ -47,6 +47,15 @@ public final class GameSerializer {
     }
 
     /**
+     * Normalizes line separators to {@code \\n} for wire transport (NDJSON / cross-platform peers).
+     */
+    public String serializeForNetwork(GameController controller, String draftNotationLineOrNull) {
+        return serialize(controller, draftNotationLineOrNull)
+                .replace("\r\n", "\n")
+                .replace("\r", "\n");
+    }
+
+    /**
      * Parses text produced by {@link #serialize(GameController, String)}.
      */
     public ParsedTxtGame parse(String text) {

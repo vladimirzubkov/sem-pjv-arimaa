@@ -26,13 +26,13 @@ final class SetupSidePanelController {
     void refreshReserveButtons(Game g) {
         boolean setup = MainUiLayoutPhase.isSetup(g);
         PlayerSide side = g.getSideToMove();
-        boolean cpuTurn = setup && main.isComputerControlled(side);
+        boolean blocked = setup && !main.isLocalInteractiveTurn(g);
         Map<PieceType, Integer> counts = g.setupReserveCountsByType(side);
         for (PieceType type : PieceType.values()) {
             Button b = main.reserveButtons.get(type);
             int n = counts.getOrDefault(type, 0);
             b.setText(MainController.labelForReserveButton(type, n));
-            b.setDisable(!setup || n == 0 || cpuTurn);
+            b.setDisable(!setup || n == 0 || blocked);
             if (main.pieceSkinUsesFigureArt() && setup && n > 0) {
                 Image icon = main.figureRasterCache.getRasterized(side, type, RESERVE_ICON_MAX);
                 if (icon != null) {
@@ -57,13 +57,13 @@ final class SetupSidePanelController {
     void refreshSetupActionButtons(Game g) {
         boolean setup = MainUiLayoutPhase.isSetup(g);
         PlayerSide side = g.getSideToMove();
-        boolean cpuTurn = setup && main.isComputerControlled(side);
-        main.cancelHandButton.setDisable(!setup || g.getSetupHand() == null || cpuTurn);
-        main.chessButton.setDisable(!setup || cpuTurn);
-        main.doneButton.setDisable(!setup || !g.allSetupPiecesOnBoard(side) || cpuTurn);
+        boolean blocked = setup && !main.isLocalInteractiveTurn(g);
+        main.cancelHandButton.setDisable(!setup || g.getSetupHand() == null || blocked);
+        main.chessButton.setDisable(!setup || blocked);
+        main.doneButton.setDisable(!setup || !g.allSetupPiecesOnBoard(side) || blocked);
         boolean canRandomFill = setup && g.canFillRemainingReserveRandomly(side);
         boolean canRandomShuffle = setup && g.allSetupPiecesOnBoard(side);
-        main.randomButton.setDisable(!setup || (!canRandomFill && !canRandomShuffle) || cpuTurn);
+        main.randomButton.setDisable(!setup || (!canRandomFill && !canRandomShuffle) || blocked);
         if (setup) {
             main.randomButton.setText(canRandomShuffle ? "Náhodně rozestavit" : "Náhodně doplnit zbytek");
         }

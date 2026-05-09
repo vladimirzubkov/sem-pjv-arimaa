@@ -28,7 +28,7 @@ public final class ComputerPlayMove {
             case COMPUTER_LEVEL_0 -> RandomTrapAvoidingMoveChooser.chooseMove(game, random);
             case COMPUTER_LEVEL_1 -> GreedyComputerMove.chooseMove(game, random);
             case COMPUTER_LEVEL_2 -> AlphaBetaComputerMove.chooseMove(game, random);
-            case HUMAN -> throw new IllegalArgumentException("not a computer kind");
+            case HUMAN, NETWORK_PEER -> throw new IllegalArgumentException("not a computer kind");
         };
     }
 }

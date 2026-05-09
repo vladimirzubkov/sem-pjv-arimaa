@@ -5,6 +5,10 @@
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
+    <!-- Síť: vždy INFO na konzoli (i při root OFF). Zbytek aplikace řídí root / menu Log. -->
+    <logger name="cz.cvut.fel.pjv.arimaa.network" level="INFO" additivity="false">
+        <appender-ref ref="STDOUT"/>
+    </logger>
     <root level="OFF">
         <appender-ref ref="STDOUT"/>
     </root>

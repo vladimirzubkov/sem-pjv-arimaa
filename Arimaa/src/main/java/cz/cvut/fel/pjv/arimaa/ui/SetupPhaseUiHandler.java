@@ -135,4 +135,12 @@ final class SetupPhaseUiHandler {
         }
         main.refreshAll();
     }
+
+    /**
+     * Next chess-mapped preset index for a network intent (increments the same counter as {@link
+     * #applyChessMappedSetupFromUi}).
+     */
+    int consumeNextChessPresetIndexForNetwork() {
+        return Math.floorMod(chessSetupRotateIndex++, Game.CHESS_SETUP_ROTATION_COUNT);
+    }
 }

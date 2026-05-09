@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.19
+
+- **Síť (TCP):** dvouhráčová hra; zprávy jako **jeden JSON na řádek** (řádkový JSON, **NDJSON** / Newline Delimited JSON / JSON Lines). **Hostitel = Gold**, **klient = Silver**; kanonický stav na hostiteli, klient dostává **`state_snapshot`** s **`saveText`** (stejný formát jako uložená partie).
+- **Aplikační protokol v2** (pole **`protocolVersion`** v `hello`/`welcome`): rozšířený handshake o přiřazení hráčů (**`silverSeatControl`**, **`goldSeatControl`**), zpráva **`seat_control`**, rozšířené **`intent`** včetně **`PLAY_SUBMIT_NOTATION`** a **`SETUP_SILVER_CPU_AUTOFILL`**, **`ping`/`pong`**, **`error`**, **`bye`**.
+- **UI:** menu **Síť** (hostovat / připojit se, port; u hostitele přehled **lokálních IPv4**); **Hráči** — **protihráč (síť)** a volba člověk/počítač.
+- **Implementace:** `ArimaaNetworkCoordinator`, `NetworkJson`, `WireMessages`, `NetworkAssignmentCodec`, `NetworkLocalAddresses`; v `logback.xml` logger `cz.cvut.fel.pjv.arimaa.network` vždy **INFO** na konzoli.
+- **Testy:** `NetworkJsonWireTest` (protokol v2, seat control, intent s notací).
+- **Distribuce:** `maven-shade-plugin` — spustitelný JAR se závislostmi.
+- **Poznámka:** klient ve **VirtualBox NAT** se k hostiteli na **Windows** typicky připojuje na **`10.0.2.2`** (ne na LAN IP uvedené v dialogu hostitele).
+
 ## 0.8.19
 
 - **Gameplay / hráči:** tři úrovně počítače (**0** — náhodný tah s filtrem pastí, **1** — greedy podle heuristiky z **náhodně vzorkovaných** legálních tahů (bez výpisu všech tahů) + časový limit ~2,5 s, **2** — minimax + alpha-beta: max. **2** celé tahy při ≤28 kořenových tazích, jinak hloubka **1**; **horní limit ~3,5 s** na jeden výběr tahu; řazení potomků podle délky tahu kvůli cutům); posuvník **jen pauza animace** kroků tahu PC (**0,1–2,0 s**, výchozí 1 s); heuristika upřednostňuje **vývoj silnějších figur** (ne jen králíci), SETUP CPU zkouší **šachová rozestavení** (náhodné pořadí presetů) a teprve pak náhodné doplnění.

@@ -27,10 +27,12 @@ public final class PlaySceneKeyHandler {
             }
             Game g = main.game();
             if (g != null && (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER)) {
-                if (main.isComputerControlled(g.getSideToMove())) {
-                    if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
-                        main.toggleComputerAutoplayPauseFromKeyboard();
-                        e.consume();
+                if (!main.isLocalInteractiveTurn(g)) {
+                    if (main.isComputerControlled(g.getSideToMove())) {
+                        if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
+                            main.toggleComputerAutoplayPauseFromKeyboard();
+                            e.consume();
+                        }
                     }
                     return;
                 }
@@ -63,10 +65,12 @@ public final class PlaySceneKeyHandler {
             if (g == null || g.getState() != GameState.PLAY) {
                 return;
             }
-            if (main.isComputerControlled(g.getSideToMove())) {
-                if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
-                    main.toggleComputerAutoplayPauseFromKeyboard();
-                    e.consume();
+            if (!main.isLocalInteractiveTurn(g)) {
+                if (main.isComputerControlled(g.getSideToMove())) {
+                    if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
+                        main.toggleComputerAutoplayPauseFromKeyboard();
+                        e.consume();
+                    }
                 }
                 return;
             }

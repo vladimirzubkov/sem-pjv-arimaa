@@ -73,7 +73,7 @@ final class PlaySidePanelController {
             return;
         }
         boolean play = MainUiLayoutPhase.isPlay(g);
-        boolean cpuPlay = play && main.isComputerControlled(g.getSideToMove());
+        boolean blockedPlay = play && !main.isLocalInteractiveTurn(g);
         if (main.playEndTurnButton != null) {
             boolean canEnd =
                     play
@@ -81,7 +81,7 @@ final class PlaySidePanelController {
                             && main.gameController.getPlayHistory().isBootstrapped()
                             && main.gameController.getPlayHistory().isAtEditableDraftTail()
                             && !main.playDraft.partial.getSteps().isEmpty();
-            main.playEndTurnButton.setDisable(!canEnd || cpuPlay);
+            main.playEndTurnButton.setDisable(!canEnd || blockedPlay);
         }
         if (main.playCancelTurnButton != null) {
             boolean canCancelNormally =
@@ -90,7 +90,7 @@ final class PlaySidePanelController {
                     main.forbidCancelAfterTrapItem != null
                             && main.forbidCancelAfterTrapItem.isSelected()
                             && main.viewPrefixRemovesPieceViaTrap();
-            main.playCancelTurnButton.setDisable(!canCancelNormally || trapBlocksCancel || cpuPlay);
+            main.playCancelTurnButton.setDisable(!canCancelNormally || trapBlocksCancel || blockedPlay);
         }
     }
 

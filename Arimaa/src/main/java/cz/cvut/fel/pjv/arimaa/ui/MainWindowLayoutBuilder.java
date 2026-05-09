@@ -73,20 +73,7 @@ public final class MainWindowLayoutBuilder {
 
         main.cancelHandButton = new Button("Zrušit výběr z ruky");
         main.cancelHandButton.setMaxWidth(Double.MAX_VALUE);
-        main.cancelHandButton.setOnAction(e -> {
-            Game g = main.game();
-            if (g != null && main.isComputerControlled(g.getSideToMove())) {
-                return;
-            }
-            if (g != null) {
-                boolean changed = g.getSetupHand() != null;
-                g.cancelPendingSetupPlacement();
-                if (changed) {
-                    main.recordTimeline();
-                }
-                main.refreshAll();
-            }
-        });
+        main.cancelHandButton.setOnAction(e -> main.onCancelSetupHandFromUi());
 
         main.randomButton = new Button("Náhodně doplnit zbytek");
         main.randomButton.setMaxWidth(Double.MAX_VALUE);
@@ -123,7 +110,8 @@ public final class MainWindowLayoutBuilder {
                     || n == null
                     || n.intValue() < 0
                     || main.gameController == null
-                    || main.isComputerPlayPending()) {
+                    || main.isComputerPlayPending()
+                    || main.isNetworkClient()) {
                 return;
             }
             Game g = main.game();
@@ -144,6 +132,7 @@ public final class MainWindowLayoutBuilder {
             main.gameController.applyPlayHistoryViewToGame();
             main.syncPlayPartialFromHistory();
             main.refreshAll();
+            main.hostBroadcastSnapshotIfNeeded();
         });
     }
 
@@ -298,7 +287,11 @@ public final class MainWindowLayoutBuilder {
         goldCpu2.setToggleGroup(goldPlayerGroup);
         goldCpu2.setUserData(PlayerControllerKind.COMPUTER_LEVEL_2);
         goldHuman.setSelected(true);
+        main.goldPlayerMenuGroup = goldPlayerGroup;
         goldPlayerGroup.selectedToggleProperty().addListener((obs, prev, toggled) -> {
+            if (main.suppressGameplayPlayerMenuCallback) {
+                return;
+            }
             if (!(toggled instanceof RadioMenuItem r) || !(r.getUserData() instanceof PlayerControllerKind k)) {
                 return;
             }
@@ -327,7 +320,11 @@ public final class MainWindowLayoutBuilder {
         silverCpu2.setToggleGroup(silverPlayerGroup);
         silverCpu2.setUserData(PlayerControllerKind.COMPUTER_LEVEL_2);
         silverHuman.setSelected(true);
+        main.silverPlayerMenuGroup = silverPlayerGroup;
         silverPlayerGroup.selectedToggleProperty().addListener((obs, prev, toggled) -> {
+            if (main.suppressGameplayPlayerMenuCallback) {
+                return;
+            }
             if (!(toggled instanceof RadioMenuItem r) || !(r.getUserData() instanceof PlayerControllerKind k)) {
                 return;
             }
@@ -429,6 +426,22 @@ public final class MainWindowLayoutBuilder {
         main.rotateBoardToMoverItem.selectedProperty().addListener((obs, prev, now) -> Platform.runLater(main::refreshAll));
         menuGameplay.getItems().add(main.rotateBoardToMoverItem);
 
+        Menu menuSit = new Menu("S_íť");
+        menuSit.setMnemonicParsing(true);
+        main.networkHostMenuItem = new MenuItem("Hostovat…");
+        main.networkHostMenuItem.setOnAction(e -> main.startNetworkHostDialog());
+        main.networkConnectMenuItem = new MenuItem("Připojit se…");
+        main.networkConnectMenuItem.setOnAction(e -> main.startNetworkClientDialog());
+        main.networkDisconnectMenuItem = new MenuItem("Odpojit");
+        main.networkDisconnectMenuItem.setDisable(true);
+        main.networkDisconnectMenuItem.setOnAction(e -> main.disconnectNetwork());
+        menuSit.getItems()
+                .addAll(
+                        main.networkHostMenuItem,
+                        main.networkConnectMenuItem,
+                        new SeparatorMenuItem(),
+                        main.networkDisconnectMenuItem);
+
         Menu menuLog = new Menu("Log");
         Menu menuLogLevel = new Menu("Logback Level");
         main.logLevelToggleGroup = new ToggleGroup();
@@ -477,7 +490,7 @@ public final class MainWindowLayoutBuilder {
         });
 
         MenuBar menuBar = new MenuBar();
-        menuBar.getMenus().addAll(menuHra, menuTah, menuGameplay, menuLog);
+        menuBar.getMenus().addAll(menuHra, menuTah, menuGameplay, menuSit, menuLog);
         return menuBar;
     }
 

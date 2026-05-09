@@ -16,6 +16,14 @@ import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.model.Step;
 import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.model.PlayHalfTurn;
+import cz.cvut.fel.pjv.arimaa.network.ArimaaNetworkCoordinator;
+import cz.cvut.fel.pjv.arimaa.network.IntentKind;
+import cz.cvut.fel.pjv.arimaa.network.NetworkAssignmentCodec;
+import cz.cvut.fel.pjv.arimaa.network.NetworkLocalAddresses;
+import cz.cvut.fel.pjv.arimaa.network.NetworkRole;
+import cz.cvut.fel.pjv.arimaa.network.WireMessages;
+import cz.cvut.fel.pjv.arimaa.persistence.GameSerializer;
+import cz.cvut.fel.pjv.arimaa.persistence.PlayNotationParser;
 import cz.cvut.fel.pjv.arimaa.util.ArimaaNotation;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import javafx.animation.Animation;
@@ -28,13 +36,18 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ContentDisplay;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.control.ListView;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.Background;
@@ -42,6 +55,7 @@ import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.CornerRadii;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
@@ -67,6 +81,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -177,6 +192,21 @@ public class MainController implements BoardViewHost {
 
     /** When selected, during PLAY/GAME_OVER the board orients so the side to move (or winner) is at the bottom edge. */
     CheckMenuItem rotateBoardToMoverItem;
+    /** When &gt; 0, {@link #recordTimeline()} / draft sync skip host echo; {@link #applyHostIntentFromNetwork} broadcasts once in {@code finally}. */
+    private int networkIntentApplyDepth;
+
+    /** When true, {@link #applyNetworkSnapshotSaveText} is rebuilding state — host must not echo snapshots. */
+    private boolean applyingNetworkSnapshot;
+    /** Lazily created; {@link #clearNetworkSessionAfterDisconnect} leaves the instance but role is {@link NetworkRole#NONE}. */
+    private ArimaaNetworkCoordinator arimaaNetworkCoordinator;
+    ToggleGroup goldPlayerMenuGroup;
+    ToggleGroup silverPlayerMenuGroup;
+    MenuItem networkHostMenuItem;
+    MenuItem networkConnectMenuItem;
+    MenuItem networkDisconnectMenuItem;
+
+    public static final int DEFAULT_NETWORK_PORT = 7788;
+
     /** In {@link GameState#PLAY}: draft steps and cursors ({@link PlayTurnDraftState}). */
     final PlayTurnDraftState playDraft = new PlayTurnDraftState();
 
@@ -190,6 +220,12 @@ public class MainController implements BoardViewHost {
 
     private PlayerControllerKind goldPlayerKind = PlayerControllerKind.HUMAN;
     private PlayerControllerKind silverPlayerKind = PlayerControllerKind.HUMAN;
+    /** Host UI: Silver assignment chosen by the peer. */
+    private PlayerControllerKind networkPeerSilverKind;
+    /** Client UI: Gold assignment chosen by the peer. */
+    private PlayerControllerKind networkPeerGoldKind;
+    /** When true, Gameplay player {@link ToggleGroup} listeners skip broadcasting seat changes. */
+    boolean suppressGameplayPlayerMenuCallback;
     private final Random computerRandom = new Random();
     private boolean computerActionPending;
     /** When true, do not start new computer setup / choose-move work; PLAY step animation uses {@link #computerPlayTurnTimeline} pause/play. */
@@ -319,6 +355,7 @@ public class MainController implements BoardViewHost {
         refreshAll();
         syncLogLevelMenuSelection();
         syncLogToFileMenuSelection();
+        syncNetworkMenuState();
     }
 
     @Override
@@ -352,7 +389,14 @@ public class MainController implements BoardViewHost {
         int modelRank = modelRankFromVisualRow(visualRow, g);
         GameState st = g.getState();
         if (st == GameState.PLAY) {
-            if (isComputerControlled(g.getSideToMove())) {
+            if (!isLocalInteractiveTurn(g)) {
+                return;
+            }
+            if (isNetworkClient()) {
+                arimaaNetwork()
+                        .sendIntent(
+                                new WireMessages.IntentMessage(
+                                        IntentKind.PLAY_ACTIVATE, null, modelFile, modelRank, null));
                 return;
             }
             playPhase.handlePlayBoardActivation(modelFile, modelRank);
@@ -361,7 +405,14 @@ public class MainController implements BoardViewHost {
         if (!MainUiLayoutPhase.isSetup(g)) {
             return;
         }
-        if (isComputerControlled(g.getSideToMove())) {
+        if (!isLocalInteractiveTurn(g)) {
+            return;
+        }
+        if (isNetworkClient()) {
+            arimaaNetwork()
+                    .sendIntent(
+                            new WireMessages.IntentMessage(
+                                    IntentKind.SETUP_BOARD_CLICK, null, modelFile, modelRank, null));
             return;
         }
         setupPhase.onBoardCellClick(modelFile, modelRank);
@@ -369,16 +420,49 @@ public class MainController implements BoardViewHost {
 
     void onPickReserve(PieceType type) {
         Game g = game();
-        if (g != null && isComputerControlled(g.getSideToMove())) {
+        if (g != null && !isLocalInteractiveTurn(g)) {
+            return;
+        }
+        if (isNetworkClient()) {
+            arimaaNetwork().sendIntent(new WireMessages.IntentMessage(IntentKind.SETUP_PICK, type, null, null, null));
             return;
         }
         setupPhase.onPickReserve(type);
     }
 
+    void onCancelSetupHandFromUi() {
+        Game g = game();
+        if (g != null && !isLocalInteractiveTurn(g)) {
+            return;
+        }
+        if (isNetworkClient()) {
+            arimaaNetwork().sendIntent(new WireMessages.IntentMessage(IntentKind.SETUP_CANCEL_HAND, null, null, null, null));
+            return;
+        }
+        if (g != null) {
+            boolean changed = g.getSetupHand() != null;
+            g.cancelPendingSetupPlacement();
+            if (changed) {
+                recordTimeline();
+            }
+            refreshAll();
+        }
+    }
+
     private void refreshPlayersAssignmentLabel() {
-        playersAssignmentLabel.setText(
-                "Gold: %s%nSilver: %s"
-                        .formatted(goldPlayerKind.assignmentDescriptionCs(), silverPlayerKind.assignmentDescriptionCs()));
+        String goldLine =
+                goldPlayerKind == PlayerControllerKind.NETWORK_PEER
+                        ? (networkPeerGoldKind == null
+                                ? "protihráč (síť)"
+                                : "protihráč (síť) — " + networkPeerGoldKind.assignmentDescriptionCs())
+                        : goldPlayerKind.assignmentDescriptionCs();
+        String silverLine =
+                silverPlayerKind == PlayerControllerKind.NETWORK_PEER
+                        ? (networkPeerSilverKind == null
+                                ? "protihráč (síť)"
+                                : "protihráč (síť) — " + networkPeerSilverKind.assignmentDescriptionCs())
+                        : silverPlayerKind.assignmentDescriptionCs();
+        playersAssignmentLabel.setText("Gold: %s%nSilver: %s".formatted(goldLine, silverLine));
     }
 
     void refreshAll() {
@@ -410,6 +494,8 @@ public class MainController implements BoardViewHost {
         boardGrid.paintHoverOverlay(g);
         updateComputerPauseOverlay();
         scheduleComputerTurnIfNeeded();
+        syncGameplayPlayerMenuDisabled();
+        syncNetworkMenuState();
         if (g.getState() == GameState.GAME_OVER) {
             PlayerSide w = g.getMatchWinner();
             setStatus(w == null ? "Konec hry." : "Konec hry — vyhrál %s.".formatted(sideName(w)));
@@ -613,7 +699,7 @@ public class MainController implements BoardViewHost {
         }
     }
 
-    void startNewGameAction() {
+    public void startNewGameAction() {
         Game g = game();
         if (g != null) {
             log.info("user action: new game");
@@ -626,6 +712,7 @@ public class MainController implements BoardViewHost {
             }
             setStatus("Nová hra — rozestavuje Gold.");
             refreshAll();
+            hostBroadcastSnapshotIfNeeded();
         }
     }
 
@@ -643,10 +730,22 @@ public class MainController implements BoardViewHost {
         if (gameController != null) {
             gameController.recordAfterMutation();
         }
+        if (networkIntentApplyDepth == 0) {
+            hostBroadcastSnapshotIfNeeded();
+        }
     }
 
     private void refreshHistoryMenus() {
         Game g = game();
+        if (isNetworkClient()) {
+            if (undoMenuItem != null) {
+                undoMenuItem.setDisable(true);
+            }
+            if (redoMenuItem != null) {
+                redoMenuItem.setDisable(true);
+            }
+            return;
+        }
         boolean undo;
         boolean redo;
         if (g == null || gameController == null) {
@@ -712,6 +811,7 @@ public class MainController implements BoardViewHost {
             if (gameController.undo()) {
                 setStatus("Zpět — vrácen předchozí stav.");
                 refreshAll();
+                hostBroadcastSnapshotIfNeeded();
             }
             return;
         }
@@ -729,6 +829,7 @@ public class MainController implements BoardViewHost {
                     appendHistory(new GameHistoryEvent.DraftStepUndone(playDraft.partial.getSteps().size()));
                     setStatus("Zpět — odstraněn poslední krok rozpracovaného tahu.");
                     refreshAll();
+                    hostBroadcastSnapshotIfNeeded();
                     return;
                 }
             }
@@ -737,6 +838,7 @@ public class MainController implements BoardViewHost {
                 syncPlayPartialFromHistory();
                 setStatus("Zpět — krok zpět v rámci tahu (náhled).");
                 refreshAll();
+                hostBroadcastSnapshotIfNeeded();
             } else {
                 setStatus("Začátek tahu — další Zpět: klikněte na předchozí řádek v Historii tahů.");
             }
@@ -752,6 +854,7 @@ public class MainController implements BoardViewHost {
             if (gameController.redo()) {
                 setStatus("Vpřed — obnoven stav.");
                 refreshAll();
+                hostBroadcastSnapshotIfNeeded();
             }
             return;
         }
@@ -765,6 +868,7 @@ public class MainController implements BoardViewHost {
         if (isTrailingDraftAtLiveEnd() && draftUi.tryRedoDraftFromRedoStack()) {
             setStatus("Vpřed — krok obnoven.");
             refreshAll();
+            hostBroadcastSnapshotIfNeeded();
             return;
         }
         if (gameController.redo()) {
@@ -772,15 +876,17 @@ public class MainController implements BoardViewHost {
             syncPlayPartialFromHistory();
             setStatus("Vpřed — krok vpřed v rámci tahu (náhled).");
             refreshAll();
+            hostBroadcastSnapshotIfNeeded();
             return;
         }
         if (draftUi.hasCancelledDraftSnapshot() && draftUi.redoCancelledDraft()) {
             setStatus("Vpřed — obnoven rozpracovaný tah.");
             refreshAll();
+            hostBroadcastSnapshotIfNeeded();
         }
     }
 
-    void setStatus(String text) {
+    public void setStatus(String text) {
         statusLabel.setText(text);
     }
 
@@ -788,16 +894,466 @@ public class MainController implements BoardViewHost {
         return side == PlayerSide.GOLD ? goldPlayerKind : silverPlayerKind;
     }
 
+    public PlayerControllerKind getGoldPlayerKind() {
+        return goldPlayerKind;
+    }
+
+    public PlayerControllerKind getSilverPlayerKind() {
+        return silverPlayerKind;
+    }
+
     void setGoldPlayerKind(PlayerControllerKind kind) {
         goldPlayerKind = Objects.requireNonNull(kind, "kind");
+        if (isNetworkHost() && isNetworkSessionActive()) {
+            arimaaNetwork().sendSeatControlFromHost(NetworkAssignmentCodec.encode(kind));
+        }
     }
 
     void setSilverPlayerKind(PlayerControllerKind kind) {
         silverPlayerKind = Objects.requireNonNull(kind, "kind");
+        if (isNetworkClient() && isNetworkSessionActive()) {
+            arimaaNetwork().sendSeatControlFromClient(NetworkAssignmentCodec.encode(kind));
+        }
     }
 
     boolean isComputerControlled(PlayerSide side) {
         return playerControllerKind(side).isComputer();
+    }
+
+    ArimaaNetworkCoordinator arimaaNetwork() {
+        if (arimaaNetworkCoordinator == null) {
+            arimaaNetworkCoordinator = new ArimaaNetworkCoordinator(this);
+        }
+        return arimaaNetworkCoordinator;
+    }
+
+    public boolean isNetworkHost() {
+        return arimaaNetworkCoordinator != null && arimaaNetworkCoordinator.isHost();
+    }
+
+    public boolean isNetworkClient() {
+        return arimaaNetworkCoordinator != null
+                && arimaaNetworkCoordinator.getRole() == NetworkRole.CLIENT;
+    }
+
+    public boolean isNetworkSessionActive() {
+        return arimaaNetworkCoordinator != null && arimaaNetworkCoordinator.isActive();
+    }
+
+    /**
+     * Local board / panel input is allowed for the current mover: not CPU, and in a network game the mover must be
+     * {@link PlayerControllerKind#HUMAN} (local seat), not {@link PlayerControllerKind#NETWORK_PEER}.
+     */
+    boolean isLocalInteractiveTurn(Game g) {
+        if (g == null) {
+            return false;
+        }
+        if (isComputerControlled(g.getSideToMove())) {
+            return false;
+        }
+        return playerControllerKind(g.getSideToMove()) == PlayerControllerKind.HUMAN;
+    }
+
+    public boolean isApplyingNetworkSnapshot() {
+        return applyingNetworkSnapshot;
+    }
+
+    public void prepareNetworkSessionAsHost(PlayerControllerKind peerSilverAssignment) {
+        /* Gold: člověk/počítač z menu Gameplay (jako v lokální hře). */
+        silverPlayerKind = PlayerControllerKind.NETWORK_PEER;
+        networkPeerSilverKind = Objects.requireNonNull(peerSilverAssignment);
+        networkPeerGoldKind = null;
+        syncNetworkMenuState();
+        syncGameplayPlayerMenuDisabled();
+        syncGameplayPlayerMenuSelectionFromKinds();
+        setStatus("Síť — host (Gold), klient hraje Silver.");
+    }
+
+    public void prepareNetworkSessionAsClient(PlayerControllerKind peerGoldAssignment) {
+        goldPlayerKind = PlayerControllerKind.NETWORK_PEER;
+        /* Silver: člověk/počítač z menu Gameplay (jako v lokální hře). */
+        networkPeerGoldKind = Objects.requireNonNull(peerGoldAssignment);
+        networkPeerSilverKind = null;
+        syncNetworkMenuState();
+        syncGameplayPlayerMenuDisabled();
+        syncGameplayPlayerMenuSelectionFromKinds();
+        setStatus("Síť — připojeno jako Silver; čekám na stav ze serveru…");
+    }
+
+    public void clearNetworkSessionAfterDisconnect() {
+        goldPlayerKind = PlayerControllerKind.HUMAN;
+        silverPlayerKind = PlayerControllerKind.HUMAN;
+        networkPeerGoldKind = null;
+        networkPeerSilverKind = null;
+        if (goldPlayerMenuGroup != null && goldPlayerMenuGroup.getToggles().getFirst() instanceof RadioMenuItem r) {
+            r.setSelected(true);
+        }
+        if (silverPlayerMenuGroup != null && silverPlayerMenuGroup.getToggles().getFirst() instanceof RadioMenuItem r2) {
+            r2.setSelected(true);
+        }
+        syncNetworkMenuState();
+        syncGameplayPlayerMenuDisabled();
+        refreshPlayersAssignmentLabel();
+    }
+
+    void syncGameplayPlayerMenuDisabled() {
+        boolean net = isNetworkSessionActive();
+        boolean host = isNetworkHost();
+        if (goldPlayerMenuGroup != null) {
+            for (var t : goldPlayerMenuGroup.getToggles()) {
+                if (t instanceof RadioMenuItem r) {
+                    r.setDisable(net && !host);
+                }
+            }
+        }
+        if (silverPlayerMenuGroup != null) {
+            for (var t : silverPlayerMenuGroup.getToggles()) {
+                if (t instanceof RadioMenuItem r) {
+                    r.setDisable(net && host);
+                }
+            }
+        }
+    }
+
+    void syncGameplayPlayerMenuSelectionFromKinds() {
+        suppressGameplayPlayerMenuCallback = true;
+        try {
+            selectPlayerKindInMenuGroup(goldPlayerMenuGroup, goldPlayerKind);
+            selectPlayerKindInMenuGroup(silverPlayerMenuGroup, silverPlayerKind);
+        } finally {
+            suppressGameplayPlayerMenuCallback = false;
+        }
+    }
+
+    private static void selectPlayerKindInMenuGroup(ToggleGroup group, PlayerControllerKind kind) {
+        if (group == null || kind == PlayerControllerKind.NETWORK_PEER) {
+            return;
+        }
+        for (var t : group.getToggles()) {
+            if (t instanceof RadioMenuItem r && r.getUserData() == kind) {
+                r.setSelected(true);
+                return;
+            }
+        }
+    }
+
+    public void applyNetworkPeerSilverSeatFromWire(String wire) {
+        if (!isNetworkHost()) {
+            return;
+        }
+        try {
+            networkPeerSilverKind = NetworkAssignmentCodec.decode(wire);
+            refreshPlayersAssignmentLabel();
+        } catch (IllegalArgumentException ex) {
+            log.warn("seat_control (Silver) ignored: {}", ex.getMessage());
+        }
+    }
+
+    public void applyNetworkPeerGoldSeatFromWire(String wire) {
+        if (!isNetworkClient()) {
+            return;
+        }
+        try {
+            networkPeerGoldKind = NetworkAssignmentCodec.decode(wire);
+            refreshPlayersAssignmentLabel();
+        } catch (IllegalArgumentException ex) {
+            log.warn("seat_control (Gold) ignored: {}", ex.getMessage());
+        }
+    }
+
+    void syncNetworkMenuState() {
+        boolean on = isNetworkSessionActive();
+        if (networkHostMenuItem != null) {
+            networkHostMenuItem.setDisable(on);
+        }
+        if (networkConnectMenuItem != null) {
+            networkConnectMenuItem.setDisable(on);
+        }
+        if (networkDisconnectMenuItem != null) {
+            networkDisconnectMenuItem.setDisable(!on);
+        }
+    }
+
+    public String buildNetworkSnapshotSaveText() {
+        if (gameController == null) {
+            return "";
+        }
+        String draft = null;
+        Game g = game();
+        if (g != null && g.getState() == GameState.PLAY && gameController.getPlayHistory().isBootstrapped()) {
+            PlayTurnHistory ph = gameController.getPlayHistory();
+            var halves = ph.halfTurnsUnmodifiable();
+            PlayHalfTurn tail = halves.get(halves.size() - 1);
+            if (!tail.committed() && !tail.steps().isEmpty()) {
+                Game probe = PlayDraftNotationSupport.probeGameFromMemento(tail.startSnap());
+                String prefix = gameController.nextPlayNotationPrefix();
+                Move m = new Move();
+                for (Step s : tail.steps()) {
+                    m.getSteps().add(PlayDraftNotationSupport.copyStep(s));
+                }
+                draft = ArimaaNotation.formatPartialTurnLine(probe.getBoard(), m, prefix);
+            }
+        }
+        return new GameSerializer().serializeForNetwork(gameController, draft);
+    }
+
+    public void applyNetworkSnapshotSaveText(String text) {
+        if (gameController == null || stage == null) {
+            return;
+        }
+        applyingNetworkSnapshot = true;
+        try {
+            GameSerializer ser = new GameSerializer();
+            GameSerializer.ParsedTxtGame p = ser.parse(text);
+            clearPlayTurnUi();
+            gameController.loadFromTxtGame(p.playStartSnapshot(), p.moveLines());
+            syncPlayPartialFromHistory();
+            clearComputerAutoplayPauseState();
+            refreshAll();
+            if (isNetworkClient()) {
+                setStatus("Síť — stav synchronizován.");
+            }
+        } catch (RuntimeException ex) {
+            log.warn("network snapshot load failed", ex);
+            setStatus("Síť — nelze načíst stav: " + ex.getMessage());
+        } finally {
+            applyingNetworkSnapshot = false;
+            if (isNetworkClient()) {
+                computerActionPending = false;
+            }
+        }
+    }
+
+    void hostBroadcastSnapshotIfNeeded() {
+        if (arimaaNetworkCoordinator != null) {
+            arimaaNetworkCoordinator.broadcastSnapshotFromHostMainThread();
+        }
+    }
+
+    /**
+     * Applies a Silver-side intent from the network client on the host JavaFX thread.
+     *
+     * @return {@code false} if the intent is illegal in the current phase
+     */
+    public boolean applyHostIntentFromNetwork(WireMessages.IntentMessage in) {
+        networkIntentApplyDepth++;
+        try {
+            Game g = game();
+            if (g == null || gameController == null) {
+                return false;
+            }
+            if (g.getSideToMove() != PlayerSide.SILVER) {
+                return false;
+            }
+            boolean ok =
+                    switch (in.kind()) {
+                        case SETUP_PICK -> {
+                            if (g.getState() != GameState.SETUP_SILVER || in.pieceType() == null) {
+                                yield false;
+                            }
+                            setupPhase.onPickReserve(in.pieceType());
+                            yield true;
+                        }
+                        case SETUP_BOARD_CLICK -> {
+                            if (g.getState() != GameState.SETUP_SILVER || in.file() == null || in.rank() == null) {
+                                yield false;
+                            }
+                            setupPhase.onBoardCellClick(in.file(), in.rank());
+                            yield true;
+                        }
+                        case SETUP_RANDOM -> {
+                            if (!MainUiLayoutPhase.isSetup(g) || g.getState() != GameState.SETUP_SILVER) {
+                                yield false;
+                            }
+                            setupPhase.performRandomSetupPlacementAction();
+                            yield true;
+                        }
+                        case SETUP_CHESS -> {
+                            if (g.getState() != GameState.SETUP_SILVER || in.presetIndex() == null) {
+                                yield false;
+                            }
+                            if (g.applyChessMappedSetup(PlayerSide.SILVER, in.presetIndex())) {
+                                recordTimeline();
+                                setStatus("Šachová rozestavení (síť).");
+                                refreshAll();
+                                yield true;
+                            }
+                            yield false;
+                        }
+                        case SETUP_COMPLETE -> {
+                            if (g.getState() != GameState.SETUP_SILVER) {
+                                yield false;
+                            }
+                            setupPhase.tryCompleteSetupFromUi();
+                            yield true;
+                        }
+                        case SETUP_CANCEL_HAND -> {
+                            if (!MainUiLayoutPhase.isSetup(g)) {
+                                yield false;
+                            }
+                            boolean changed = g.getSetupHand() != null;
+                            g.cancelPendingSetupPlacement();
+                            if (changed) {
+                                recordTimeline();
+                            }
+                            refreshAll();
+                            yield true;
+                        }
+                        case SETUP_SILVER_CPU_AUTOFILL -> {
+                            if (g.getState() != GameState.SETUP_SILVER) {
+                                yield false;
+                            }
+                            runComputerSetupStep(g);
+                            yield true;
+                        }
+                        case PLAY_ACTIVATE -> {
+                            if (g.getState() != GameState.PLAY || in.file() == null || in.rank() == null) {
+                                yield false;
+                            }
+                            playPhase.handlePlayBoardActivation(in.file(), in.rank());
+                            yield true;
+                        }
+                        case PLAY_END_TURN -> {
+                            if (g.getState() != GameState.PLAY) {
+                                yield false;
+                            }
+                            playPhase.tryEndPlayTurn();
+                            yield true;
+                        }
+                        case PLAY_CANCEL_DRAFT -> {
+                            if (g.getState() != GameState.PLAY) {
+                                yield false;
+                            }
+                            yield draftUi.tryCancelPlayDraftFromUi();
+                        }
+                        case PLAY_SUBMIT_NOTATION -> {
+                            if (g.getState() != GameState.PLAY
+                                    || in.notationLine() == null
+                                    || in.notationLine().isBlank()) {
+                                yield false;
+                            }
+                            try {
+                                PlayNotationParser.ParsedLine pl =
+                                        PlayNotationParser.parseLine(g, in.notationLine().trim());
+                                if (pl.hasEarlyPassSuffix()) {
+                                    yield false;
+                                }
+                                Move submit = PlayDraftNotationSupport.copyMove(pl.move());
+                                gameController.restoreTrailingDraftTurnStartForSubmit();
+                                if (!gameController.submitHumanMove(submit)) {
+                                    yield false;
+                                }
+                                gameController.recordCommittedPlayTurn(submit, in.notationLine().trim());
+                                clearPlayTurnUi();
+                                syncPlayPartialFromHistory();
+                                if (g.getState() == GameState.GAME_OVER) {
+                                    PlayerSide w = g.getMatchWinner();
+                                    setStatus(
+                                            w == null
+                                                    ? "Konec hry."
+                                                    : "Konec hry — vyhrál %s.".formatted(sideName(w)));
+                                } else {
+                                    setStatus("Tah (síť) proveden.");
+                                }
+                                appendHistory(new GameHistoryEvent.TurnCommitted(in.notationLine().trim()));
+                                refreshAll();
+                                yield true;
+                            } catch (IllegalArgumentException ex) {
+                                log.debug("PLAY_SUBMIT_NOTATION: {}", ex.getMessage());
+                                yield false;
+                            }
+                        }
+                    };
+            if (ok) {
+                hostBroadcastSnapshotIfNeeded();
+            }
+            return ok;
+        } finally {
+            networkIntentApplyDepth--;
+        }
+    }
+
+    void startNetworkHostDialog() {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Hostovat");
+        dialog.setHeaderText(
+                "Server — Gold (vy), klient Silver. Člověk/počítač pro Gold nastavte v menu Gameplay → Gold hráč.");
+        DialogPane pane = dialog.getDialogPane();
+        pane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        TextField portField = new TextField(String.valueOf(DEFAULT_NETWORK_PORT));
+        TextArea ipArea = new TextArea(NetworkLocalAddresses.ipv4TextBlock());
+        ipArea.setEditable(false);
+        ipArea.setPrefRowCount(5);
+        ipArea.setWrapText(true);
+        int r = 0;
+        grid.add(new Label("Port (> 1024):"), 0, r);
+        grid.add(portField, 1, r++);
+        grid.add(new Label("Vaše IPv4:"), 0, r);
+        grid.add(ipArea, 1, r);
+        pane.setContent(grid);
+
+        Optional<ButtonType> answer = dialog.showAndWait();
+        if (answer.isEmpty() || answer.get() != ButtonType.OK) {
+            return;
+        }
+        try {
+            int port = Integer.parseInt(portField.getText().trim());
+            if (port <= 1024 || port > 65535) {
+                setStatus("Neplatný port.");
+                return;
+            }
+            arimaaNetwork().startHost(port);
+            syncNetworkMenuState();
+        } catch (NumberFormatException ex) {
+            setStatus("Port musí být číslo.");
+        }
+    }
+
+    void startNetworkClientDialog() {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Připojit se");
+        dialog.setHeaderText(
+                "Klient — Silver (vy), server Gold. Člověk/počítač pro Silver nastavte v menu Gameplay → Silver hráč.");
+        DialogPane pane = dialog.getDialogPane();
+        pane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        TextField hostField = new TextField("localhost");
+        TextField portField = new TextField(String.valueOf(DEFAULT_NETWORK_PORT));
+        int r = 0;
+        grid.add(new Label("Host:"), 0, r);
+        grid.add(hostField, 1, r++);
+        grid.add(new Label("Port:"), 0, r);
+        grid.add(portField, 1, r);
+        pane.setContent(grid);
+
+        Optional<ButtonType> answer = dialog.showAndWait();
+        if (answer.isEmpty() || answer.get() != ButtonType.OK) {
+            return;
+        }
+        try {
+            int port = Integer.parseInt(portField.getText().trim());
+            if (port <= 1024 || port > 65535) {
+                setStatus("Neplatný port.");
+                return;
+            }
+            arimaaNetwork().startClient(hostField.getText().trim(), port);
+            syncNetworkMenuState();
+        } catch (NumberFormatException ex) {
+            setStatus("Port musí být číslo.");
+        }
+    }
+
+    void disconnectNetwork() {
+        if (arimaaNetworkCoordinator != null) {
+            arimaaNetworkCoordinator.stopSession();
+        }
     }
 
     public double getComputerStepDelayMs() {
@@ -820,6 +1376,16 @@ public class MainController implements BoardViewHost {
             return;
         }
         if (computerAutoplayPaused) {
+            return;
+        }
+        if (g.getState() == GameState.SETUP_SILVER
+                && isNetworkClient()
+                && isComputerControlled(PlayerSide.SILVER)) {
+            computerActionPending = true;
+            arimaaNetwork()
+                    .sendIntent(
+                            new WireMessages.IntentMessage(
+                                    IntentKind.SETUP_SILVER_CPU_AUTOFILL, null, null, null, null));
             return;
         }
         computerActionPending = true;
@@ -872,6 +1438,14 @@ public class MainController implements BoardViewHost {
                     if (computerAutoplayPaused) {
                         computerActionPending = false;
                         refreshAll();
+                        return;
+                    }
+                    Game gNow = game();
+                    if (isNetworkClient()
+                            && gNow != null
+                            && gNow.getSideToMove() == PlayerSide.SILVER
+                            && isComputerControlled(PlayerSide.SILVER)) {
+                        submitNetworkClientSilverCpuPlayTurn(chosen);
                         return;
                     }
                     beginComputerPlayAnimation(chosen);
@@ -1011,6 +1585,26 @@ public class MainController implements BoardViewHost {
         }
     }
 
+    private void submitNetworkClientSilverCpuPlayTurn(Move chosen) {
+        try {
+            Game g = game();
+            if (g == null || gameController == null) {
+                return;
+            }
+            gameController.restoreTrailingDraftTurnStartForSubmit();
+            String prefix = gameController.nextPlayNotationPrefix();
+            Move submit = PlayDraftNotationSupport.copyMove(chosen);
+            String notationLine = ArimaaNotation.formatFullTurn(g.getBoard(), submit, prefix);
+            arimaaNetwork()
+                    .sendIntent(
+                            new WireMessages.IntentMessage(
+                                    IntentKind.PLAY_SUBMIT_NOTATION, null, null, null, null, notationLine));
+        } finally {
+            computerActionPending = false;
+        }
+        refreshAll();
+    }
+
     private void beginComputerPlayAnimation(Move chosen) {
         stopComputerPlayTurnTimelineIfAny();
         Game g = game();
@@ -1114,6 +1708,7 @@ public class MainController implements BoardViewHost {
             computerActionPending = false;
         }
         refreshAll();
+        hostBroadcastSnapshotIfNeeded();
     }
 
     Game game() {
@@ -1184,6 +1779,9 @@ public class MainController implements BoardViewHost {
         }
         gameController.getPlayHistory().replaceTrailingDraftStepsFromMove(playDraft.partial);
         gameController.applyPlayHistoryViewToGame();
+        if (networkIntentApplyDepth == 0) {
+            hostBroadcastSnapshotIfNeeded();
+        }
     }
 
     private List<String> buildNotationHistoryLines() {
@@ -1211,7 +1809,11 @@ public class MainController implements BoardViewHost {
     /** Same as tlačítko „Náhodně …“ — náhodné doplnění nebo přeřazení na domovských řadách. */
     void performRandomSetupPlacementAction() {
         Game g = game();
-        if (g != null && isComputerControlled(g.getSideToMove())) {
+        if (g != null && !isLocalInteractiveTurn(g)) {
+            return;
+        }
+        if (isNetworkClient()) {
+            arimaaNetwork().sendIntent(new WireMessages.IntentMessage(IntentKind.SETUP_RANDOM, null, null, null, null));
             return;
         }
         setupPhase.performRandomSetupPlacementAction();
@@ -1220,7 +1822,14 @@ public class MainController implements BoardViewHost {
     /** Same as „Šachová rozestavení“ — rotates among reversed / symmetric / MH / HH presets. */
     void applyChessMappedSetupFromUi() {
         Game g = game();
-        if (g != null && isComputerControlled(g.getSideToMove())) {
+        if (g != null && !isLocalInteractiveTurn(g)) {
+            return;
+        }
+        if (isNetworkClient()) {
+            int preset = setupPhase.consumeNextChessPresetIndexForNetwork();
+            arimaaNetwork()
+                    .sendIntent(
+                            new WireMessages.IntentMessage(IntentKind.SETUP_CHESS, null, null, null, preset));
             return;
         }
         setupPhase.applyChessMappedSetupFromUi();
@@ -1229,7 +1838,11 @@ public class MainController implements BoardViewHost {
     /** Same as „Hotovo (ukončit rozestavení)“. */
     void tryCompleteSetupFromUi() {
         Game g = game();
-        if (g != null && isComputerControlled(g.getSideToMove())) {
+        if (g != null && !isLocalInteractiveTurn(g)) {
+            return;
+        }
+        if (isNetworkClient()) {
+            arimaaNetwork().sendIntent(new WireMessages.IntentMessage(IntentKind.SETUP_COMPLETE, null, null, null, null));
             return;
         }
         setupPhase.tryCompleteSetupFromUi();
@@ -1243,6 +1856,15 @@ public class MainController implements BoardViewHost {
      * @return {@code true} if the draft was cleared; {@code false} if nothing to cancel, wrong phase, or trap lock
      */
     boolean tryCancelPlayDraftFromUi() {
+        Game g = game();
+        if (g != null && isNetworkClient() && isLocalInteractiveTurn(g)) {
+            arimaaNetwork()
+                    .sendIntent(
+                            new WireMessages.IntentMessage(
+                                    IntentKind.PLAY_CANCEL_DRAFT, null, null, null, null));
+            setStatus("Zrušení rozpracovaného tahu (síť)…");
+            return true;
+        }
         return draftUi.tryCancelPlayDraftFromUi();
     }
 
@@ -1283,9 +1905,14 @@ public class MainController implements BoardViewHost {
      */
     void handlePlayBoardActivation(int modelFile, int modelRank) {
         Game g = game();
-        if (g != null
-                && g.getState() == GameState.PLAY
-                && isComputerControlled(g.getSideToMove())) {
+        if (g != null && g.getState() == GameState.PLAY && !isLocalInteractiveTurn(g)) {
+            return;
+        }
+        if (g != null && g.getState() == GameState.PLAY && isNetworkClient()) {
+            arimaaNetwork()
+                    .sendIntent(
+                            new WireMessages.IntentMessage(
+                                    IntentKind.PLAY_ACTIVATE, null, modelFile, modelRank, null));
             return;
         }
         playPhase.handlePlayBoardActivation(modelFile, modelRank);
@@ -1293,10 +1920,15 @@ public class MainController implements BoardViewHost {
 
     void tryEndPlayTurn() {
         Game g = game();
-        if (g != null && isComputerControlled(g.getSideToMove())) {
+        if (g != null && !isLocalInteractiveTurn(g)) {
+            return;
+        }
+        if (isNetworkClient()) {
+            arimaaNetwork().sendIntent(new WireMessages.IntentMessage(IntentKind.PLAY_END_TURN, null, null, null, null));
             return;
         }
         playPhase.tryEndPlayTurn();
+        hostBroadcastSnapshotIfNeeded();
     }
 
     static String labelForReserveButton(PieceType type, int count) {

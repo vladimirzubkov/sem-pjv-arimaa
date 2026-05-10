@@ -375,6 +375,7 @@ final class PlayPhaseUiHandler {
             main.refreshAll();
             return;
         }
+        /* SFX already played on each draft step; avoid repeating trap wail on turn submit. */
         main.gameController.recordCommittedPlayTurn(submit, notationLine);
         main.notifyPlayChessClockAfterCommittedTurn(mover);
         main.clearPlayTurnUi();

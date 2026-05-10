@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.21
+
+- **Gameplay:** procedurální **zvuky tahů** (`javax.sound.sampled`, `PlayProceduralSfx`) — krátký „dřevěný“ úder po kroku a samostatný efekt při novém pádu do pasti; přehrávání na virtuálním vlákně; položka **Zvuky tahů (syntéza)** (výchozí zapnuto); **bez druhého** přehrání efektu pasti při odeslání celého tahu (už zněl po krocích náhledu).
+- **Deska (PLAY):** pole **pastí** — diagonální výplň „propasti“ (`BoardGridView.trapChasmFill`): světlý tón pole vlevo nahoře, tmavší směrem vpravo dolů (částečná průhlednost rohu).
+- **Gameplay / hráči:** ve výchozím stavu **Silver — počítač úroveň 1** (`MainController`, menu **Silver hráč**); po odpojení ze sítě stejný výchozí (Gold člověk, Silver CPU 1) a synchronizace výběru v menu.
+
 ## 0.9.20
 
 - **Časovač (PLAY):** dvě strany (**Gold** / **Silver**), tabulka **Časovač** — sloupce **Celkem** a **Průměr na tah** (průměr z dokončených polotahů); neukládá se do souboru partie.

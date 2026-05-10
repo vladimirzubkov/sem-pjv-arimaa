@@ -21,6 +21,9 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.RowConstraints;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
+import javafx.scene.paint.CycleMethod;
+import javafx.scene.paint.LinearGradient;
+import javafx.scene.paint.Stop;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.StrokeType;
 import javafx.scene.text.Font;
@@ -40,6 +43,18 @@ public final class BoardGridView {
     static final Font COORD_FONT = Font.font(12);
     static final double PIECE_IMAGE_MAX = Math.max(16, CELL - 8);
     private static final double BOARD_VIEW_MARGIN = 14;
+
+    /**
+     * Trap squares: diagonal “pit” — board tone at top-left, deep shadow toward bottom-right.
+     */
+    static LinearGradient trapChasmFill(Color boardTone) {
+        Color pitOpaque = boardTone.interpolate(Color.rgb(10, 6, 14), 0.9);
+        Color pitCorner = pitOpaque.deriveColor(0, 1, 1, 0.5);
+        return new LinearGradient(0, 0, 1, 1, true, CycleMethod.NO_CYCLE,
+                new Stop(0, boardTone),
+                new Stop(0.45, boardTone.interpolate(pitOpaque, 0.38)),
+                new Stop(1, pitCorner));
+    }
 
     public record CellData(
             int fileIndex,
@@ -109,14 +124,15 @@ public final class BoardGridView {
         }
         Color baseStroke;
         double baseStrokeWidth;
-        if (PlayDraftNotationSupport.isStaticTrapSquare(pos)) {
+        boolean trap = PlayDraftNotationSupport.isStaticTrapSquare(pos);
+        if (trap) {
             baseStroke = Color.DARKRED;
             baseStrokeWidth = 2;
         } else {
             baseStroke = Color.gray(0.35);
             baseStrokeWidth = 1;
         }
-        bg.setFill(baseFill);
+        bg.setFill(trap ? trapChasmFill(baseFill) : baseFill);
         bg.setStroke(baseStroke);
         bg.setStrokeWidth(baseStrokeWidth);
 
@@ -360,7 +376,7 @@ public final class BoardGridView {
                             : Color.color(0.85, 0.78, 0.65);
                 }
                 boolean trap = PlayDraftNotationSupport.isStaticTrapSquare(pos);
-                bg.setFill(baseFill);
+                bg.setFill(trap ? trapChasmFill(baseFill) : baseFill);
                 bg.setStroke(trap ? Color.DARKRED : Color.gray(0.35));
                 bg.setStrokeWidth(trap ? 2 : 1);
                 bg.getStrokeDashArray().clear();

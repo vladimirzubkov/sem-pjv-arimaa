@@ -176,6 +176,8 @@ public class MainController implements BoardViewHost {
 
     /** When selected, draft cancel / in-turn Undo·Redo are disabled after any trap removal in the current prefix. */
     CheckMenuItem forbidCancelAfterTrapItem;
+    /** Gameplay: procedural wood / trap sounds during PLAY (default on). */
+    CheckMenuItem gameplaySoundEnabledItem;
     /** Gameplay: during computer PLAY turn animation, grow the last notation line step-by-step (prefix length). */
     CheckMenuItem showComputerTurnStepsInNotationItem;
 
@@ -219,7 +221,7 @@ public class MainController implements BoardViewHost {
     private final PlayPhaseUiHandler playPhase = new PlayPhaseUiHandler(this);
 
     private PlayerControllerKind goldPlayerKind = PlayerControllerKind.HUMAN;
-    private PlayerControllerKind silverPlayerKind = PlayerControllerKind.HUMAN;
+    private PlayerControllerKind silverPlayerKind = PlayerControllerKind.COMPUTER_LEVEL_1;
     /** Host UI: Silver assignment chosen by the peer. */
     private PlayerControllerKind networkPeerSilverKind;
     /** Client UI: Gold assignment chosen by the peer. */
@@ -1061,17 +1063,12 @@ public class MainController implements BoardViewHost {
 
     public void clearNetworkSessionAfterDisconnect() {
         goldPlayerKind = PlayerControllerKind.HUMAN;
-        silverPlayerKind = PlayerControllerKind.HUMAN;
+        silverPlayerKind = PlayerControllerKind.COMPUTER_LEVEL_1;
         networkPeerGoldKind = null;
         networkPeerSilverKind = null;
-        if (goldPlayerMenuGroup != null && goldPlayerMenuGroup.getToggles().getFirst() instanceof RadioMenuItem r) {
-            r.setSelected(true);
-        }
-        if (silverPlayerMenuGroup != null && silverPlayerMenuGroup.getToggles().getFirst() instanceof RadioMenuItem r2) {
-            r2.setSelected(true);
-        }
         syncNetworkMenuState();
         syncGameplayPlayerMenuDisabled();
+        syncGameplayPlayerMenuSelectionFromKinds();
         refreshPlayersAssignmentLabel();
     }
 
@@ -1320,9 +1317,11 @@ public class MainController implements BoardViewHost {
                                 Move submit = PlayDraftNotationSupport.copyMove(pl.move());
                                 gameController.restoreTrailingDraftTurnStartForSubmit();
                                 PlayerSide mover = g.getSideToMove();
+                                int trapsBeforeSfx = PlayProceduralSfx.totalTrapCaptures(g);
                                 if (!gameController.submitHumanMove(submit)) {
                                     yield false;
                                 }
+                                playSfxAfterBoardMutationIfEnabled(trapsBeforeSfx);
                                 gameController.recordCommittedPlayTurn(submit, in.notationLine().trim());
                                 notifyPlayChessClockAfterCommittedTurn(mover);
                                 clearPlayTurnUi();
@@ -1735,7 +1734,9 @@ public class MainController implements BoardViewHost {
             ph.replaceTrailingDraftStepsFromMove(full);
         }
         ph.setViewPrefix(tailIdx, k);
+        int trapsBeforeSfx = PlayProceduralSfx.totalTrapCaptures(g);
         gameController.applyPlayHistoryViewToGame();
+        playSfxAfterBoardMutationIfEnabled(trapsBeforeSfx);
         syncPlayPartialFromHistory();
         if (refreshUi) {
             refreshAll();
@@ -1777,6 +1778,7 @@ public class MainController implements BoardViewHost {
                 gameController.applyPlayHistoryViewToGame();
                 return;
             }
+            /* SFX already played per animated step in applyComputerPlayStepView; avoid second trap wail on submit. */
             gameController.recordCommittedPlayTurn(submit, notationLine);
             notifyPlayChessClockAfterCommittedTurn(mover);
             clearPlayTurnUi();
@@ -1798,6 +1800,14 @@ public class MainController implements BoardViewHost {
 
     Game game() {
         return gameController != null ? gameController.getGame() : null;
+    }
+
+    /** After {@link GameController#applyPlayHistoryViewToGame()} or successful {@link GameController#submitHumanMove}. */
+    void playSfxAfterBoardMutationIfEnabled(int trapsBefore) {
+        if (gameplaySoundEnabledItem == null || !gameplaySoundEnabledItem.isSelected()) {
+            return;
+        }
+        PlayProceduralSfx.playAfterBoardMutation(trapsBefore, game());
     }
 
     /**
@@ -1863,7 +1873,9 @@ public class MainController implements BoardViewHost {
             return;
         }
         gameController.getPlayHistory().replaceTrailingDraftStepsFromMove(playDraft.partial);
+        int trapsBeforeSfx = PlayProceduralSfx.totalTrapCaptures(game());
         gameController.applyPlayHistoryViewToGame();
+        playSfxAfterBoardMutationIfEnabled(trapsBeforeSfx);
         if (networkIntentApplyDepth == 0) {
             hostBroadcastSnapshotIfNeeded();
         }

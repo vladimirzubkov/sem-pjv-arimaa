@@ -359,7 +359,7 @@ public final class MainWindowLayoutBuilder {
         silverCpu2.setMnemonicParsing(true);
         silverCpu2.setToggleGroup(silverPlayerGroup);
         silverCpu2.setUserData(PlayerControllerKind.COMPUTER_LEVEL_2);
-        silverHuman.setSelected(true);
+        silverCpu1.setSelected(true);
         main.silverPlayerMenuGroup = silverPlayerGroup;
         silverPlayerGroup.selectedToggleProperty().addListener((obs, prev, toggled) -> {
             if (main.suppressGameplayPlayerMenuCallback) {
@@ -452,6 +452,10 @@ public final class MainWindowLayoutBuilder {
         main.forbidCancelAfterTrapItem.setSelected(false);
         main.forbidCancelAfterTrapItem.selectedProperty().addListener((obs, prev, now) -> Platform.runLater(main::refreshAll));
         menuGameplay.getItems().add(main.forbidCancelAfterTrapItem);
+
+        main.gameplaySoundEnabledItem = new CheckMenuItem("Zvuky tahů (syntéza)");
+        main.gameplaySoundEnabledItem.setSelected(true);
+        menuGameplay.getItems().add(main.gameplaySoundEnabledItem);
 
         main.showComputerTurnStepsInNotationItem =
                 new CheckMenuItem("Zobrazit jednotlivé kroky počítače při tahu");

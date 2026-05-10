@@ -2,6 +2,7 @@ package cz.cvut.fel.pjv.arimaa.ui;
 
 import ch.qos.logback.classic.Level;
 import cz.cvut.fel.pjv.arimaa.logging.LoggingSupport;
+import cz.cvut.fel.pjv.arimaa.ui.help.HelpMenuFactory;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
@@ -533,8 +534,10 @@ public final class MainWindowLayoutBuilder {
             main.syncLogToFileMenuSelection();
         });
 
+        Menu menuNapoveda = HelpMenuFactory.buildMenu(main.stage);
+
         MenuBar menuBar = new MenuBar();
-        menuBar.getMenus().addAll(menuHra, menuTah, menuGameplay, menuSit, menuLog);
+        menuBar.getMenus().addAll(menuHra, menuTah, menuGameplay, menuSit, menuLog, menuNapoveda);
         return menuBar;
     }
 }

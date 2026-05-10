@@ -16,9 +16,10 @@ public final class PlaySceneKeyHandler {
     private PlaySceneKeyHandler() {}
 
     /**
-     * Capture phase: Esc (cancel draft), arrows / WASD (when a piece is selected), Tab / Shift+Tab (pull targets, else push
-     * targets, else own pieces), Ctrl+Tab / Ctrl+Shift+Tab (always own pieces; e.g. during push), Space (complete pull), Enter;
-     * SETUP: Space / Ctrl+Space / Ctrl+Enter; when the mover is the computer: Space toggles autoplay pause.
+     * Capture phase: Esc (cancel draft), arrows / WASD (when a piece is selected), Tab / Shift+Tab (unified pull then push
+     * targets, else own pieces), Ctrl+Tab / Ctrl+Shift+Tab (always own pieces; e.g. during push), Space (focused pull or push,
+     * else legacy first pull then push), Enter; SETUP: Space / Ctrl+Space / Ctrl+Enter; when the mover is the computer: Space
+     * toggles autoplay pause.
      */
     public static void install(Scene scene, MainController main) {
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
@@ -97,13 +98,8 @@ public final class PlaySceneKeyHandler {
             }
             if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
                 PlayTargetBundle targets = main.playTargetBundle(g);
-                if (!targets.pullWeakSquares().isEmpty()) {
-                    main.activatePlayPullFromKeyboard(g);
-                    e.consume();
-                    return;
-                }
-                if (!targets.pushFirstStepTargets().isEmpty()) {
-                    main.activatePlayPushFromKeyboard(g);
+                if (!targets.pullWeakSquares().isEmpty() || !targets.pushFirstOptions().isEmpty()) {
+                    main.activatePlayPullOrPushFromKeyboard(g);
                     e.consume();
                 }
                 return;

@@ -13,12 +13,15 @@ public final class PlayTurnDraftState {
     public Position activeSegmentOrigin;
     public Position keyboardPullFocus;
     public Position keyboardPushFocus;
+    /** When non-null with {@link #keyboardPushFocus}, disambiguates multiple push bundles to the same first-step cell. */
+    public Position keyboardPushWeakFrom;
 
     public void clearTurnPositions() {
         nextFrom = null;
         activeSegmentOrigin = null;
         keyboardPullFocus = null;
         keyboardPushFocus = null;
+        keyboardPushWeakFrom = null;
     }
 
     public void clearPartialAndTurnPositions() {

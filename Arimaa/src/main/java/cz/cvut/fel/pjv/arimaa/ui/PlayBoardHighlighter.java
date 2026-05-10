@@ -9,6 +9,7 @@ import javafx.scene.paint.Paint;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.shape.StrokeType;
 
+import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -34,8 +35,12 @@ final class PlayBoardHighlighter {
     private static final double ORIGIN_STROKE_W = 2.5;
     private static final double TARGET_STROKE_W = 2.5;
     private static final double SELECTED_STROKE_W = 3;
-    private static final double PULL_STROKE_W = 3;
+    /** Stroke width for pull-ring and push first-step cell outlines (aligned). */
+    private static final double SPECIAL_MOVE_STROKE_W = 3;
+    /** Keyboard focus ring on the push destination cell (first step). */
     private static final double FOCUS_STROKE_W = 4;
+    /** Thinner ring on the pushed opponent piece when the push option is known (half of {@link #FOCUS_STROKE_W}). */
+    private static final double PUSH_FOCUS_WEAKER_STROKE_W = FOCUS_STROKE_W / 2;
 
     private PlayBoardHighlighter() {}
 
@@ -49,9 +54,7 @@ final class PlayBoardHighlighter {
         if (draft.keyboardPullFocus != null && (pullTargets.isEmpty() || !pullTargets.contains(draft.keyboardPullFocus))) {
             draft.keyboardPullFocus = null;
         }
-        if (draft.keyboardPushFocus != null && (pushTargets.isEmpty() || !pushTargets.contains(draft.keyboardPushFocus))) {
-            draft.keyboardPushFocus = null;
-        }
+        reconcilePushKeyboardFocus(draft, targets);
         PlayerSide mover = g.getSideToMove();
         Position origin = draft.activeSegmentOrigin;
         if (origin != null && !origin.equals(draft.nextFrom)) {
@@ -99,14 +102,14 @@ final class PlayBoardHighlighter {
             Color stroke = isPush ? PUSH_STROKE : SLIDE_STROKE;
             tbg.setFill(cellBaseFill(tdata).interpolate(tint, isPush ? 0.5 : 0.48));
             tbg.setStroke(stroke);
-            tbg.setStrokeWidth(TARGET_STROKE_W);
+            tbg.setStrokeWidth(isPush ? SPECIAL_MOVE_STROKE_W : TARGET_STROKE_W);
             tbg.setStrokeType(StrokeType.INSIDE);
         }
         for (Position opp : pullTargets) {
             BoardGridView.CellData odata = cellAt.apply(opp);
             Rectangle obg = odata.background();
             obg.setStroke(PULL_RING);
-            obg.setStrokeWidth(PULL_STROKE_W);
+            obg.setStrokeWidth(SPECIAL_MOVE_STROKE_W);
             obg.setStrokeType(StrokeType.INSIDE);
         }
         if (draft.keyboardPullFocus != null && pullTargets.contains(draft.keyboardPullFocus)) {
@@ -118,12 +121,70 @@ final class PlayBoardHighlighter {
             kbg.setStrokeType(StrokeType.INSIDE);
         }
         if (draft.keyboardPushFocus != null && pushTargets.contains(draft.keyboardPushFocus)) {
-            BoardGridView.CellData pdata = cellAt.apply(draft.keyboardPushFocus);
-            Rectangle pbg = pdata.background();
-            pbg.setStroke(KEYBOARD_FOCUS_RING);
-            pbg.setStrokeWidth(FOCUS_STROKE_W);
-            pbg.getStrokeDashArray().clear();
-            pbg.setStrokeType(StrokeType.INSIDE);
+            Position weakRing = pushFocusWeakerCell(draft, targets);
+            if (weakRing != null) {
+                BoardGridView.CellData wdata = cellAt.apply(weakRing);
+                Rectangle wbg = wdata.background();
+                wbg.setStroke(KEYBOARD_FOCUS_RING);
+                wbg.setStrokeWidth(PUSH_FOCUS_WEAKER_STROKE_W);
+                wbg.getStrokeDashArray().clear();
+                wbg.setStrokeType(StrokeType.INSIDE);
+            }
+            BoardGridView.CellData ddata = cellAt.apply(draft.keyboardPushFocus);
+            Rectangle dbg = ddata.background();
+            dbg.setStroke(KEYBOARD_FOCUS_RING);
+            dbg.setStrokeWidth(FOCUS_STROKE_W);
+            dbg.getStrokeDashArray().clear();
+            dbg.setStrokeType(StrokeType.INSIDE);
+        }
+    }
+
+    /**
+     * Cell of the pushed weaker piece for the thin focus ring: explicit draft pair, or the only weaker matching this
+     * destination.
+     */
+    private static Position pushFocusWeakerCell(PlayTurnDraftState draft, PlayTargetBundle targets) {
+        if (draft.keyboardPushFocus == null) {
+            return null;
+        }
+        List<PushFirstOption> match = targets.pushFirstOptions().stream()
+                .filter(o -> o.firstStepTo().equals(draft.keyboardPushFocus))
+                .toList();
+        if (match.isEmpty()) {
+            return null;
+        }
+        if (draft.keyboardPushWeakFrom != null) {
+            for (PushFirstOption o : match) {
+                if (o.weakerFrom().equals(draft.keyboardPushWeakFrom)) {
+                    return o.weakerFrom();
+                }
+            }
+            return null;
+        }
+        if (match.size() == 1) {
+            return match.get(0).weakerFrom();
+        }
+        return null;
+    }
+
+    private static void reconcilePushKeyboardFocus(PlayTurnDraftState draft, PlayTargetBundle targets) {
+        if (draft.keyboardPushFocus == null) {
+            draft.keyboardPushWeakFrom = null;
+            return;
+        }
+        Set<Position> pushTargets = targets.pushFirstStepTargets();
+        if (pushTargets.isEmpty() || !pushTargets.contains(draft.keyboardPushFocus)) {
+            draft.keyboardPushFocus = null;
+            draft.keyboardPushWeakFrom = null;
+            return;
+        }
+        if (draft.keyboardPushWeakFrom != null) {
+            boolean ok = targets.pushFirstOptions().stream()
+                    .anyMatch(o -> o.firstStepTo().equals(draft.keyboardPushFocus)
+                            && o.weakerFrom().equals(draft.keyboardPushWeakFrom));
+            if (!ok) {
+                draft.keyboardPushWeakFrom = null;
+            }
         }
     }
 

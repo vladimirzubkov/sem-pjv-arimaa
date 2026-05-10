@@ -1979,10 +1979,19 @@ public class MainController implements BoardViewHost {
     }
 
     /**
-     * Tab / Shift+Tab: cycle pull targets, else push first-step targets, else own pieces.
+     * Tab / Shift+Tab: one ring of pull targets (sorted), then each legal push option (sorted; same destination kept as
+     * separate stops when different weaker pieces can be displaced there; pull wins on overlapping cell), else own pieces.
      */
     void advancePlayTabFocus(Game g, boolean reverse) {
         playPhase.advancePlayTabFocus(g, reverse);
+    }
+
+    /**
+     * Space when pull and/or push targets exist: uses {@code keyboardPullFocus} or push focus pair
+     * ({@code keyboardPushFocus}, {@code keyboardPushWeakFrom}) when valid; otherwise first pull, else first push.
+     */
+    void activatePlayPullOrPushFromKeyboard(Game g) {
+        playPhase.activatePlayPullOrPushFromKeyboard(g);
     }
 
     /** Space: complete pull using keyboard focus or first pull target in visual order. */

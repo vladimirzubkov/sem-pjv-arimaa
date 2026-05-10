@@ -83,6 +83,7 @@ final class PlayDraftUiCoordinator {
         main.playDraft.activeSegmentOrigin = null;
         main.playDraft.keyboardPullFocus = null;
         main.playDraft.keyboardPushFocus = null;
+        main.playDraft.keyboardPushWeakFrom = null;
         main.appendHistory(new GameHistoryEvent.DraftCleared());
         main.setStatus("Rozpracovaný tah zrušen (Vpřed obnoví).");
         main.refreshAll();

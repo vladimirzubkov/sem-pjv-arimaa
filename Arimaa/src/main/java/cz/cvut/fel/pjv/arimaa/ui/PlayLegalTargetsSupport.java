@@ -10,6 +10,7 @@ import cz.cvut.fel.pjv.arimaa.model.enums.StepKind;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -102,7 +103,7 @@ public final class PlayLegalTargetsSupport {
             }
         }
 
-        Set<Position> pushFirst = new HashSet<>();
+        List<PushFirstOption> pushOptions = new ArrayList<>();
         if (remaining >= 2) {
             for (List<Step> bundle : DefaultRuleEngine.enumerateStepBundles(occ, side)) {
                 if (bundle.size() > remaining) {
@@ -115,7 +116,8 @@ public final class PlayLegalTargetsSupport {
                     continue;
                 }
                 if (isValidSuffix.test(g, bundle)) {
-                    pushFirst.add(bundle.get(0).getTo());
+                    Step d0 = bundle.get(0);
+                    pushOptions.add(new PushFirstOption(d0.getTo(), d0.getFrom()));
                 }
             }
         }
@@ -147,6 +149,6 @@ public final class PlayLegalTargetsSupport {
             }
         }
 
-        return new PlayTargetBundle(slides, pushFirst, pulls);
+        return new PlayTargetBundle(slides, pushOptions, pulls);
     }
 }

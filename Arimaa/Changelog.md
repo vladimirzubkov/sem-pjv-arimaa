@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.22
+
+- **Klávesnice (PLAY):** jeden cyklus **Tab** / Shift+Tab pro **tahnutí** a pak všechny dostupné varianty **tlačení** — včetně tlačení na **stejné prázdné pole** od různých soupeřových figur nebo **dvou směrů** u jedné figury; **mezerník** respektuje právě zvolenou variantu (ne vždy automaticky tahnutí, když jde o tlačení).
+- **Deska (PLAY):** u tlačení z klávesnice **dva žluté rámečky** — tenčí ukazuje **tlačenou** figuru, tlustší **cílové pole** prvního kroku; sjednocení výraznosti obrysů tlačení s tahnutím tam, kde to hráče nejvíc zajímá.
+- **Nápověda:** aktualizované texty **Ovládání** a stručná **Pravidla** v souladu s chováním aplikace; menu **Nápověda** a dialog **O programu** (včetně vloženého náhledu videa).
+- **Sestavení:** závislost **javafx-web** pro zobrazení nápovědy a náhledu v dialogu O programu.
+
 ## 0.9.21
 
 - **Gameplay:** procedurální **zvuky tahů** (`javax.sound.sampled`, `PlayProceduralSfx`) — krátký „dřevěný“ úder po kroku a samostatný efekt při novém pádu do pasti; přehrávání na virtuálním vlákně; položka **Zvuky tahů (syntéza)** (výchozí zapnuto); **bez druhého** přehrání efektu pasti při odeslání celého tahu (už zněl po krocích náhledu).

@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -27,6 +28,20 @@ import java.util.Set;
 final class PlayPhaseUiHandler {
 
     private static final Logger log = LoggerFactory.getLogger(PlayPhaseUiHandler.class);
+
+    private record PullPushTabEntry(Position pullPos, PushFirstOption pushOpt) {
+        static PullPushTabEntry pull(Position p) {
+            return new PullPushTabEntry(Objects.requireNonNull(p), null);
+        }
+
+        static PullPushTabEntry push(PushFirstOption o) {
+            return new PullPushTabEntry(null, Objects.requireNonNull(o));
+        }
+
+        boolean isPull() {
+            return pullPos != null;
+        }
+    }
 
     private final MainController main;
 
@@ -124,6 +139,7 @@ final class PlayPhaseUiHandler {
     void advancePlayTabFocusOwnPiecesOnly(Game g, boolean reverse) {
         main.playDraft.keyboardPullFocus = null;
         main.playDraft.keyboardPushFocus = null;
+        main.playDraft.keyboardPushWeakFrom = null;
         selectNextOwnPieceForPlayKeyboard(g, reverse, "Ctrl+Tab");
     }
 
@@ -147,56 +163,137 @@ final class PlayPhaseUiHandler {
         main.refreshAll();
     }
 
+    /**
+     * Pull squares first (sorted), then each legal push option (same first-step cell kept as separate stops if several
+     * weaker pieces can be displaced there); push entries whose first-step cell is also a pull target are skipped (pull
+     * wins).
+     */
+    private List<PullPushTabEntry> buildUnifiedPullPushTabRing(PlayTargetBundle tabTargets, Game g) {
+        Set<Position> pulls = tabTargets.pullWeakSquares();
+        List<PullPushTabEntry> ring = new ArrayList<>();
+        List<Position> pullList = new ArrayList<>(pulls);
+        pullList.sort((a, b) -> comparePositionKeyboardCycle(a, b, g));
+        for (Position p : pullList) {
+            ring.add(PullPushTabEntry.pull(p));
+        }
+        List<PushFirstOption> pushOrdered = new ArrayList<>(tabTargets.pushFirstOptions());
+        pushOrdered.sort((a, b) -> {
+            int c = comparePositionKeyboardCycle(a.firstStepTo(), b.firstStepTo(), g);
+            if (c != 0) {
+                return c;
+            }
+            return comparePositionKeyboardCycle(a.weakerFrom(), b.weakerFrom(), g);
+        });
+        for (PushFirstOption po : pushOrdered) {
+            if (!pulls.contains(po.firstStepTo())) {
+                ring.add(PullPushTabEntry.push(po));
+            }
+        }
+        return ring;
+    }
+
+    private void applyPullPushTabEntry(PullPushTabEntry entry) {
+        Objects.requireNonNull(entry, "entry");
+        if (entry.isPull()) {
+            main.playDraft.keyboardPullFocus = entry.pullPos();
+            main.playDraft.keyboardPushFocus = null;
+            main.playDraft.keyboardPushWeakFrom = null;
+        } else {
+            PushFirstOption o = Objects.requireNonNull(entry.pushOpt(), "pushOpt");
+            main.playDraft.keyboardPullFocus = null;
+            main.playDraft.keyboardPushFocus = o.firstStepTo();
+            main.playDraft.keyboardPushWeakFrom = o.weakerFrom();
+        }
+    }
+
+    private void setStatusForPullPushTabFocus(boolean pull) {
+        if (pull) {
+            main.setStatus(
+                    "Tahnutí (fialová) — mezerník dokončí výběr soupeře; Tab / Shift+Tab = další cíl (tahnutí nebo tlačení).");
+        } else {
+            main.setStatus(
+                    "Tlačení (oranžová) — tlustý žlutý rámeček = cílové pole prvního kroku, tenčí = tlačená soupeřova figura; mezerník provede výběr; Tab = další varianta.");
+        }
+    }
+
     void advancePlayTabFocus(Game g, boolean reverse) {
         PlayTargetBundle tabTargets = main.playTargetBundle(g);
-        Set<Position> pulls = tabTargets.pullWeakSquares();
-        if (!pulls.isEmpty()) {
+        List<PullPushTabEntry> ring = buildUnifiedPullPushTabRing(tabTargets, g);
+        if (ring.isEmpty()) {
+            main.playDraft.keyboardPullFocus = null;
             main.playDraft.keyboardPushFocus = null;
-            List<Position> list = new ArrayList<>(pulls);
-            list.sort((a, b) -> comparePositionKeyboardCycle(a, b, g));
-            if (main.playDraft.keyboardPullFocus != null && !pulls.contains(main.playDraft.keyboardPullFocus)) {
-                main.playDraft.keyboardPullFocus = null;
-            }
-            int idx;
-            if (main.playDraft.keyboardPullFocus == null) {
-                idx = reverse ? list.size() - 1 : 0;
-            } else {
-                int cur = list.indexOf(main.playDraft.keyboardPullFocus);
-                if (cur < 0) {
-                    cur = 0;
-                }
-                idx = reverse ? (cur - 1 + list.size()) % list.size() : (cur + 1) % list.size();
-            }
-            main.playDraft.keyboardPullFocus = list.get(idx);
-            main.setStatus("Tahnutí — mezerník dokončí výběr soupeře (Tab = další figura).");
-            main.refreshAll();
+            main.playDraft.keyboardPushWeakFrom = null;
+            selectNextOwnPieceForPlayKeyboard(g, reverse, "Tab");
             return;
         }
-        main.playDraft.keyboardPullFocus = null;
-        Set<Position> pushT = tabTargets.pushFirstStepTargets();
+        int curIdx = -1;
+        if (main.playDraft.keyboardPullFocus != null) {
+            for (int i = 0; i < ring.size(); i++) {
+                PullPushTabEntry e = ring.get(i);
+                if (e.isPull() && e.pullPos().equals(main.playDraft.keyboardPullFocus)) {
+                    curIdx = i;
+                    break;
+                }
+            }
+        } else if (main.playDraft.keyboardPushFocus != null) {
+            for (int i = 0; i < ring.size(); i++) {
+                PullPushTabEntry e = ring.get(i);
+                if (e.isPull()) {
+                    continue;
+                }
+                PushFirstOption o = e.pushOpt();
+                if (o.firstStepTo().equals(main.playDraft.keyboardPushFocus)
+                        && Objects.equals(main.playDraft.keyboardPushWeakFrom, o.weakerFrom())) {
+                    curIdx = i;
+                    break;
+                }
+            }
+        }
+        int nextIdx;
+        if (curIdx < 0) {
+            nextIdx = reverse ? ring.size() - 1 : 0;
+        } else {
+            nextIdx = reverse ? (curIdx - 1 + ring.size()) % ring.size() : (curIdx + 1) % ring.size();
+        }
+        PullPushTabEntry next = ring.get(nextIdx);
+        applyPullPushTabEntry(next);
+        setStatusForPullPushTabFocus(next.isPull());
+        main.refreshAll();
+    }
+
+    private boolean keyboardPushDraftMatches(PlayTargetBundle targets) {
+        if (main.playDraft.keyboardPushFocus == null) {
+            return false;
+        }
+        Position f = main.playDraft.keyboardPushFocus;
+        Position w = main.playDraft.keyboardPushWeakFrom;
+        return targets.pushFirstOptions().stream()
+                .anyMatch(o -> o.firstStepTo().equals(f) && (w == null || o.weakerFrom().equals(w)));
+    }
+
+    /**
+     * Space during PLAY when pull and/or push targets exist: uses keyboard focus if set; otherwise first pull, else
+     * first push.
+     */
+    void activatePlayPullOrPushFromKeyboard(Game g) {
+        PlayTargetBundle targets = main.playTargetBundle(g);
+        Set<Position> pulls = targets.pullWeakSquares();
+        Set<Position> pushT = targets.pushFirstStepTargets();
+        if (main.playDraft.keyboardPullFocus != null && pulls.contains(main.playDraft.keyboardPullFocus)) {
+            activatePlayPullFromKeyboard(g);
+            return;
+        }
+        if (keyboardPushDraftMatches(targets)) {
+            activatePlayPushFromKeyboard(g);
+            return;
+        }
+        if (!pulls.isEmpty()) {
+            activatePlayPullFromKeyboard(g);
+            return;
+        }
         if (!pushT.isEmpty()) {
-            List<Position> plist = new ArrayList<>(pushT);
-            plist.sort((a, b) -> comparePositionKeyboardCycle(a, b, g));
-            if (main.playDraft.keyboardPushFocus != null && !pushT.contains(main.playDraft.keyboardPushFocus)) {
-                main.playDraft.keyboardPushFocus = null;
-            }
-            int pidx;
-            if (main.playDraft.keyboardPushFocus == null) {
-                pidx = reverse ? plist.size() - 1 : 0;
-            } else {
-                int cur = plist.indexOf(main.playDraft.keyboardPushFocus);
-                if (cur < 0) {
-                    cur = 0;
-                }
-                pidx = reverse ? (cur - 1 + plist.size()) % plist.size() : (cur + 1) % plist.size();
-            }
-            main.playDraft.keyboardPushFocus = plist.get(pidx);
-            main.setStatus("Tlačení — mezerník provede výběr (Tab = další oranžový cíl).");
-            main.refreshAll();
-            return;
+            activatePlayPushFromKeyboard(g);
         }
-        main.playDraft.keyboardPushFocus = null;
-        selectNextOwnPieceForPlayKeyboard(g, reverse, "Tab");
     }
 
     private void setStatusOwnPieceSelected(Game g, String keyboardLabelOrNull) {
@@ -227,16 +324,39 @@ final class PlayPhaseUiHandler {
     }
 
     void activatePlayPushFromKeyboard(Game g) {
-        Set<Position> pushT = main.playTargetBundle(g).pushFirstStepTargets();
-        if (pushT.isEmpty()) {
+        List<PushFirstOption> opts = sortedPushFirstOptions(main.playTargetBundle(g), g);
+        if (opts.isEmpty()) {
             return;
         }
-        List<Position> sorted = new ArrayList<>(pushT);
-        sorted.sort((a, b) -> comparePositionKeyboardCycle(a, b, g));
-        Position pos = main.playDraft.keyboardPushFocus != null && pushT.contains(main.playDraft.keyboardPushFocus)
-                ? main.playDraft.keyboardPushFocus
-                : sorted.get(0);
-        handlePlayBoardActivation(pos.getFileIndex(), pos.getRankIndex());
+        PushFirstOption chosen = resolveChosenPushOption(opts, main.playDraft);
+        main.playDraft.keyboardPushFocus = chosen.firstStepTo();
+        main.playDraft.keyboardPushWeakFrom = chosen.weakerFrom();
+        handlePlayBoardActivation(chosen.firstStepTo().getFileIndex(), chosen.firstStepTo().getRankIndex());
+    }
+
+    private List<PushFirstOption> sortedPushFirstOptions(PlayTargetBundle tabTargets, Game g) {
+        List<PushFirstOption> out = new ArrayList<>(tabTargets.pushFirstOptions());
+        out.sort((a, b) -> {
+            int c = comparePositionKeyboardCycle(a.firstStepTo(), b.firstStepTo(), g);
+            if (c != 0) {
+                return c;
+            }
+            return comparePositionKeyboardCycle(a.weakerFrom(), b.weakerFrom(), g);
+        });
+        return out;
+    }
+
+    private static PushFirstOption resolveChosenPushOption(List<PushFirstOption> opts, PlayTurnDraftState draft) {
+        Position f = draft.keyboardPushFocus;
+        Position w = draft.keyboardPushWeakFrom;
+        if (f != null) {
+            for (PushFirstOption o : opts) {
+                if (o.firstStepTo().equals(f) && (w == null || o.weakerFrom().equals(w))) {
+                    return o;
+                }
+            }
+        }
+        return opts.get(0);
     }
 
     void handlePlayBoardActivation(int modelFile, int modelRank) {
@@ -258,6 +378,9 @@ final class PlayPhaseUiHandler {
                 main.discardDraftRedoBranch();
                 main.playDraft.nextFrom = pos;
                 main.playDraft.activeSegmentOrigin = pos;
+                main.playDraft.keyboardPullFocus = null;
+                main.playDraft.keyboardPushFocus = null;
+                main.playDraft.keyboardPushWeakFrom = null;
                 setStatusOwnPieceSelected(g, null);
                 main.refreshAll();
                 return;
@@ -330,6 +453,10 @@ final class PlayPhaseUiHandler {
                     continue;
                 }
                 if (!bundle.get(0).getTo().equals(pos)) {
+                    continue;
+                }
+                Position weakFilter = main.playDraft.keyboardPushWeakFrom;
+                if (weakFilter != null && !weakFilter.equals(bundle.get(0).getFrom())) {
                     continue;
                 }
                 if (!main.isValidPlaySuffixFromViewHalfStart(g, bundle)) {

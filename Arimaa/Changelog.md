@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.23
+
+- **Historie tahů:** po **novém tahu** zůstává **automatické posunutí** (`scrollTo`) tak, aby byl vidět aktuální řádek; při **kliknutí na řádek** v historii nebo při **Page Up / Page Down** se posuvník už **sám neposouvá** — lze listovat bez skoků.
+- **Klávesnice (PLAY / konec partie):** **Page Up** / **Page Down** posunou výběr v „Historie tahů“ po stránce (ne u síťového klienta).
+- **Konec partie:** při zapnutých **zvucích tahů** lze přehrát volitelné soubory **`assets/gold-victory.mp4`** a **`assets/silver-victory.mp4`** (adresář vedle spuštění aplikace); chybí-li složka nebo soubor, nic se neděje.
+- **Sestavení:** závislost **javafx-media** pro přehrávání výherních klipů.
+
 ## 0.9.22
 
 - **Klávesnice (PLAY):** jeden cyklus **Tab** / Shift+Tab pro **tahnutí** a pak všechny dostupné varianty **tlačení** — včetně tlačení na **stejné prázdné pole** od různých soupeřových figur nebo **dvou směrů** u jedné figury; **mezerník** respektuje právě zvolenou variantu (ne vždy automaticky tahnutí, když jde o tlačení).

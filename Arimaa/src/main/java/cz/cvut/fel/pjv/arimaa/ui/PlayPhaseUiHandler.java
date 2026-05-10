@@ -511,6 +511,7 @@ final class PlayPhaseUiHandler {
             PlayerSide w = g.getMatchWinner();
             log.info("play turn ended: GAME_OVER winner={}", w);
             main.setStatus(w == null ? "Konec hry." : "Konec hry — vyhrál %s.".formatted(MainController.sideName(w)));
+            main.playVictoryWinnerMediaIfEnabled(w);
         } else {
             log.info("play turn ended: state={} sideToMove={}", g.getState(), g.getSideToMove());
             main.setStatus("Tah proveden.");

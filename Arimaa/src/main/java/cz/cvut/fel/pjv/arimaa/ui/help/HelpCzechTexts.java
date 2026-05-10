@@ -8,7 +8,7 @@ public final class HelpCzechTexts {
     private HelpCzechTexts() {}
 
     /** Fallback when JAR manifest has no {@code Implementation-Version} (e.g. IDE run). */
-    public static final String FALLBACK_APP_VERSION = "0.9.22";
+    public static final String FALLBACK_APP_VERSION = "0.9.23";
 
     public static final String TITLE_PRAVIDLA = "Pravidla hry";
     public static final String TITLE_OVLADANI = "Ovládání";
@@ -48,6 +48,7 @@ public final class HelpCzechTexts {
                     • Esc — zrušit rozpracovaný tah (draft).
                     • Tab / Shift+Tab — jeden cyklus cílů: nejdřív všechna tahnutí (pull), pak každá legální varianta tlačení (i na stejnou buňku z jiné soupeřovy figury), jinak vlastní figury.
                     • Ctrl+Tab / Ctrl+Shift+Tab — vždy jen vlastní figury (např. při tlačení).
+                    • Page Up / Page Down — posun výběru v „Historie tahů“ po stránce (bez posunu posuvníku jako po kliknutí).
                     • Mezerník — tahnutí nebo tlačení podle žlutého fokusu z Tabu (u tlačení tlustý rámeček na cílovém poli, tenčí na tlačené figuře); bez fokusu nejdřív pull, jinak push.
                     • Šipky nebo WASD — pohyb po šachovnici po výběru figury.
 

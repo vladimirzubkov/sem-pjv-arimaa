@@ -3,8 +3,6 @@ package cz.cvut.fel.pjv.arimaa.ui;
 import ch.qos.logback.classic.Level;
 import cz.cvut.fel.pjv.arimaa.logging.LoggingSupport;
 import cz.cvut.fel.pjv.arimaa.ui.help.HelpMenuFactory;
-import cz.cvut.fel.pjv.arimaa.model.Game;
-import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
 import javafx.beans.binding.Bindings;
@@ -110,34 +108,10 @@ public final class MainWindowLayoutBuilder {
         main.notationHistoryList.setStyle("-fx-font-family: Consolas; -fx-font-size: 11px;");
         main.notationHistoryList.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
         main.notationHistoryList.getSelectionModel().selectedIndexProperty().addListener((obs, o, n) -> {
-            if (main.suppressHistoryListEvents
-                    || n == null
-                    || n.intValue() < 0
-                    || main.gameController == null
-                    || main.isComputerPlayPending()
-                    || main.isNetworkClient()) {
+            if (main.suppressHistoryListEvents || n == null || n.intValue() < 0) {
                 return;
             }
-            Game g = main.game();
-            if (!MainUiLayoutPhase.showCapturesAndNotationHistory(g)) {
-                return;
-            }
-            PlayTurnHistory ph = main.gameController.getPlayHistory();
-            if (!ph.isBootstrapped()) {
-                return;
-            }
-            List<Integer> vis = ph.visibleHalfIndicesForDisplay(true);
-            int idx = n.intValue();
-            if (idx >= vis.size()) {
-                return;
-            }
-            main.cancelComputerPlayForHistoryScrub();
-            ph.navigateToVisibleLine(idx, true);
-            main.gameController.applyPlayHistoryViewToGame();
-            main.syncPlayPartialFromHistory();
-            main.notifyPlayChessClockHistoryNavigation();
-            main.refreshAll();
-            main.hostBroadcastSnapshotIfNeeded();
+            main.applyNotationHistoryListSelection(n.intValue());
         });
     }
 

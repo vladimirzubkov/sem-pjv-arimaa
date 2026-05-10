@@ -18,8 +18,8 @@ public final class PlaySceneKeyHandler {
     /**
      * Capture phase: Esc (cancel draft), arrows / WASD (when a piece is selected), Tab / Shift+Tab (unified pull then push
      * targets, else own pieces), Ctrl+Tab / Ctrl+Shift+Tab (always own pieces; e.g. during push), Space (focused pull or push,
-     * else legacy first pull then push), Enter; SETUP: Space / Ctrl+Space / Ctrl+Enter; when the mover is the computer: Space
-     * toggles autoplay pause.
+     * else legacy first pull then push), Enter; Page Up / Page Down step through „Historie tahů“ by page (PLAY and after
+     * the match); SETUP: Space / Ctrl+Space / Ctrl+Enter; when the mover is the computer: Space toggles autoplay pause.
      */
     public static void install(Scene scene, MainController main) {
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
@@ -60,6 +60,17 @@ public final class PlaySceneKeyHandler {
                         e.consume();
                     }
                     return;
+                }
+                return;
+            }
+            if (g != null
+                    && MainUiLayoutPhase.showCapturesAndNotationHistory(g)
+                    && (e.getCode() == KeyCode.PAGE_UP || e.getCode() == KeyCode.PAGE_DOWN)) {
+                if (main.gameController != null
+                        && main.gameController.getPlayHistory().isBootstrapped()
+                        && !main.isNetworkClient()) {
+                    main.navigateNotationHistoryByPage(e.getCode() == KeyCode.PAGE_DOWN ? 1 : -1);
+                    e.consume();
                 }
                 return;
             }

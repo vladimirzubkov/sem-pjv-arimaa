@@ -36,7 +36,7 @@ final class PlaySidePanelController {
         fillCaptureFlow(main.silverCapturesPane, g, PlayerSide.SILVER);
     }
 
-    void refreshNotationHistory() {
+    void refreshNotationHistory(boolean autoScrollToSelected) {
         if (main.gameController == null) {
             main.notationHistoryItems.clear();
             return;
@@ -55,16 +55,17 @@ final class PlaySidePanelController {
             }
         }
         main.suppressHistoryListEvents = false;
-        // After setAll/select, scroll on next pulse so the ListView has laid out cells (Gold + Silver + human moves).
-        Platform.runLater(
-                () -> {
-                    int i = main.notationHistoryList.getSelectionModel().getSelectedIndex();
-                    if (i >= 0 && i < main.notationHistoryItems.size()) {
-                        main.notationHistoryList.scrollTo(i);
-                    } else if (!main.notationHistoryItems.isEmpty()) {
-                        main.notationHistoryList.scrollTo(main.notationHistoryItems.size() - 1);
-                    }
-                });
+        if (autoScrollToSelected) {
+            Platform.runLater(
+                    () -> {
+                        int i = main.notationHistoryList.getSelectionModel().getSelectedIndex();
+                        if (i >= 0 && i < main.notationHistoryItems.size()) {
+                            main.notationHistoryList.scrollTo(i);
+                        } else if (!main.notationHistoryItems.isEmpty()) {
+                            main.notationHistoryList.scrollTo(main.notationHistoryItems.size() - 1);
+                        }
+                    });
+        }
     }
 
     void refreshPlayActionButtons(Game g) {

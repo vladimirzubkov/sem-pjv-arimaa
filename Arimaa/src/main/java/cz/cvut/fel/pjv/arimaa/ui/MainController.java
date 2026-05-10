@@ -263,6 +263,12 @@ public class MainController implements BoardViewHost {
     final FlowPane goldCapturesPane = new FlowPane(4, 4);
     final FlowPane silverCapturesPane = new FlowPane(4, 4);
     boolean suppressHistoryListEvents;
+    /**
+     * When {@code true}, the next {@link PlaySidePanelController#refreshNotationHistory(boolean)} inside
+     * {@link #refreshAll()} scrolls the notation list to the selected row. Cleared before
+     * {@link #applyNotationHistoryListSelection(int)} so clicks and Page Up/Down do not jump the scroll position.
+     */
+    private boolean notationHistoryAutoScrollOnNextRefresh = true;
     final ObservableList<String> notationHistoryItems = FXCollections.observableArrayList();
     final ListView<String> notationHistoryList = new ListView<>(notationHistoryItems);
     final Label clockGoldTotalLabel = new Label("00:00");
@@ -560,7 +566,9 @@ public class MainController implements BoardViewHost {
         setupSidePanel.refreshSetupActionButtons(g);
         playSidePanel.refreshPlayActionButtons(g);
         playSidePanel.refreshCapturedPanel(g);
-        playSidePanel.refreshNotationHistory();
+        boolean nhScroll = notationHistoryAutoScrollOnNextRefresh;
+        notationHistoryAutoScrollOnNextRefresh = true;
+        playSidePanel.refreshNotationHistory(nhScroll);
         refreshHandLabel(g);
         updateWindowTitle(g);
         refreshHistoryMenus();
@@ -1332,6 +1340,7 @@ public class MainController implements BoardViewHost {
                                             w == null
                                                     ? "Konec hry."
                                                     : "Konec hry — vyhrál %s.".formatted(sideName(w)));
+                                    playVictoryWinnerMediaIfEnabled(w);
                                 } else {
                                     setStatus("Tah (síť) proveden.");
                                 }
@@ -1786,6 +1795,7 @@ public class MainController implements BoardViewHost {
             if (g.getState() == GameState.GAME_OVER) {
                 PlayerSide w = g.getMatchWinner();
                 setStatus(w == null ? "Konec hry." : "Konec hry — vyhrál %s.".formatted(sideName(w)));
+                playVictoryWinnerMediaIfEnabled(w);
             } else {
                 setStatus("Tah počítače proveden.");
             }
@@ -1808,6 +1818,82 @@ public class MainController implements BoardViewHost {
             return;
         }
         PlayProceduralSfx.playAfterBoardMutation(trapsBefore, game());
+    }
+
+    /** Applies „Historie tahů“ line selection: view prefix, board, draft sync, refresh (mouse or {@link #navigateNotationHistoryByPage}). */
+    void applyNotationHistoryListSelection(int idx) {
+        if (idx < 0 || gameController == null || isComputerPlayPending() || isNetworkClient()) {
+            return;
+        }
+        Game g = game();
+        if (!MainUiLayoutPhase.showCapturesAndNotationHistory(g)) {
+            return;
+        }
+        PlayTurnHistory ph = gameController.getPlayHistory();
+        if (!ph.isBootstrapped()) {
+            return;
+        }
+        List<Integer> vis = ph.visibleHalfIndicesForDisplay(true);
+        if (idx >= vis.size()) {
+            return;
+        }
+        notationHistoryAutoScrollOnNextRefresh = false;
+        cancelComputerPlayForHistoryScrub();
+        ph.navigateToVisibleLine(idx, true);
+        gameController.applyPlayHistoryViewToGame();
+        syncPlayPartialFromHistory();
+        notifyPlayChessClockHistoryNavigation();
+        refreshAll();
+        hostBroadcastSnapshotIfNeeded();
+    }
+
+    /**
+     * Page Down ({@code directionSign > 0}) / Page Up moves the notation history selection by roughly one visible page
+     * without auto-scrolling the list.
+     */
+    void navigateNotationHistoryByPage(int directionSign) {
+        if (directionSign == 0 || gameController == null || !gameController.getPlayHistory().isBootstrapped() || isNetworkClient()) {
+            return;
+        }
+        Game g = game();
+        if (!MainUiLayoutPhase.showCapturesAndNotationHistory(g)) {
+            return;
+        }
+        int n = notationHistoryItems.size();
+        if (n == 0) {
+            return;
+        }
+        int page = estimateNotationHistoryPageSize();
+        int delta = page * Integer.signum(directionSign);
+        int cur = notationHistoryList.getSelectionModel().getSelectedIndex();
+        if (cur < 0) {
+            cur = directionSign > 0 ? 0 : n - 1;
+        } else {
+            cur = Math.min(n - 1, Math.max(0, cur + delta));
+        }
+        suppressHistoryListEvents = true;
+        notationHistoryList.getSelectionModel().select(cur);
+        suppressHistoryListEvents = false;
+        applyNotationHistoryListSelection(cur);
+    }
+
+    private int estimateNotationHistoryPageSize() {
+        double h = notationHistoryList.getHeight();
+        if (h <= 0) {
+            h = notationHistoryList.getPrefHeight();
+        }
+        double cell = notationHistoryList.getFixedCellSize();
+        if (cell <= 0) {
+            cell = 22;
+        }
+        return Math.max(1, (int) (h / cell));
+    }
+
+    void playVictoryWinnerMediaIfEnabled(PlayerSide winner) {
+        if (winner == null || gameplaySoundEnabledItem == null || !gameplaySoundEnabledItem.isSelected()) {
+            return;
+        }
+        PlayVictoryMediaSfx.playWinnerIfPresent(winner);
     }
 
     /**

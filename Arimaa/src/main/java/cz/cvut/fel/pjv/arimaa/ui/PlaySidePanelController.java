@@ -55,17 +55,16 @@ final class PlaySidePanelController {
             }
         }
         main.suppressHistoryListEvents = false;
-        if (main.isComputerPlayPending()) {
-            Platform.runLater(
-                    () -> {
-                        int i = main.notationHistoryList.getSelectionModel().getSelectedIndex();
-                        if (i >= 0 && i < main.notationHistoryItems.size()) {
-                            main.notationHistoryList.scrollTo(i);
-                        } else if (!main.notationHistoryItems.isEmpty()) {
-                            main.notationHistoryList.scrollTo(main.notationHistoryItems.size() - 1);
-                        }
-                    });
-        }
+        // After setAll/select, scroll on next pulse so the ListView has laid out cells (Gold + Silver + human moves).
+        Platform.runLater(
+                () -> {
+                    int i = main.notationHistoryList.getSelectionModel().getSelectedIndex();
+                    if (i >= 0 && i < main.notationHistoryItems.size()) {
+                        main.notationHistoryList.scrollTo(i);
+                    } else if (!main.notationHistoryItems.isEmpty()) {
+                        main.notationHistoryList.scrollTo(main.notationHistoryItems.size() - 1);
+                    }
+                });
     }
 
     void refreshPlayActionButtons(Game g) {

@@ -367,6 +367,7 @@ final class PlayPhaseUiHandler {
         Move submit = PlayDraftNotationSupport.copyMove(main.playDraft.partial);
         String notationLine = ArimaaNotation.formatFullTurn(g.getBoard(), submit, prefix);
         log.debug("submitting play turn: {} steps", submit.getSteps().size());
+        PlayerSide mover = g.getSideToMove();
         if (!main.gameController.submitHumanMove(submit)) {
             log.info("submitHumanMove rejected (illegal or invalid state)");
             main.setStatus("Tah není platný.");
@@ -375,6 +376,7 @@ final class PlayPhaseUiHandler {
             return;
         }
         main.gameController.recordCommittedPlayTurn(submit, notationLine);
+        main.notifyPlayChessClockAfterCommittedTurn(mover);
         main.clearPlayTurnUi();
         main.syncPlayPartialFromHistory();
         if (g.getState() == GameState.GAME_OVER) {

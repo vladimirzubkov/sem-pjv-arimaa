@@ -263,6 +263,12 @@ public class MainController implements BoardViewHost {
     boolean suppressHistoryListEvents;
     final ObservableList<String> notationHistoryItems = FXCollections.observableArrayList();
     final ListView<String> notationHistoryList = new ListView<>(notationHistoryItems);
+    final Label clockGoldTotalLabel = new Label("00:00");
+    final Label clockGoldAvgLabel = new Label("—");
+    final Label clockSilverTotalLabel = new Label("00:00");
+    final Label clockSilverAvgLabel = new Label("—");
+    private PlayChessClockModel playChessClockModel;
+    private PlayChessClockTicker playChessClockTicker;
 
     @Override
     public boolean pieceSkinUsesFigureArt() {
@@ -349,6 +355,16 @@ public class MainController implements BoardViewHost {
         primaryStage.show();
         Platform.runLater(() -> scene.getRoot().requestFocus());
 
+        playChessClockModel = new PlayChessClockModel();
+        playChessClockTicker =
+                new PlayChessClockTicker(
+                        playChessClockModel,
+                        clockGoldTotalLabel,
+                        clockGoldAvgLabel,
+                        clockSilverTotalLabel,
+                        clockSilverAvgLabel);
+        playChessClockTicker.start();
+
         if (gameController != null) {
             gameController.resetTimeline();
         }
@@ -356,6 +372,61 @@ public class MainController implements BoardViewHost {
         syncLogLevelMenuSelection();
         syncLogToFileMenuSelection();
         syncNetworkMenuState();
+    }
+
+    /** Stops the background chess-clock ticker (e.g. on application exit). */
+    public void shutdownPlayChessClock() {
+        if (playChessClockTicker != null) {
+            playChessClockTicker.stop();
+            playChessClockTicker = null;
+        }
+        playChessClockModel = null;
+    }
+
+    void resetPlayChessClockToSetup() {
+        if (playChessClockModel != null) {
+            playChessClockModel.resetToSetup();
+        }
+    }
+
+    /** Called when PLAY begins after setup (Gold moves first). */
+    public void notifyPlayChessClockEnterPlay() {
+        Game g = game();
+        if (playChessClockModel == null || g == null || g.getState() != GameState.PLAY) {
+            return;
+        }
+        playChessClockModel.enterPlayPhase(g.getSideToMove());
+    }
+
+    /** {@code mover} is the side that completed the turn (before {@code sideToMove} advances). */
+    public void notifyPlayChessClockAfterCommittedTurn(PlayerSide mover) {
+        Game g = game();
+        if (playChessClockModel == null || g == null) {
+            return;
+        }
+        playChessClockModel.onTurnCommitted(mover, g.getState() == GameState.GAME_OVER);
+    }
+
+    /** After loading a game or scrubbing the notation list: restart local clocks from the viewed position. */
+    public void notifyPlayChessClockHistoryNavigation() {
+        Game g = game();
+        if (playChessClockModel == null || g == null) {
+            return;
+        }
+        playChessClockModel.resetForHistoryOrLoad(g);
+    }
+
+    private void syncPlayChessClockCpuPause() {
+        if (playChessClockModel == null) {
+            return;
+        }
+        Game g = game();
+        boolean suspend =
+                g != null
+                        && g.getState() == GameState.PLAY
+                        && computerAutoplayPaused
+                        && shouldOfferComputerStep(g);
+        playChessClockModel.setCpuChargeSuspended(suspend);
     }
 
     @Override
@@ -500,6 +571,7 @@ public class MainController implements BoardViewHost {
             PlayerSide w = g.getMatchWinner();
             setStatus(w == null ? "Konec hry." : "Konec hry — vyhrál %s.".formatted(sideName(w)));
         }
+        syncPlayChessClockCpuPause();
     }
 
     /** {@code true} while automated computer move (executor or animated steps) holds {@link #computerActionPending}. */
@@ -706,6 +778,7 @@ public class MainController implements BoardViewHost {
             clearComputerAutoplayPauseState();
             clearPlayTurnUi();
             setupPhase.resetChessPresetRotation();
+            resetPlayChessClockToSetup();
             g.startNewGame();
             if (gameController != null) {
                 gameController.resetTimeline();
@@ -722,6 +795,12 @@ public class MainController implements BoardViewHost {
     void playbackLoadedHistory() {
         clearComputerAutoplayPauseState();
         syncPlayPartialFromHistory();
+        Game gLoad = game();
+        if (playChessClockModel != null && gLoad != null) {
+            playChessClockModel.resetForHistoryOrLoad(gLoad);
+        } else if (playChessClockModel != null) {
+            playChessClockModel.resetToSetup();
+        }
         refreshAll();
         setStatus("Hra načtena ze souboru.");
     }
@@ -1240,10 +1319,12 @@ public class MainController implements BoardViewHost {
                                 }
                                 Move submit = PlayDraftNotationSupport.copyMove(pl.move());
                                 gameController.restoreTrailingDraftTurnStartForSubmit();
+                                PlayerSide mover = g.getSideToMove();
                                 if (!gameController.submitHumanMove(submit)) {
                                     yield false;
                                 }
                                 gameController.recordCommittedPlayTurn(submit, in.notationLine().trim());
+                                notifyPlayChessClockAfterCommittedTurn(mover);
                                 clearPlayTurnUi();
                                 syncPlayPartialFromHistory();
                                 if (g.getState() == GameState.GAME_OVER) {
@@ -1543,6 +1624,7 @@ public class MainController implements BoardViewHost {
             }
         }
         updateComputerPauseOverlay();
+        syncPlayChessClockCpuPause();
     }
 
     /**
@@ -1578,6 +1660,7 @@ public class MainController implements BoardViewHost {
         }
         if (g.getState() == GameState.PLAY) {
             gameController.enterPlayPhaseBootstrap();
+            notifyPlayChessClockEnterPlay();
             setStatus("Hra — na tahu %s.".formatted(sideName(g.getSideToMove())));
         } else {
             recordTimeline();
@@ -1683,6 +1766,7 @@ public class MainController implements BoardViewHost {
             if (g == null || gameController == null) {
                 return;
             }
+            PlayerSide mover = g.getSideToMove();
             gameController.restoreTrailingDraftTurnStartForSubmit();
             Move submit = PlayDraftNotationSupport.copyMove(full);
             String prefix = gameController.nextPlayNotationPrefix();
@@ -1694,6 +1778,7 @@ public class MainController implements BoardViewHost {
                 return;
             }
             gameController.recordCommittedPlayTurn(submit, notationLine);
+            notifyPlayChessClockAfterCommittedTurn(mover);
             clearPlayTurnUi();
             syncPlayPartialFromHistory();
             if (g.getState() == GameState.GAME_OVER) {

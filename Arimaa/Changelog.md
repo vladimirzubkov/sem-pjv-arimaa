@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.20
+
+- **Časovač (PLAY):** dvě strany (**Gold** / **Silver**), tabulka **Časovač** — sloupce **Celkem** a **Průměr na tah** (průměr z dokončených polotahů); neukládá se do souboru partie.
+- **Vlákna (JavaFX):** periodický přepočet přes **`ScheduledService`** + **`Task`** na pozadí, aktualizace buněk tabulky jen přes **`Platform.runLater`** (`PlayChessClockTicker`, `PlayChessClockModel`); při ukončení aplikace **`JavafxApp.stop()`** zruší ticker.
+- **Gameplay:** položka **Zobrazit jednotlivé kroky počítače při tahu** je **ve výchozím stavu zapnutá**.
+- **Boční panel:** menší vertikální mezera mezi řádkem **Tah** a blokem **Zajaté** (bez dodatečného spaceru, `USE_PREF_SIZE` výšky u popisku tahu, spodní **Region** s `VBox.setVgrow` pro volné místo ve scrollu).
+- **Historie tahů:** po obnovení listu se **vždy** posune výběr do viditelné oblasti (`scrollTo`), nejen během animace tahu PC.
+
 ## 0.9.19
 
 - **Síť (TCP):** dvouhráčová hra; zprávy jako **jeden JSON na řádek** (řádkový JSON, **NDJSON** / Newline Delimited JSON / JSON Lines). **Hostitel = Gold**, **klient = Silver**; kanonický stav na hostiteli, klient dostává **`state_snapshot`** s **`saveText`** (stejný formát jako uložená partie).

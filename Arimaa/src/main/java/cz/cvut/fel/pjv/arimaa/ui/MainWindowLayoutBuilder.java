@@ -8,6 +8,7 @@ import cz.cvut.fel.pjv.arimaa.model.enums.PieceType;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
 import javafx.beans.binding.Bindings;
 import javafx.application.Platform;
+import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
@@ -29,7 +30,9 @@ import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundFill;
 import javafx.scene.layout.CornerRadii;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -100,8 +103,8 @@ public final class MainWindowLayoutBuilder {
     static void wireNotationHistoryList(MainController main) {
         main.notationHistoryList.setFocusTraversable(false);
         main.notationHistoryList.setFixedCellSize(22);
-        main.notationHistoryList.setPrefHeight(220);
-        main.notationHistoryList.setMaxHeight(220);
+        main.notationHistoryList.setPrefHeight(176);
+        main.notationHistoryList.setMaxHeight(176);
         main.notationHistoryList.setMinHeight(72);
         main.notationHistoryList.setStyle("-fx-font-family: Consolas; -fx-font-size: 11px;");
         main.notationHistoryList.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
@@ -131,6 +134,7 @@ public final class MainWindowLayoutBuilder {
             ph.navigateToVisibleLine(idx, true);
             main.gameController.applyPlayHistoryViewToGame();
             main.syncPlayPartialFromHistory();
+            main.notifyPlayChessClockHistoryNavigation();
             main.refreshAll();
             main.hostBroadcastSnapshotIfNeeded();
         });
@@ -145,7 +149,37 @@ public final class MainWindowLayoutBuilder {
                 new Label("Zajaté (Silver):"),
                 main.silverCapturesPane);
 
-        main.notationBox.getChildren().addAll(new Label("Historie tahů:"), main.notationHistoryList);
+        String monoSmall = "-fx-font-family: Consolas; -fx-font-size: 11px;";
+        Label clockTitle = new Label("Časovač");
+        clockTitle.setStyle("-fx-font-weight: bold;");
+        Label hCelkem = new Label("Celkem");
+        Label hPrumer = new Label("Průměr na tah");
+        hCelkem.setStyle(monoSmall);
+        hPrumer.setStyle(monoSmall);
+        main.clockGoldTotalLabel.setStyle(monoSmall);
+        main.clockGoldAvgLabel.setStyle(monoSmall);
+        main.clockSilverTotalLabel.setStyle(monoSmall);
+        main.clockSilverAvgLabel.setStyle(monoSmall);
+        GridPane clockGrid = new GridPane();
+        clockGrid.setHgap(12);
+        clockGrid.setVgap(4);
+        clockGrid.add(clockTitle, 0, 0);
+        clockGrid.add(hCelkem, 1, 0);
+        clockGrid.add(hPrumer, 2, 0);
+        GridPane.setHalignment(hCelkem, HPos.RIGHT);
+        GridPane.setHalignment(hPrumer, HPos.RIGHT);
+        clockGrid.add(new Label("Gold"), 0, 1);
+        clockGrid.add(main.clockGoldTotalLabel, 1, 1);
+        clockGrid.add(main.clockGoldAvgLabel, 2, 1);
+        clockGrid.add(new Label("Silver"), 0, 2);
+        clockGrid.add(main.clockSilverTotalLabel, 1, 2);
+        clockGrid.add(main.clockSilverAvgLabel, 2, 2);
+        GridPane.setHalignment(main.clockGoldTotalLabel, HPos.RIGHT);
+        GridPane.setHalignment(main.clockGoldAvgLabel, HPos.RIGHT);
+        GridPane.setHalignment(main.clockSilverTotalLabel, HPos.RIGHT);
+        GridPane.setHalignment(main.clockSilverAvgLabel, HPos.RIGHT);
+
+        main.notationBox.getChildren().addAll(clockGrid, new Label("Historie tahů:"), main.notationHistoryList);
         main.notationBox.setVisible(false);
         main.notationBox.setManaged(false);
     }
@@ -153,6 +187,8 @@ public final class MainWindowLayoutBuilder {
     static VBox buildSidePanel(MainController main) {
         main.handLabel.setWrapText(true);
         main.handLabel.setMaxWidth(220);
+        main.handLabel.setMinHeight(Region.USE_PREF_SIZE);
+        main.handLabel.setMaxHeight(Region.USE_PREF_SIZE);
         main.handPieceGraphic.setPreserveRatio(true);
         main.handPieceGraphic.setSmooth(true);
 
@@ -162,22 +198,26 @@ public final class MainWindowLayoutBuilder {
         main.playersAssignmentLabel.setMaxWidth(240);
         main.setStatus("Rozestavte Gold; pak Hotovo. Silver totéž.");
 
-        VBox sidePanel = new VBox(10,
-                new Label("Stav:"),
-                main.statusLabel,
-                new Label("Hráči:"),
-                main.playersAssignmentLabel,
-                main.handLabel,
-                spacer(8),
-                main.capturesBox,
-                main.notationBox,
-                main.reserveBox,
-                main.cancelHandButton,
-                main.randomButton,
-                main.chessButton,
-                main.doneButton,
-                main.playEndTurnButton,
-                main.playCancelTurnButton);
+        VBox sidePanel = new VBox(10);
+        sidePanel.getChildren()
+                .addAll(
+                        new Label("Stav:"),
+                        main.statusLabel,
+                        new Label("Hráči:"),
+                        main.playersAssignmentLabel,
+                        main.handLabel,
+                        main.capturesBox,
+                        main.notationBox,
+                        main.reserveBox,
+                        main.cancelHandButton,
+                        main.randomButton,
+                        main.chessButton,
+                        main.doneButton,
+                        main.playEndTurnButton,
+                        main.playCancelTurnButton);
+        Region bottomFill = new Region();
+        VBox.setVgrow(bottomFill, Priority.ALWAYS);
+        sidePanel.getChildren().add(bottomFill);
         sidePanel.setPadding(new Insets(12));
         sidePanel.setPrefWidth(260);
         sidePanel.setMaxHeight(Double.MAX_VALUE);
@@ -415,7 +455,7 @@ public final class MainWindowLayoutBuilder {
 
         main.showComputerTurnStepsInNotationItem =
                 new CheckMenuItem("Zobrazit jednotlivé kroky počítače při tahu");
-        main.showComputerTurnStepsInNotationItem.setSelected(false);
+        main.showComputerTurnStepsInNotationItem.setSelected(true);
         main.showComputerTurnStepsInNotationItem
                 .selectedProperty()
                 .addListener((obs, prev, now) -> Platform.runLater(main::refreshAll));
@@ -492,11 +532,5 @@ public final class MainWindowLayoutBuilder {
         MenuBar menuBar = new MenuBar();
         menuBar.getMenus().addAll(menuHra, menuTah, menuGameplay, menuSit, menuLog);
         return menuBar;
-    }
-
-    private static Region spacer(int h) {
-        Region r = new Region();
-        r.setMinHeight(h);
-        return r;
     }
 }

@@ -11,6 +11,8 @@ import javafx.stage.Stage;
  */
 public class JavafxApp extends Application {
 
+    private MainController mainController;
+
     @Override
     public void start(Stage primaryStage) {
         Game game = new Game();
@@ -19,8 +21,15 @@ public class JavafxApp extends Application {
         GameController gameController = new GameController();
         gameController.setGame(game);
 
-        MainController mainController = new MainController();
+        mainController = new MainController();
         mainController.setGameController(gameController);
         mainController.attachToStage(primaryStage);
+    }
+
+    @Override
+    public void stop() {
+        if (mainController != null) {
+            mainController.shutdownPlayChessClock();
+        }
     }
 }

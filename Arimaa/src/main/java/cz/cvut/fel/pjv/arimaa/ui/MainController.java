@@ -1893,7 +1893,9 @@ public class MainController implements BoardViewHost {
         if (winner == null || gameplaySoundEnabledItem == null || !gameplaySoundEnabledItem.isSelected()) {
             return;
         }
-        PlayVictoryMediaSfx.playWinnerIfPresent(winner);
+        if (stage != null) {
+            PlayVictoryMediaSfx.playWinnerIfPresent(stage, winner);
+        }
     }
 
     /**

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.24
+
+- **Konec partie / výhra:** výherní klipy **`assets/gold-victory.mp4`** a **`assets/silver-victory.mp4`** se přehrávají v **samostatném okně** s **`MediaView`** (viditelné video, ne jen zvuk). Rozměr videa **sleduje velikost okna** (`fitWidth` / `fitHeight` vázané na scénu).
+- **Výchozí média v repu:** oba výherní MP4 jsou součástí **`Arimaa/assets/`** (cca 2 MB každý); lze je lokálně nahradit vlastními soubory se stejnými názvy.
+- **Přehrávání (Windows):** pokud cesta k souboru obsahuje **ne-ASCII** (např. diakritika ve složce projektu), klip se před **`MediaPlayer`** zkopíruje do **krátkého ASCII temp** souboru (`%TEMP%`), aby JavaFX Media / GStreamer spolehlivě otevřely `file:` URI.
+- **Formát klipů:** doporučeno **H.264 + AAC** v MP4; **MP3 v kontejneru MP4** často skončí **`ERROR_MEDIA_INVALID`**. Při chybě dekódu se zobrazí **upozornění** s návodem (včetně příkladu ffmpeg s **`-c:a aac`**).
+- **Hledání klipů:** postupně se zkouší relativní **`assets/`**, **`user.dir`**, **`target/assets/`**, adresář modulu Maven (včetně **`target/assets/`**) a **`assets/` vedle spuštěného JAR** (vhodné pro `java -jar` z `target/`).
+- **Git:** položka **`/assets/`** v **`Arimaa/.gitignore`** zrušena — výherní klipy lze verzovat v repozitáři.
+
 ## 0.9.23
 
 - **Historie tahů:** po **novém tahu** zůstává **automatické posunutí** (`scrollTo`) tak, aby byl vidět aktuální řádek; při **kliknutí na řádek** v historii nebo při **Page Up / Page Down** se posuvník už **sám neposouvá** — lze listovat bez skoků.

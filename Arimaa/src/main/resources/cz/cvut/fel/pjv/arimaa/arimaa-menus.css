@@ -1,10 +1,35 @@
 /* Jednotné odsazení 10 px vlevo/vpravo: horní lišta a okraj popup menu.
- * Řádky (.menu-item, CheckMenuItem, CustomMenuItem…) — výchozí Modena, bez vlastních paddingů a bez translate. */
+ * Barva textu: na světlém pozadí popupu musí být tmavá (Modena / Windows někdy nechá bílý fill). */
 
 .menu-bar .menu-button {
     -fx-padding: 4px 10px 4px 10px;
 }
 
+.menu-bar .menu-button > .label {
+    -fx-text-fill: #141414;
+}
+
+.menu-bar .menu-button:hover > .label,
+.menu-bar .menu-button:focused > .label,
+.menu-bar .menu-button:showing > .label {
+    -fx-text-fill: white;
+}
+
 .context-menu {
     -fx-padding: 4px 10px 4px 10px;
+}
+
+.context-menu .menu-item > .label,
+.context-menu .check-menu-item > .label,
+.context-menu .radio-menu-item > .label {
+    -fx-text-fill: #141414;
+}
+
+.context-menu .menu-item:hover > .label,
+.context-menu .menu-item:focused > .label,
+.context-menu .check-menu-item:hover > .label,
+.context-menu .check-menu-item:focused > .label,
+.context-menu .radio-menu-item:hover > .label,
+.context-menu .radio-menu-item:focused > .label {
+    -fx-text-fill: white;
 }

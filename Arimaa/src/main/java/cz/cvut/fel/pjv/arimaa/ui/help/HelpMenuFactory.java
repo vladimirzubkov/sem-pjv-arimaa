@@ -13,7 +13,7 @@ public final class HelpMenuFactory {
      * @param ownerWindow parent for modal dialogs (e.g. primary {@code Stage}); may be {@code null}
      */
     public static Menu buildMenu(Window ownerWindow) {
-        Menu menu = new Menu("N_ápověda");
+        Menu menu = new Menu("Ná_pověda");
         menu.setMnemonicParsing(true);
 
         MenuItem pravidla = new MenuItem("Pravidla hry");

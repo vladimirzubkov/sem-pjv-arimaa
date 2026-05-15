@@ -8,7 +8,7 @@ public final class HelpCzechTexts {
     private HelpCzechTexts() {}
 
     /** Fallback when JAR manifest has no {@code Implementation-Version} (e.g. IDE run). */
-    public static final String FALLBACK_APP_VERSION = "0.9.23";
+    public static final String FALLBACK_APP_VERSION = "0.9.24";
 
     public static final String TITLE_PRAVIDLA = "Pravidla hry";
     public static final String TITLE_OVLADANI = "Ovládání";
@@ -48,7 +48,7 @@ public final class HelpCzechTexts {
                     • Esc — zrušit rozpracovaný tah (draft).
                     • Tab / Shift+Tab — jeden cyklus cílů: nejdřív všechna tahnutí (pull), pak každá legální varianta tlačení (i na stejnou buňku z jiné soupeřovy figury), jinak vlastní figury.
                     • Ctrl+Tab / Ctrl+Shift+Tab — vždy jen vlastní figury (např. při tlačení).
-                    • Page Up / Page Down — posun výběru v „Historie tahů“ po stránce (bez posunu posuvníku jako po kliknutí).
+                    • Page Up / Page Down — předchozí / další řádek v „Historie tahů“ (seznam posune výběr do viditelné oblasti).
                     • Mezerník — tahnutí nebo tlačení podle žlutého fokusu z Tabu (u tlačení tlustý rámeček na cílovém poli, tenčí na tlačené figuře); bez fokusu nejdřív pull, jinak push.
                     • Šipky nebo WASD — pohyb po šachovnici po výběru figury.
 
@@ -64,7 +64,7 @@ public final class HelpCzechTexts {
 
     public static final String BODY_CPU =
             """
-                    V menu Gameplay můžete pro zlatého a stříbrného hráče zvolit člověka nebo počítač — úroveň 0, 1 nebo 2.
+                    V menu Nastavení můžete pro zlatého a stříbrného hráče zvolit člověka nebo počítač — úroveň 0, 1 nebo 2.
 
                     Úroveň 0: náhodný výběr legálního celého tahu. Program se snaží upřednostnit tahy, které \
                     hned neztratí vlastní figuru pastí; po několika desítkách pokusů vezme libovolný legální tah.
@@ -77,7 +77,7 @@ public final class HelpCzechTexts {
                     Maximální hloubka je omezená (typicky dva plné tahy od kořene; při velmi mnoha legálních \
                     tazích se hloubka sníží). Je nastavený pevný časový rozpočet na jeden tah, aby UI nezamrzlo.
 
-                    Posuvník „Pauza tahu počítače na krok“ v menu Gameplay pouze zpomaluje animaci kroků tahu \
+                    Posuvník „Pauza tahu počítače na krok“ v menu Nastavení pouze zpomaluje animaci kroků tahu \
                     počítače; nesouvisí s hloubkou hledání úrovní 1 a 2.
                     """
                     .stripTrailing();

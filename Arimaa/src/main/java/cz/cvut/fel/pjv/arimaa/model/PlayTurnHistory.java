@@ -112,18 +112,7 @@ public final class PlayTurnHistory {
         if (visibleIndex < 0 || visibleIndex >= vis.size()) {
             return;
         }
-        int halfIndex = vis.get(visibleIndex);
-        PlayHalfTurn ht = halfTurns.get(halfIndex);
-        if (ht.committed()) {
-            if (halfIndex + 1 < halfTurns.size()) {
-                viewHalfIndex = halfIndex + 1;
-                appliedPrefixSteps = 0;
-            } else {
-                navigateToEndOfHalf(halfIndex);
-            }
-        } else {
-            navigateToEndOfHalf(halfIndex);
-        }
+        navigateToEndOfHalf(vis.get(visibleIndex));
     }
 
     public void navigateToEndOfHalf(int halfIndex) {

@@ -31,8 +31,8 @@ public final class PlayNotationParser {
     }
 
     /**
-     * Counts {@code file} tokens consumed when aligning from the start: engine stream may contain extra trap-removal
-     * tokens ({@code …x}) that are absent from {@code file}.
+     * Counts {@code file} tokens consumed when aligning from the start: trap-removal tokens ({@code …x}) may appear
+     * only in the engine stream, only in the saved file, or in both.
      */
     static int consumedFileTokensAllowEngineTraps(List<String> engine, List<String> file) {
         int ei = 0;
@@ -47,6 +47,10 @@ public final class PlayNotationParser {
             }
             if (isTrapRemovalNotation(e)) {
                 ei++;
+                continue;
+            }
+            if (isTrapRemovalNotation(f)) {
+                fi++;
                 continue;
             }
             break;
@@ -105,16 +109,22 @@ public final class PlayNotationParser {
     }
 
     /**
-     * Reconstructs {@link Move#getSteps()} token-by-token so engine notation matches the saved line (used when loading
-     * {@link GameSerializer} files).
+     * Reconstructs {@link Move#getSteps()} from move tokens only. Tokens such as {@code Rc3x} (trap removal) are
+     * recorded in saved notation for humans but are not Arimaa steps — they are stripped before matching.
      */
     public static Move parsePlayBody(Game game, List<String> tokens) {
+        ArrayList<String> moveTokens = new ArrayList<>();
+        for (String t : tokens) {
+            if (!isTrapRemovalNotation(t)) {
+                moveTokens.add(t);
+            }
+        }
         Move move = new Move();
-        if (tokens.isEmpty()) {
+        if (moveTokens.isEmpty()) {
             return move;
         }
         int matched = 0;
-        while (matched < tokens.size()) {
+        while (matched < moveTokens.size()) {
             Map<Position, Piece> occ = DefaultRuleEngine.simulatePlayPrefix(game, move);
             boolean progressed = false;
             Move bestTrial = null;
@@ -124,13 +134,19 @@ public final class PlayNotationParser {
                 for (Step st : bundle) {
                     trial.getSteps().add(copyStep(st));
                 }
+                if (trial.getSteps().size() > 4) {
+                    continue;
+                }
                 String body = DefaultRuleEngine.buildArimaaNotationBody(game.getBoard(), trial);
                 List<String> expect = tokenize(body);
                 if (expect.isEmpty()) {
                     continue;
                 }
-                int consumed = consumedFileTokensAllowEngineTraps(expect, tokens);
-                if (consumed > bestConsumed) {
+                int consumed = consumedFileTokensAllowEngineTraps(expect, moveTokens);
+                int trialSteps = trial.getSteps().size();
+                int bestSteps = bestTrial == null ? 0 : bestTrial.getSteps().size();
+                if (consumed > bestConsumed
+                        || (consumed == bestConsumed && trialSteps > bestSteps)) {
                     bestConsumed = consumed;
                     bestTrial = trial;
                 }
@@ -142,14 +158,14 @@ public final class PlayNotationParser {
             }
             if (!progressed) {
                 String tail =
-                        matched < tokens.size()
-                                ? tokens.get(matched)
+                        matched < moveTokens.size()
+                                ? moveTokens.get(matched)
                                 : "?";
                 throw new IllegalArgumentException(
                         "Notaci nelze po přehrání předchozích tahů sladit s pozicí (token "
                                 + matched
                                 + "/"
-                                + tokens.size()
+                                + moveTokens.size()
                                 + ": „"
                                 + tail
                                 + "“). Zkontrolujte shodu uloženého setupu s tahy nebo uložte partii znovu z aplikace.");

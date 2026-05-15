@@ -3,6 +3,7 @@ package cz.cvut.fel.pjv.arimaa.ui.help;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.paint.Color;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
@@ -14,6 +15,8 @@ import javafx.stage.Window;
 
 /** Modal window with read-only scrollable text and a close button. */
 public final class HelpScrollableDialog {
+
+    private static final String READABLE_TEXT_STYLE = "-fx-text-fill: #141414;";
 
     private HelpScrollableDialog() {}
 
@@ -39,6 +42,7 @@ public final class HelpScrollableDialog {
 
         Label content = new Label(body);
         content.setWrapText(true);
+        content.setStyle(READABLE_TEXT_STYLE);
 
         ScrollPane scroll = new ScrollPane(content);
         scroll.setFitToWidth(true);
@@ -57,6 +61,7 @@ public final class HelpScrollableDialog {
         VBox.setMargin(close, new Insets(4, 0, 0, 0));
 
         Scene scene = new Scene(root, 560, 440);
+        scene.setFill(Color.rgb(236, 236, 238));
         stage.setScene(scene);
         stage.showAndWait();
     }

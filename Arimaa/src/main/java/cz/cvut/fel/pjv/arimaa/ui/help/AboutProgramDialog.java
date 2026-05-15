@@ -165,7 +165,7 @@ public final class AboutProgramDialog {
         left.setPrefWidth(340);
         VBox.setVgrow(techScroll, Priority.ALWAYS);
 
-        Label videoCaption = new Label("Jak na to, jemné nuance");
+        Label videoCaption = new Label("Zdroj vítězného videa");
         videoCaption.setStyle("-fx-font-weight: bold;" + READABLE_TEXT_STYLE);
 
         WebView webView = new WebView();

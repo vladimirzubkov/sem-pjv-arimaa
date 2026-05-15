@@ -1,105 +1,95 @@
-# Semestrální práce B0B36PJV – Arimaa
+# Semestrální práce B0B36PJV — Arimaa
 
-Desktopová hra **Arimaa** v Javě. Tento repozitář obsahuje **kostru projektu (CP2)** podle schválené vize; herní logika, UI scény a síťová komunikace budou doplněny v dalších iteracích.
+Desktopová hra **Arimaa** v Javě 21 s GUI v **JavaFX**. Partie podporuje plná pravidla hry (tahy 1–4 kroky, tlačení, tažení, pasti, zmrazení, konec hry), **časovač** stran, **ukládání a načítání** v textové notaci, hru **dva lidé na jednom PC**, hru proti **počítači** (více úrovní než pouhý náhodný generátor) a **síťový režim** host–klient přes **TCP**.
 
-## Modul Maven
+**Zadání kurzu (obecné):** [Semestrální práce — B0B36PJV](https://cw.fel.cvut.cz/wiki/courses/b0b36pjv/semestral/start)  
+**Zadání tématu Arimaa:** [Arimaa — semestrální práce](https://cw.fel.cvut.cz/wiki/courses/b0b36pjv/semestral/arima)
 
-Zdrojový kód je v adresáři [`Arimaa/`](Arimaa/).
+## Uživatelská dokumentace
 
-- **Kompilace:** `mvn -f Arimaa/pom.xml compile`
-- **Spuštění JavaFX:** `mvn -f Arimaa/pom.xml javafx:run`  
-  Hlavní třída: `cz.cvut.fel.pjv.arimaa.ArimaaApp` (nastavení logování, poté `Application.launch(JavafxApp.class, args)`).
+- **[Uživatelský manuál](Dokumentace/manual-hrace.md)** — pravidla (shrnutí), ovládání, klávesové zkratky, úrovně AI, rozestavení, spuštění na Windows/Linux/macOS, síť (host **7788**, klient).
+
+V GitLab Wiki je potřeba mít **aktuální** uživatelský manuál dle zadání CP3; obsah tohoto souboru lze do wiki zkopírovat nebo na něj odkázat.
+
+## Technická dokumentace (v repozitáři)
+
+- **PlantUML** zdroje: [`Dokumentace/*.puml`](Dokumentace/)  
+- Vygenerované **PNG**: [`Dokumentace/out/`](Dokumentace/out/) (diagram balíčků, model, UI, stavy; postup generování viz dřívější sekce v historii README / komentáře v `manual-hrace.md`)
+- **Síť:** protokol NDJSON přes TCP, typy zpráv v balíčku `cz.cvut.fel.pjv.arimaa.network` — pro detailní specifikaci viz zdrojové soubory a Javadoc u veřejných typů
+
+## Splnění povinných požadavků kurzu (kontrolní seznam)
+
+Přehled vůči stránce [Semestrální práce — nutné požadavky](https://cw.fel.cvut.cz/wiki/courses/b0b36pjv/semestral/start).
+
+| # | Požadavek | Status |
+|---|-----------|--------|
+| 1 | Java ≥ 21, projekt pod **Maven** | Ano (`Arimaa/pom.xml`, `maven.compiler.release` 21) |
+| 2 | Průběžné commity na **GitLab**, rozumná historie | Zodpovědnost týmu / cvičícího hodnocení |
+| 3 | **JavaFX** GUI; alespoň jedna netriviální část **bez Scene Builderu** | Ano — např. `MainController`, `BoardGridView`, herní layout a logika v kódu |
+| 4 | **Vlákna** mimo triviální `Timer`; u JavaFX typicky **Task** / **Service** | Ano — např. `PlayChessClockTicker` + `Task`, síťové IO na thread poolu, animace tahu PC |
+| 5 | **Unit testy** nebo funkční testy (JUnit) | Ano — více testových tříd v `Arimaa/src/test/java` (model, AI, perzistence, síťová serializace, …) |
+| 6 | **Loggery** (SLF4J/Logback), zap/vyp **bez editace kódu** | Ano — CLI `--log-level` / JVM vlastnost, menu **Log → Logback Level**, volitelný soubor |
+| 7 | **Uložení stavu** aplikace / partie | Ano — ukládání/načítání přes serializer (`GameSerializer`, soubor) |
+| 8 | **Javadoc** u netriviálních public API | Ano — povinné prvky mají Javadoc (kontinuálně doplňováno) |
+| 9 | Komentáře u netriviálních částí | Ano |
+| 10 | **Uživatelský manuál** a **technická dokumentace** (není to Javadoc) | Uživatelský: `Dokumentace/manual-hrace.md` + diagramy; technická: diagramy + balíčky/network v kódu — **wiki GitLab** dle CP3 |
+| 11 | Kód a komentáře **anglicky**; uživ./tech. dokumentace **CS/SK** povoleno | Ano — tento README a manuál česky; zdrojáky anglicky |
+
+### Téma Arimaa — očekávané funkce dle wiki
+
+Z [zadání Arimaa](https://cw.fel.cvut.cz/wiki/courses/b0b36pjv/semestral/arima):
+
+| Funkce dle zadání | Status |
+|-------------------|--------|
+| Tahy 1–4, tlačení, tažení | Implementováno (`DefaultRuleEngine`, …) |
+| Pasti, zmrazení | Implementováno |
+| Králík na poslední řádek, blokace / konec hry | Implementováno |
+| **Hrací hodiny** (čas přemýšlení) | Implementováno (`PlayChessClockModel`, UI tabulka) |
+| Uložení, načtení, krokování tazy, **oficiální notace** | Implementováno (textový formát, historie) |
+| Dva hráči na **jednom PC** | Ano |
+| Hra proti **počítači** (minimum náhodné tahy) | Ano — úrovně 0–2 (`PlayerControllerKind`, AI balíček) |
+
+## Modul Maven a spuštění
+
+Zdroje: **[`Arimaa/`](Arimaa/)**
+
+```bash
+mvn -f Arimaa/pom.xml compile
+mvn -f Arimaa/pom.xml javafx:run
+```
+
+**Hlavní třída:** `cz.cvut.fel.pjv.arimaa.ArimaaApp`
 
 ### Logování
 
-- **Výchozí:** žádný výstup na konzoli (úroveň **OFF**).
-- **Při spuštění z příkazové řádky:** přidejte argument ve tvaru `--log-level=DEBUG` (hodnoty: `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`, `ALL`; lze použít i `NONE` místo `OFF`).
-- **Alternativa (JVM):** `-Dcz.cvut.fel.pjv.arimaa.log.level=INFO`
-- **V aplikaci:** menu **Log → Logback Level** — výběr úrovně za běhu (Logback root logger).
-- **Volitelný zápis do souboru** (vedle konzole, stejný formát jako STDOUT): argument `--log-file=CESTA` nebo JVM vlastnost `-Dcz.cvut.fel.pjv.arimaa.log.file=CESTA` zapne při startu druhý appender na root loggeru. V menu **Log → Zapisovat do souboru** lze zápis zapnout/vypnout za běhu; bez vlastní cesty se použije soubor **`arimaa.log` v kořeni modulu Maven** (vedle `src/`), pokud jde spustit z `target/classes` nebo z JARu v `target/`; jinak **`arimaa.log` v aktuálním pracovním adresáři** (`user.dir`). Používá se jednoduchý **FileAppender** (append), bez rotace — pro větší objemy logů zvolte cestu na disk s dostatečným místem. Úroveň logů je nezávislá; při **OFF** se do souboru ani na konzoli nic nevyšle.
+- **Výchozí:** tichý režim (`OFF`) na konzoli.
+- **Argumenty / JVM:** `--log-level=DEBUG` nebo `-Dcz.cvut.fel.pjv.arimaa.log.level=INFO`
+- **Za běhu:** menu **Log → Logback Level**, **Log → Zapisovat do souboru**
 
-Při spuštění přes Maven lze použít JVM vlastnost (funguje i bez programových argumentů):
+Podrobnosti viz [Uživatelský manuál — sekce Spuštění](Dokumentace/manual-hrace.md).
 
-```text
-mvn -f Arimaa/pom.xml javafx:run -Dcz.cvut.fel.pjv.arimaa.log.level=DEBUG
-```
-
-Spuštění z IDE: **Main class** `cz.cvut.fel.pjv.arimaa.ArimaaApp`, do **Program arguments** např. `--log-level=INFO` nebo `--log-file=C:/temp/arimaa.log`, nebo VM options `-Dcz.cvut.fel.pjv.arimaa.log.level=INFO` / `-Dcz.cvut.fel.pjv.arimaa.log.file=...`.
-
-## Použité technologie
+## Použité technologie (shrnutí)
 
 | Oblast | Technologie |
 |--------|-------------|
 | Jazyk | Java 21 |
 | Build | Maven |
-| GUI | JavaFX (controls, FXML připraveno na později) |
-| Logování | SLF4J + Logback (`src/main/resources/logback.xml`) |
-| Testy (příprava na CP3) | JUnit 5 (závislost v POM, testy zatím nejsou povinné pro CP2) |
+| GUI | JavaFX (controls, media, web pro nápovědu) |
+| Logování | SLF4J + Logback |
+| Testy | JUnit 5 |
+| Serializace / JSON (síť) | Jackson (dle modulu) |
+| Ostatní | Batik pro rasterizaci SVG figurek |
 
-## Objektový návrh (MVC)
+## Struktura balíčků (MVC orientace)
 
-Aplikace je členěna do vrstev:
+- **`model`** — `Game`, `Board`, pravidla (`DefaultRuleEngine`), historie, notace
+- **`controller`** — `GameController`
+- **`ui`** — JavaFX obrazovka, menu, klávesnice, síťové dialogy
+- **`persistence`** — ukládání/načítání
+- **`ai`** — tahy počítače
+- **`network`** — TCP host/klient, wire zprávy
+- **`logging`** — konfigurace Logbacku z CLI a UI
 
-- **`model`** – doménový model: `Game`, `Board`, `Piece`, `Position`, `Move` (celý tah až se čtyřmi kroky), `Step` (jeden atomický krok), výčty `GameState`, `PlayerSide`, `PieceType`, rozhraní `MoveValidator` a `RuleEngine` pro validaci a aplikaci tahů.
-- **`controller`** – tenká vrstva `GameController` mezi UI a modelem (např. předání lidského tahu).
-- **`ui`** – JavaFX: `JavafxApp`, `MainController` (propojení s FXML přijde později).
-- **`persistence`** – ukládání a načítání (`GameRepository`, `GameSerializer` / notace).
-- **`ai`** – generování tahů a náhodná AI (`MoveGenerator`, `RandomAiPlayer`).
-- **`network`** – rozhraní `GameMessage`, `NetworkClient`, `NetworkServer` **bez implementace**; TCP klient–server podle IP a portu bude doplněn později spolu s popisem protokolu pro finální dokumentaci.
-- **`util`** – např. konstanty desky (`BoardConstants`).
-- **`logging`** – nastavení úrovně Logbacku z CLI / JVM a z menu (`LoggingSupport`).
+---
 
-V CP2 jsou těla metod záměrně prázdná nebo vracejí neutrální hodnoty; nejde o hratelnou hru.
-
-### Diagram balíčků
-
-![Vrstvy balíčků](Dokumentace/out/package-structure.png)
-
-### Diagram tříd – model
-
-![Doménový model](Dokumentace/out/class-model.png)
-
-**Doménový model – stručně k metodám (plán):**
-
-- **Game** – drží stav partie a hráče na tahu; `applyMove` zpracuje celý souhrnný tah (1–4 kroky), případně změní fázi hry.
-- **Board** – reprezentace desky 8×8; metody pro čtení/zápis obsazení pole, inicializaci a reset (rozestavění / nová hra).
-- **Piece**, **Position** – vlastnosti figury (typ, strana) a souřadnice pole; přístup pro vykreslení a pravidla.
-- **Move**, **Step** – `Move` je jeden tah hráče jako posloupnost až čtyř `Step`; každý `Step` popíše jeden atomický posun (včetně směrů push/pull až v implementaci).
-- **MoveValidator** – ověří, zda je krok nebo celý tah v aktuálním stavu legální (včetně počtu kroků v tahu).
-- **RuleEngine** – po platném tahu aktualizuje stav (odstranění v pasti, zmrazení, výměna strany, konec hry).
-
-Třídy **GameState**, **PlayerSide**, **PieceType** budou především výčty bez vlastní logiky.
-
-### Diagram tříd – JavaFX a MVC
-
-![UI a GameController](Dokumentace/out/class-ui.png)
-
-### Stavový diagram
-
-Stavy zahrnují režim hry na jednom počítači. Na stavovém diagramu značí popisek **(opce)** u přechodů se stavem **`CONNECTING`** volitelné síťové připojení (IP:port).
-
-![Stavy aplikace](Dokumentace/out/state-game.png)
-
-## Dokumentace ve formátu PlantUML
-
-Zdrojové soubory diagramů jsou v [`Dokumentace/*.puml`](Dokumentace/). Obrázky v [`Dokumentace/out/`](Dokumentace/out/) lze znovu vygenerovat například:
-
-- nástrojem [PlantUML](https://plantuml.com/) (CLI nebo plugin do IDE), nebo
-- službou [Kroki](https://kroki.io/) (HTTP POST těla `.puml` na endpoint `plantuml/png`).
-
-Příklad (PowerShell z kořene repozitáře):
-
-```powershell
-Invoke-WebRequest -Uri "https://kroki.io/plantuml/png" -Method Post `
-  -Body ([IO.File]::ReadAllText("Dokumentace/class-model.puml")) `
-  -ContentType "text/plain; charset=utf-8" `
-  -OutFile "Dokumentace/out/class-model.png"
-```
-
-## Síťová hra (plán)
-
-Po dokončení základní lokální hry je plánována **jednoduchá komunikace po TCP** (adresa hostitele a číslo portu). Klienti budou posílat serializované zprávy (`GameMessage` a odvozené typy). Detaily protokolu budou popsány v technické dokumentaci u finálního odevzdání (CP3).
-
-## Starší odevzdání
-
-Soubory vize projektu (CP1) a zadání kurzu jsou v adresáři [`zadani/`](zadani/).
+*Text README je určen pro cvičícího a kontrolu souladu se zadáním; neobsahuje nástroje editoru ani interní postupy vývoje.*

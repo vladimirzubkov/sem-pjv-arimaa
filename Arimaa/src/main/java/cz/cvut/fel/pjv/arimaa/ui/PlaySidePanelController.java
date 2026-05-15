@@ -60,9 +60,9 @@ final class PlaySidePanelController {
                     () -> {
                         int i = main.notationHistoryList.getSelectionModel().getSelectedIndex();
                         if (i >= 0 && i < main.notationHistoryItems.size()) {
-                            main.notationHistoryList.scrollTo(i);
+                            main.scrollNotationHistoryToShowIndex(i);
                         } else if (!main.notationHistoryItems.isEmpty()) {
-                            main.notationHistoryList.scrollTo(main.notationHistoryItems.size() - 1);
+                            main.scrollNotationHistoryToShowIndex(main.notationHistoryItems.size() - 1);
                         }
                     });
         }
@@ -85,7 +85,11 @@ final class PlaySidePanelController {
         }
         if (main.playCancelTurnButton != null) {
             boolean canCancelNormally =
-                    play && (!main.playDraft.partial.getSteps().isEmpty() || main.playDraft.nextFrom != null);
+                    play
+                            && main.gameController != null
+                            && main.gameController.getPlayHistory().isBootstrapped()
+                            && main.gameController.getPlayHistory().isAtEditableDraftTail()
+                            && (!main.playDraft.partial.getSteps().isEmpty() || main.playDraft.nextFrom != null);
             boolean trapBlocksCancel =
                     main.forbidCancelAfterTrapItem != null
                             && main.forbidCancelAfterTrapItem.isSelected()

@@ -1,0 +1,69 @@
+ArimaaTxtSave 1
+META PLAY GOLD 0 -
+HAND -
+R1 RRRRRRRR
+R2 HCDMEDCH
+R7 hmcedchr
+R8 rrrdrrrr
+RESERVE_GOLD 
+RESERVE_SILVER 
+CAPTURES_GOLD 
+CAPTURES_SILVER 
+1g Md2n Ha2n Cg2n Hh2n
+1s mb7s hg7s de7s ha7s
+2g Cb2n Dc2n Rc1n Df2n
+2s ed7s cf7s rg8s cc7s
+3g Rf1n Rd1n Ee2n Rb1n
+3s dd8s ed6s de6s dd7s
+4g Rh1n Ra1n Rg1n Re1n
+4s rh7s rc8s re8s rh8s
+5g Ha3n Cb3w Rb2n Rb3n
+5s rh6s rf8s re7s ra8s
+6g Ee3n Re2n Rb4n Md3n
+6s mb6n Rb5n cc6s Rb6e Rc6x
+7g Df3n Dc3e Rf2n Rc2n
+7s mb7s rh5s rc7s rb8s
+8g Rc3n Rd2w rh4n Hh3n
+8s Rc4s cc5s rc6s rh7s
+9g Hh4s Rc3w cc4s cc3x Md4w
+9s ed5s Dd3s ed4s rh5s
+10g Rb3n Rc2n Rb4n Ca3e
+10s rh6s de5w re6s dd6w
+11g Cg3n Ra2n re5n Ee4n
+11s cf6s rf7s ha6s ra7s
+12g dd5n Ee5w dd6n Ed5n
+12s re6s rb7e dd7e de7s
+13g Re3n Rg2n de6n Ed6e
+13s rg7w de7w re5w dd7s
+14g Mc4w Rc3n dd6n Ee6w
+14s dd7e ed3e de7s rd5s
+15g Dd2n Re4n de6n Ed6e
+15s de7w Dd3s ee3w dd7s
+16g Df4w Rf3n dd6n Ee6w
+16s dd7e de7s cf5e rf6s
+17g de6n Ed6e rd4n De4w
+17s mb6n Rb5n dc6e Rb6e Rc6x
+18g Rf4w dd6n Ee6w Re5n
+18s Re6e Rf6x de7s ed3e mb7s
+19g de6n Ed6e Dd2n Re4n
+19s Dd3s ee3w ha5e dd7s
+20g dd6n Ee6w Re5n Ha4n
+20s rc7s dd7w Re6e Rf6x de7s
+21g Ra3n de6n Ed6e Cb3e
+21s rf7s rf5s rc6e dc7s
+22g rd6n Ee6w rf4s rf3x Cg4w
+22s rd5e de7s re5s rf6s
+23g re4s Dd4e re3e rf3x De4s
+23s ed3n ed4e Rc4e Cc3x rc5s
+24g Dd2n rc4s rc3x Mb4e Rg3n
+24s De3s ee4s Dd3s ee3w
+25g Cf4w rf5s rf4s rf3x Ce4e
+25s Rd4e ed3n Mc4s Mc3x ed4w
+26g Dd2n De2n de6n Ed6e
+26s ec4e Dd3w Dc3x ed4s rd7s
+27g Cf4n Ee6e hg6n Ef6e
+27s de7s De3e Df3x ed3e rd6s
+28g Eg6w Rh2w Ef6n de6e df6x
+28s Rg4w cg5s Rf4s Rf3x cg4w
+29g Ef7n hg7w hf7s hf6x Ef8s
+29s rd5s rd4s rd3s rd2s

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.24
+
+- **Zvuky tahů:** procedurální PCM **předpočítané při startu** (`PlayProceduralSfx`); přehrávání přes **jednu sdílenou** `SourceDataLine` na dedikovaném vlákně (méně výpadků na Windows než open/close u každého kroku); **počet úderů = počet přidaných kroků** (push/pull, síťová notace); původní timbre stoupání (520/980/1420 Hz).
+- **Menu Nápověda:** oprava **bílého textu na světlém pozadí** v liště a rozbalovacím menu (`arimaa-menus.css`); dialogy nápovědy — čitelný tmavý text (`HelpScrollableDialog`).
+- **Časovač (UI):** sloupec **Průměr / na tah** na **dva řádky**, mírné odsazení vpravo.
+- **Historie tahů:** **Page Up / Page Down** posouvá o **jeden řádek**; seznam scrolluje tak, aby byl výběr **blíže středu** viewportu (ne jen `scrollTo` na horní okraj); panel historie **roste s výškou okna** (`VBox.setVgrow`).
+- **PLAY (klávesnice):** **šipky / WASD** na desce znovu fungují při souběžném handleru historie (oprava předčasného `return` u Page Up/Down).
+- **Boční panel (PLAY):** **Zrušit rozpracovaný tah** a **Konec tahu** aktivní jen na **konci draftu** při prohlížení historie (`isAtEditableDraftTail`), ne při náhledu starších řádků.
+- **README:** aktualizace popisu stavu projektu (CP3, manuál, spuštění).
+- **Menu:** položka **Gameplay** přejmenována na **Nastavení** (Alt+N); sjednocené texty v nápovědě a stavových hláškách.
+- **Načítání partie:** tokeny pasti v notaci (`…x`, např. `Rc6x`) se **nepočítají** jako krok tahu (max. 4 kroky); oprava chyby „Turn must have 1–4 steps, got 5“.
+- **Stav (UI):** při chybě načtení/uložení **hlavička** u „Stav:“ a **důvod** na druhém řádku (`statusDetailLabel`); po tahu text **Na tahu hráč Gold/Silver** (místo „Tah počítače proveden“).
+- **Historie tahů:** **Page Up / Page Down** — posun o **jeden řádek**, seznam **scrolluje** k výběru; výběr řádku = **konec polotahu** (oprava procházení Gold/Silver); **šipky / WASD** na desce v PLAY znovu fungují (oprava `return` u historie).
+- **Deska (PLAY):** **zmrazené** figury vizuálně **zeslabené** (`DefaultRuleEngine.isFrozen`).
+- **O programu:** popisek vpravo u videa **Zdroj vítězného videa**.
+- **Testy:** fixture `tested_game_1.txt`, `PlayNotationParserTrapTest`, rozšíření `GameSerializerTest`.
+- **Konec partie / výhra:** výherní klipy **`assets/gold-victory.mp4`** a **`assets/silver-victory.mp4`** se přehrávají v **samostatném okně** s **`MediaView`** (viditelné video, ne jen zvuk). Rozměr videa **sleduje velikost okna** (`fitWidth` / `fitHeight` vázané na scénu).
+- **Výchozí média v repu:** oba výherní MP4 jsou součástí **`Arimaa/assets/`** (cca 2 MB každý); lze je lokálně nahradit vlastními soubory se stejnými názvy.
+- **Přehrávání (Windows):** pokud cesta k souboru obsahuje **ne-ASCII** (např. diakritika ve složce projektu), klip se před **`MediaPlayer`** zkopíruje do **krátkého ASCII temp** souboru (`%TEMP%`), aby JavaFX Media / GStreamer spolehlivě otevřely `file:` URI.
+- **Formát klipů:** doporučeno **H.264 + AAC** v MP4; **MP3 v kontejneru MP4** často skončí **`ERROR_MEDIA_INVALID`**. Při chybě dekódu se zobrazí **upozornění** s návodem (včetně příkladu ffmpeg s **`-c:a aac`**).
+- **Hledání klipů:** postupně se zkouší relativní **`assets/`**, **`user.dir`**, **`target/assets/`**, adresář modulu Maven (včetně **`target/assets/`**) a **`assets/` vedle spuštěného JAR** (vhodné pro `java -jar` z `target/`).
+- **Git:** položka **`/assets/`** v **`Arimaa/.gitignore`** zrušena — výherní klipy lze verzovat v repozitáři.
+
 ## 0.9.23
 
 - **Historie tahů:** po **novém tahu** zůstává **automatické posunutí** (`scrollTo`) tak, aby byl vidět aktuální řádek; při **kliknutí na řádek** v historii nebo při **Page Up / Page Down** se posuvník už **sám neposouvá** — lze listovat bez skoků.

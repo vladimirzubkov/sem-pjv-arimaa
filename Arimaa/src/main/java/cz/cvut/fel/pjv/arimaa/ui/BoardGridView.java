@@ -1,5 +1,6 @@
 package cz.cvut.fel.pjv.arimaa.ui;
 
+import cz.cvut.fel.pjv.arimaa.model.DefaultRuleEngine;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.model.Piece;
@@ -43,6 +44,8 @@ public final class BoardGridView {
     static final Font COORD_FONT = Font.font(12);
     static final double PIECE_IMAGE_MAX = Math.max(16, CELL - 8);
     private static final double BOARD_VIEW_MARGIN = 14;
+    /** Opacity for pieces frozen under Arimaa rules ({@link DefaultRuleEngine#isFrozen}). */
+    private static final double FROZEN_PIECE_OPACITY = 0.38;
 
     /**
      * Trap squares: diagonal “pit” — board tone at top-left, deep shadow toward bottom-right.
@@ -266,6 +269,7 @@ public final class BoardGridView {
                 int mr = host.modelRankFromVisualRow(row, g);
                 Position pos = Position.of(mf, mr);
                 Piece p = host.effectivePieceAt(g, pos);
+                boolean frozen = p != null && isFrozenForDisplay(g, pos);
                 if (!host.pieceSkinUsesFigureArt()) {
                     data.pieceImage().setImage(null);
                     data.pieceImage().setVisible(false);
@@ -300,8 +304,26 @@ public final class BoardGridView {
                         }
                     }
                 }
+                applyFrozenPieceOpacity(data, frozen && p != null);
             }
         }
+    }
+
+    private static boolean isFrozenForDisplay(Game g, Position pos) {
+        if (g == null || g.getBoard() == null) {
+            return false;
+        }
+        GameState st = g.getState();
+        if (st != GameState.PLAY && st != GameState.GAME_OVER) {
+            return false;
+        }
+        return DefaultRuleEngine.isFrozen(g.getBoard(), pos);
+    }
+
+    private static void applyFrozenPieceOpacity(CellData data, boolean frozen) {
+        double o = frozen ? FROZEN_PIECE_OPACITY : 1.0;
+        data.pieceImage().setOpacity(o);
+        data.pieceLabel().setOpacity(o);
     }
 
     void paintHoverOverlay(Game g) {

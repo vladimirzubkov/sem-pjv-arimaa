@@ -102,9 +102,10 @@ public final class MainWindowLayoutBuilder {
     static void wireNotationHistoryList(MainController main) {
         main.notationHistoryList.setFocusTraversable(false);
         main.notationHistoryList.setFixedCellSize(22);
+        main.notationHistoryList.setMinHeight(88);
         main.notationHistoryList.setPrefHeight(176);
-        main.notationHistoryList.setMaxHeight(176);
-        main.notationHistoryList.setMinHeight(72);
+        main.notationHistoryList.setMaxHeight(Double.MAX_VALUE);
+        main.notationHistoryList.setMaxWidth(Double.MAX_VALUE);
         main.notationHistoryList.setStyle("-fx-font-family: Consolas; -fx-font-size: 11px;");
         main.notationHistoryList.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
         main.notationHistoryList.getSelectionModel().selectedIndexProperty().addListener((obs, o, n) -> {
@@ -128,9 +129,13 @@ public final class MainWindowLayoutBuilder {
         Label clockTitle = new Label("Časovač");
         clockTitle.setStyle("-fx-font-weight: bold;");
         Label hCelkem = new Label("Celkem");
-        Label hPrumer = new Label("Průměr na tah");
-        hCelkem.setStyle(monoSmall);
-        hPrumer.setStyle(monoSmall);
+        Label hPrumerTop = new Label("Průměr");
+        Label hPrumerBottom = new Label("na tah");
+        hPrumerTop.setStyle(monoSmall);
+        hPrumerBottom.setStyle(monoSmall);
+        VBox hPrumer = new VBox(0, hPrumerTop, hPrumerBottom);
+        hPrumer.setAlignment(Pos.CENTER_RIGHT);
+        hPrumer.setPadding(new Insets(0, 0, 0, 10));
         main.clockGoldTotalLabel.setStyle(monoSmall);
         main.clockGoldAvgLabel.setStyle(monoSmall);
         main.clockSilverTotalLabel.setStyle(monoSmall);
@@ -151,10 +156,14 @@ public final class MainWindowLayoutBuilder {
         clockGrid.add(main.clockSilverAvgLabel, 2, 2);
         GridPane.setHalignment(main.clockGoldTotalLabel, HPos.RIGHT);
         GridPane.setHalignment(main.clockGoldAvgLabel, HPos.RIGHT);
+        GridPane.setMargin(main.clockGoldAvgLabel, new Insets(0, 0, 0, 10));
         GridPane.setHalignment(main.clockSilverTotalLabel, HPos.RIGHT);
         GridPane.setHalignment(main.clockSilverAvgLabel, HPos.RIGHT);
+        GridPane.setMargin(main.clockSilverAvgLabel, new Insets(0, 0, 0, 10));
 
         main.notationBox.getChildren().addAll(clockGrid, new Label("Historie tahů:"), main.notationHistoryList);
+        VBox.setVgrow(main.notationHistoryList, Priority.ALWAYS);
+        main.notationBox.setMaxHeight(Double.MAX_VALUE);
         main.notationBox.setVisible(false);
         main.notationBox.setManaged(false);
     }
@@ -169,15 +178,27 @@ public final class MainWindowLayoutBuilder {
 
         main.statusLabel.setWrapText(true);
         main.statusLabel.setMaxWidth(240);
+
+        main.statusDetailLabel.setWrapText(true);
+        main.statusDetailLabel.setMaxWidth(240);
+        main.statusDetailLabel.setVisible(false);
+        main.statusDetailLabel.setManaged(false);
+
         main.playersAssignmentLabel.setWrapText(true);
         main.playersAssignmentLabel.setMaxWidth(240);
         main.setStatus("Rozestavte Gold; pak Hotovo. Silver totéž.");
 
+        VBox statusBlock =
+                new VBox(
+                        2,
+                        new Label("Stav:"),
+                        main.statusLabel,
+                        main.statusDetailLabel);
+
         VBox sidePanel = new VBox(10);
         sidePanel.getChildren()
                 .addAll(
-                        new Label("Stav:"),
-                        main.statusLabel,
+                        statusBlock,
                         new Label("Hráči:"),
                         main.playersAssignmentLabel,
                         main.handLabel,
@@ -190,9 +211,7 @@ public final class MainWindowLayoutBuilder {
                         main.doneButton,
                         main.playEndTurnButton,
                         main.playCancelTurnButton);
-        Region bottomFill = new Region();
-        VBox.setVgrow(bottomFill, Priority.ALWAYS);
-        sidePanel.getChildren().add(bottomFill);
+        VBox.setVgrow(main.notationBox, Priority.ALWAYS);
         sidePanel.setPadding(new Insets(12));
         sidePanel.setPrefWidth(260);
         sidePanel.setMaxHeight(Double.MAX_VALUE);
@@ -233,7 +252,7 @@ public final class MainWindowLayoutBuilder {
         main.redoMenuItem.setOnAction(e -> main.performRedo());
         menuTah.getItems().addAll(main.undoMenuItem, main.redoMenuItem);
 
-        Menu menuGameplay = new Menu("Ga_meplay");
+        Menu menuGameplay = new Menu("N_astavení");
         menuGameplay.setMnemonicParsing(true);
         Menu menuSkin = new Menu("Skin");
         ToggleGroup skinToggleGroup = new ToggleGroup();
@@ -445,7 +464,7 @@ public final class MainWindowLayoutBuilder {
         main.rotateBoardToMoverItem.selectedProperty().addListener((obs, prev, now) -> Platform.runLater(main::refreshAll));
         menuGameplay.getItems().add(main.rotateBoardToMoverItem);
 
-        Menu menuSit = new Menu("S_íť");
+        Menu menuSit = new Menu("_Síť");
         menuSit.setMnemonicParsing(true);
         main.networkHostMenuItem = new MenuItem("Hostovat…");
         main.networkHostMenuItem.setOnAction(e -> main.startNetworkHostDialog());

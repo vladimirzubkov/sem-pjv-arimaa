@@ -74,7 +74,7 @@ public final class ArimaaSaveLoadSupport {
             log.info("user action: game saved to {}", path);
         } catch (IOException ex) {
             log.warn("save failed", ex);
-            ui.setStatus("Uložení se nepovedlo: %s".formatted(ex.getMessage()));
+            ui.setStatus("Uložení se nepovedlo", ex.getMessage());
         }
     }
 
@@ -105,10 +105,10 @@ public final class ArimaaSaveLoadSupport {
             ui.playbackLoadedHistory();
         } catch (IOException ex) {
             log.warn("load failed", ex);
-            ui.setStatus("Načtení se nepovedlo: %s".formatted(ex.getMessage()));
+            ui.setStatus("Načtení se nepovedlo", ex.getMessage());
         } catch (RuntimeException ex) {
             log.warn("load parse/replay failed", ex);
-            ui.setStatus("Soubor nelze načíst: %s".formatted(ex.getMessage()));
+            ui.setStatus("Soubor nelze načíst", ex.getMessage());
         }
     }
 }

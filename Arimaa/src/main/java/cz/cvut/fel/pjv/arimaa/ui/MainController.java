@@ -147,7 +147,10 @@ public class MainController implements BoardViewHost {
         return hoverVisualRow;
     }
 
+    /** Main status line under „Stav:“. */
     final Label statusLabel = new Label();
+    /** Optional detail line below {@link #statusLabel} (e.g. load error reason). */
+    final Label statusDetailLabel = new Label();
     /** Gold/Silver controller summary (human vs CPU level). */
     final Label playersAssignmentLabel = new Label();
     private BoardGridView boardGrid;
@@ -906,7 +909,7 @@ public class MainController implements BoardViewHost {
         }
         if (MainUiLayoutPhase.isPlayOrGameOver(g)) {
             if (draftEditsBlockedByTrapMenuOption()) {
-                setStatus("Nelze vrátit krok — v rozpracovaném tahu padla figura do pasti (Gameplay).");
+                setStatus("Nelze vrátit krok — v rozpracovaném tahu padla figura do pasti (Nastavení).");
                 return;
             }
             if (isTrailingDraftAtLiveEnd() && gameController.getPlayHistory().trailingUncommittedStepCount() > 0) {
@@ -951,7 +954,7 @@ public class MainController implements BoardViewHost {
             return;
         }
         if (draftEditsBlockedByTrapMenuOption()) {
-            setStatus("Nelze vpřed — rozpracovaný tah obsahuje pád do pasti (Gameplay).");
+            setStatus("Nelze vpřed — rozpracovaný tah obsahuje pád do pasti (Nastavení).");
             return;
         }
         if (isTrailingDraftAtLiveEnd() && draftUi.tryRedoDraftFromRedoStack()) {
@@ -976,7 +979,28 @@ public class MainController implements BoardViewHost {
     }
 
     public void setStatus(String text) {
-        statusLabel.setText(text);
+        if (text == null) {
+            setStatus("", null);
+            return;
+        }
+        int nl = text.indexOf('\n');
+        if (nl >= 0) {
+            setStatus(text.substring(0, nl).trim(), text.substring(nl + 1).trim());
+            return;
+        }
+        setStatus(text, null);
+    }
+
+    /**
+     * @param headline main line under „Stav:“
+     * @param detail optional second line; hidden when {@code null} or blank
+     */
+    public void setStatus(String headline, String detail) {
+        statusLabel.setText(headline == null ? "" : headline);
+        boolean hasDetail = detail != null && !detail.isBlank();
+        statusDetailLabel.setText(hasDetail ? detail : "");
+        statusDetailLabel.setVisible(hasDetail);
+        statusDetailLabel.setManaged(hasDetail);
     }
 
     PlayerControllerKind playerControllerKind(PlayerSide side) {
@@ -1329,7 +1353,8 @@ public class MainController implements BoardViewHost {
                                 if (!gameController.submitHumanMove(submit)) {
                                     yield false;
                                 }
-                                playSfxAfterBoardMutationIfEnabled(trapsBeforeSfx);
+                                playSfxAfterBoardMutationIfEnabled(
+                                        trapsBeforeSfx, Math.max(1, submit.getSteps().size()));
                                 gameController.recordCommittedPlayTurn(submit, in.notationLine().trim());
                                 notifyPlayChessClockAfterCommittedTurn(mover);
                                 clearPlayTurnUi();
@@ -1342,7 +1367,7 @@ public class MainController implements BoardViewHost {
                                                     : "Konec hry — vyhrál %s.".formatted(sideName(w)));
                                     playVictoryWinnerMediaIfEnabled(w);
                                 } else {
-                                    setStatus("Tah (síť) proveden.");
+                                    setStatus(statusPlayerOnTurn(g.getSideToMove()));
                                 }
                                 appendHistory(new GameHistoryEvent.TurnCommitted(in.notationLine().trim()));
                                 refreshAll();
@@ -1366,7 +1391,7 @@ public class MainController implements BoardViewHost {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Hostovat");
         dialog.setHeaderText(
-                "Server — Gold (vy), klient Silver. Člověk/počítač pro Gold nastavte v menu Gameplay → Gold hráč.");
+                "Server — Gold (vy), klient Silver. Člověk/počítač pro Gold nastavte v menu Nastavení → Gold hráč.");
         DialogPane pane = dialog.getDialogPane();
         pane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
@@ -1406,7 +1431,7 @@ public class MainController implements BoardViewHost {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Připojit se");
         dialog.setHeaderText(
-                "Klient — Silver (vy), server Gold. Člověk/počítač pro Silver nastavte v menu Gameplay → Silver hráč.");
+                "Klient — Silver (vy), server Gold. Člověk/počítač pro Silver nastavte v menu Nastavení → Silver hráč.");
         DialogPane pane = dialog.getDialogPane();
         pane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
@@ -1669,7 +1694,7 @@ public class MainController implements BoardViewHost {
         if (g.getState() == GameState.PLAY) {
             gameController.enterPlayPhaseBootstrap();
             notifyPlayChessClockEnterPlay();
-            setStatus("Hra — na tahu %s.".formatted(sideName(g.getSideToMove())));
+            setStatus(statusPlayerOnTurn(g.getSideToMove()));
         } else {
             recordTimeline();
             setStatus("Nová hra — rozestavuje %s.".formatted(sideName(g.getSideToMove())));
@@ -1745,7 +1770,7 @@ public class MainController implements BoardViewHost {
         ph.setViewPrefix(tailIdx, k);
         int trapsBeforeSfx = PlayProceduralSfx.totalTrapCaptures(g);
         gameController.applyPlayHistoryViewToGame();
-        playSfxAfterBoardMutationIfEnabled(trapsBeforeSfx);
+        playSfxAfterBoardMutationIfEnabled(trapsBeforeSfx, 1);
         syncPlayPartialFromHistory();
         if (refreshUi) {
             refreshAll();
@@ -1797,7 +1822,7 @@ public class MainController implements BoardViewHost {
                 setStatus(w == null ? "Konec hry." : "Konec hry — vyhrál %s.".formatted(sideName(w)));
                 playVictoryWinnerMediaIfEnabled(w);
             } else {
-                setStatus("Tah počítače proveden.");
+                setStatus(statusPlayerOnTurn(g.getSideToMove()));
             }
             appendHistory(new GameHistoryEvent.TurnCommitted(notationLine));
         } finally {
@@ -1813,11 +1838,11 @@ public class MainController implements BoardViewHost {
     }
 
     /** After {@link GameController#applyPlayHistoryViewToGame()} or successful {@link GameController#submitHumanMove}. */
-    void playSfxAfterBoardMutationIfEnabled(int trapsBefore) {
-        if (gameplaySoundEnabledItem == null || !gameplaySoundEnabledItem.isSelected()) {
+    void playSfxAfterBoardMutationIfEnabled(int trapsBefore, int woodCues) {
+        if (gameplaySoundEnabledItem == null || !gameplaySoundEnabledItem.isSelected() || woodCues <= 0) {
             return;
         }
-        PlayProceduralSfx.playAfterBoardMutation(trapsBefore, game());
+        PlayProceduralSfx.playAfterBoardMutation(trapsBefore, game(), woodCues);
     }
 
     /** Applies „Historie tahů“ line selection: view prefix, board, draft sync, refresh (mouse or {@link #navigateNotationHistoryByPage}). */
@@ -1847,10 +1872,7 @@ public class MainController implements BoardViewHost {
         hostBroadcastSnapshotIfNeeded();
     }
 
-    /**
-     * Page Down ({@code directionSign > 0}) / Page Up moves the notation history selection by roughly one visible page
-     * without auto-scrolling the list.
-     */
+    /** Page Down ({@code directionSign > 0}) / Page Up: previous or next line in „Historie tahů“. */
     void navigateNotationHistoryByPage(int directionSign) {
         if (directionSign == 0 || gameController == null || !gameController.getPlayHistory().isBootstrapped() || isNetworkClient()) {
             return;
@@ -1863,37 +1885,63 @@ public class MainController implements BoardViewHost {
         if (n == 0) {
             return;
         }
-        int page = estimateNotationHistoryPageSize();
-        int delta = page * Integer.signum(directionSign);
         int cur = notationHistoryList.getSelectionModel().getSelectedIndex();
         if (cur < 0) {
-            cur = directionSign > 0 ? 0 : n - 1;
+            List<Integer> vis = gameController.getPlayHistory().visibleHalfIndicesForDisplay(true);
+            cur = vis.indexOf(gameController.getPlayHistory().viewHalfIndex());
+            if (cur < 0) {
+                cur = directionSign > 0 ? 0 : n - 1;
+            }
         } else {
-            cur = Math.min(n - 1, Math.max(0, cur + delta));
+            cur = Math.min(n - 1, Math.max(0, cur + Integer.signum(directionSign)));
         }
+        selectNotationHistoryLine(cur);
+    }
+
+    private void selectNotationHistoryLine(int cur) {
         suppressHistoryListEvents = true;
         notationHistoryList.getSelectionModel().select(cur);
         suppressHistoryListEvents = false;
         applyNotationHistoryListSelection(cur);
+        int scrollTarget = cur;
+        Platform.runLater(() -> scrollNotationHistoryToShowIndex(scrollTarget));
     }
 
-    private int estimateNotationHistoryPageSize() {
-        double h = notationHistoryList.getHeight();
-        if (h <= 0) {
-            h = notationHistoryList.getPrefHeight();
+    /**
+     * Scrolls the notation list so {@code index} sits near the vertical center of the viewport. Plain
+     * {@link javafx.scene.control.ListView#scrollTo(int)} aligns the row to the top, which feels wrong for Page Down.
+     */
+    void scrollNotationHistoryToShowIndex(int index) {
+        if (index < 0 || notationHistoryItems.isEmpty()) {
+            return;
         }
+        int n = notationHistoryItems.size();
+        index = Math.min(n - 1, Math.max(0, index));
         double cell = notationHistoryList.getFixedCellSize();
         if (cell <= 0) {
             cell = 22;
         }
-        return Math.max(1, (int) (h / cell));
+        double h = notationHistoryList.getHeight();
+        if (h <= 0) {
+            h = notationHistoryList.getPrefHeight();
+        }
+        int visibleRows = Math.max(1, (int) Math.floor(h / cell));
+        if (n <= visibleRows) {
+            notationHistoryList.scrollTo(0);
+            return;
+        }
+        int firstVisible = index - visibleRows / 2;
+        firstVisible = Math.max(0, Math.min(firstVisible, n - visibleRows));
+        notationHistoryList.scrollTo(firstVisible);
     }
 
     void playVictoryWinnerMediaIfEnabled(PlayerSide winner) {
         if (winner == null || gameplaySoundEnabledItem == null || !gameplaySoundEnabledItem.isSelected()) {
             return;
         }
-        PlayVictoryMediaSfx.playWinnerIfPresent(winner);
+        if (stage != null) {
+            PlayVictoryMediaSfx.playWinnerIfPresent(stage, winner);
+        }
     }
 
     /**
@@ -1958,10 +2006,13 @@ public class MainController implements BoardViewHost {
         if (gameController == null || !gameController.getPlayHistory().isBootstrapped()) {
             return;
         }
-        gameController.getPlayHistory().replaceTrailingDraftStepsFromMove(playDraft.partial);
+        PlayTurnHistory ph = gameController.getPlayHistory();
+        int stepsBefore = ph.appliedPrefixSteps();
         int trapsBeforeSfx = PlayProceduralSfx.totalTrapCaptures(game());
+        ph.replaceTrailingDraftStepsFromMove(playDraft.partial);
+        int woodCues = Math.max(1, ph.appliedPrefixSteps() - stepsBefore);
         gameController.applyPlayHistoryViewToGame();
-        playSfxAfterBoardMutationIfEnabled(trapsBeforeSfx);
+        playSfxAfterBoardMutationIfEnabled(trapsBeforeSfx, woodCues);
         if (networkIntentApplyDepth == 0) {
             hostBroadcastSnapshotIfNeeded();
         }
@@ -2129,5 +2180,9 @@ public class MainController implements BoardViewHost {
 
     static String sideName(PlayerSide s) {
         return s == PlayerSide.GOLD ? "Gold" : "Silver";
+    }
+
+    static String statusPlayerOnTurn(PlayerSide sideToMove) {
+        return "Na tahu hráč %s.".formatted(sideName(sideToMove));
     }
 }

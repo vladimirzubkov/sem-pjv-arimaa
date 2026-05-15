@@ -514,7 +514,7 @@ final class PlayPhaseUiHandler {
             main.playVictoryWinnerMediaIfEnabled(w);
         } else {
             log.info("play turn ended: state={} sideToMove={}", g.getState(), g.getSideToMove());
-            main.setStatus("Tah proveden.");
+            main.setStatus(MainController.statusPlayerOnTurn(g.getSideToMove()));
         }
         main.appendHistory(new GameHistoryEvent.TurnCommitted(notationLine));
         main.refreshAll();

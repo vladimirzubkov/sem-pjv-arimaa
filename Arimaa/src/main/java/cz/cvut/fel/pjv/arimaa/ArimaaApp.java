@@ -7,9 +7,9 @@ import javafx.application.Application;
 /**
  * Entry point for the desktop application (JavaFX): configures logging from CLI args, then hands off to {@link JavafxApp}.
  */
-public final class ArimaaApp {
+public final class ArimaaApp { // final - nelze dědit
 
-    private ArimaaApp() {
+    private ArimaaApp() { // zákaz vytváření objektu, potřebujeme pouze main
     }
 
     /**
@@ -19,7 +19,7 @@ public final class ArimaaApp {
      *             (see {@link LoggingSupport})
      */
     public static void main(String[] args) {
-        LoggingSupport.bootstrapFromArgs(args);
-        Application.launch(JavafxApp.class, args);
+        LoggingSupport.bootstrapFromArgs(args); // nastavení úrovní logování a do souboru
+        Application.launch(JavafxApp.class, args); // spuštění GUI JavaFX aplikace
     }
 }

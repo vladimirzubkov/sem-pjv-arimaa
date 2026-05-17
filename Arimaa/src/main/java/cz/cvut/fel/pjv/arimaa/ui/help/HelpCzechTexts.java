@@ -8,7 +8,7 @@ public final class HelpCzechTexts {
     private HelpCzechTexts() {}
 
     /** Fallback when JAR manifest has no {@code Implementation-Version} (e.g. IDE run). */
-    public static final String FALLBACK_APP_VERSION = "0.9.28";
+    public static final String FALLBACK_APP_VERSION = "0.9.29";
 
     public static final String TITLE_PRAVIDLA = "Pravidla hry";
     public static final String TITLE_OVLADANI = "Ovládání";

@@ -34,6 +34,8 @@ import javafx.animation.Timeline;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.beans.binding.DoubleBinding;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -60,6 +62,7 @@ import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.image.Image;
@@ -209,6 +212,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
     ToggleGroup goldPlayerMenuGroup;
     ToggleGroup silverPlayerMenuGroup;
     MenuItem networkHostMenuItem;
+    MenuItem networkCancelHostWaitMenuItem;
     MenuItem networkConnectMenuItem;
     MenuItem networkDisconnectMenuItem;
 
@@ -231,6 +235,8 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
     private PlayerControllerKind networkPeerSilverKind;
     /** Client UI: Gold assignment chosen by the peer. */
     private PlayerControllerKind networkPeerGoldKind;
+    /** Window title middle segment during síťová hra: {@code Server} / {@code Klient} ({@code null} when offline). */
+    private String networkWindowPeerLabel;
     /** When true, Gameplay player {@link ToggleGroup} listeners skip broadcasting seat changes. */
     boolean suppressGameplayPlayerMenuCallback;
     private final Random computerRandom = new Random();
@@ -320,7 +326,10 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         ScrollPane scroll = new ScrollPane(layout.sidePanel());
         scroll.setFitToWidth(true);
         scroll.setFitToHeight(true);
-        scroll.setMinViewportWidth(240);
+        scroll.setMinViewportWidth(200);
+        scroll.setPrefViewportWidth(272);
+        scroll.setMaxWidth(400);
+        wireSidePanelTextWrapToViewport(layout.sidePanel());
         scroll.setBackground(Background.EMPTY);
         scroll.setStyle("-fx-background-color: transparent;");
 
@@ -782,6 +791,18 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             }
             default -> String.valueOf(g.getState());
         };
+        if (isNetworkSessionActive()) {
+            String peer =
+                    networkWindowPeerLabel != null && !networkWindowPeerLabel.isBlank()
+                            ? networkWindowPeerLabel
+                            : "síť";
+            if (g.getState() == GameState.GAME_OVER) {
+                stage.setTitle("Hra Arimaa | %s | %s".formatted(peer, phase));
+            } else {
+                stage.setTitle("Hra Arimaa | %s | Na tahu: %s".formatted(peer, sideName(g.getSideToMove())));
+            }
+            return;
+        }
         if (g.getState() == GameState.GAME_OVER) {
             stage.setTitle("Arimaa – %s".formatted(phase));
         } else {
@@ -1084,6 +1105,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
     }
 
     public void prepareNetworkSessionAsHost(PlayerControllerKind peerSilverAssignment) {
+        networkWindowPeerLabel = "Server";
         /* Gold: člověk/počítač z menu Gameplay (jako v lokální hře). */
         silverPlayerKind = PlayerControllerKind.NETWORK_PEER;
         networkPeerSilverKind = Objects.requireNonNull(peerSilverAssignment);
@@ -1095,6 +1117,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
     }
 
     public void prepareNetworkSessionAsClient(PlayerControllerKind peerGoldAssignment) {
+        networkWindowPeerLabel = "Klient";
         goldPlayerKind = PlayerControllerKind.NETWORK_PEER;
         /* Silver: člověk/počítač z menu Gameplay (jako v lokální hře). */
         networkPeerGoldKind = Objects.requireNonNull(peerGoldAssignment);
@@ -1110,10 +1133,15 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         silverPlayerKind = PlayerControllerKind.COMPUTER_LEVEL_1;
         networkPeerGoldKind = null;
         networkPeerSilverKind = null;
+        networkWindowPeerLabel = null;
         syncNetworkMenuState();
         syncGameplayPlayerMenuDisabled();
         syncGameplayPlayerMenuSelectionFromKinds();
         refreshPlayersAssignmentLabel();
+        Game g = game();
+        if (g != null && stage != null) {
+            updateWindowTitle(g);
+        }
     }
 
     void syncGameplayPlayerMenuDisabled() {
@@ -1183,14 +1211,45 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
 
     void syncNetworkMenuState() {
         boolean on = isNetworkSessionActive();
+        boolean hostWait =
+                arimaaNetworkCoordinator != null && arimaaNetworkCoordinator.isHostBeforeWelcomeDone();
         if (networkHostMenuItem != null) {
-            networkHostMenuItem.setDisable(on);
+            boolean showHost = !on;
+            networkHostMenuItem.setVisible(showHost);
         }
         if (networkConnectMenuItem != null) {
-            networkConnectMenuItem.setDisable(on);
+            boolean showConnect = !on;
+            networkConnectMenuItem.setVisible(showConnect);
+        }
+        if (networkCancelHostWaitMenuItem != null) {
+            networkCancelHostWaitMenuItem.setVisible(hostWait);
         }
         if (networkDisconnectMenuItem != null) {
-            networkDisconnectMenuItem.setDisable(!on);
+            boolean showDisconnect = on && !hostWait;
+            networkDisconnectMenuItem.setVisible(showDisconnect);
+        }
+    }
+
+    /**
+     * Wraps long „Stav:“ lines by binding label {@code maxWidth} to the side {@link VBox} width. Avoid binding the
+     * VBox {@code prefWidth} to the {@link ScrollPane} viewport — that can inflate the pane and hide the board.
+     */
+    private void wireSidePanelTextWrapToViewport(VBox sidePanel) {
+        DoubleBinding textMax =
+                Bindings.createDoubleBinding(
+                        () -> Math.max(40, sidePanel.getWidth() - 24), sidePanel.widthProperty());
+        statusLabel.setMinWidth(0);
+        statusDetailLabel.setMinWidth(0);
+        playersAssignmentLabel.setMinWidth(0);
+        handLabel.setMinWidth(0);
+        statusLabel.maxWidthProperty().bind(textMax);
+        statusDetailLabel.maxWidthProperty().bind(textMax);
+        playersAssignmentLabel.maxWidthProperty().bind(textMax);
+        handLabel.maxWidthProperty().bind(textMax);
+        if (!sidePanel.getChildren().isEmpty()
+                && sidePanel.getChildren().getFirst() instanceof Region statusBlock) {
+            statusBlock.setMinWidth(0);
+            statusBlock.maxWidthProperty().bind(sidePanel.widthProperty());
         }
     }
 
@@ -1217,6 +1276,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         return new GameSerializer().serializeForNetwork(gameController, draft);
     }
 
+    @Override
     public void applyNetworkSnapshotSaveText(String text) {
         if (gameController == null || stage == null) {
             return;
@@ -1229,6 +1289,14 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             gameController.loadFromTxtGame(p.playStartSnapshot(), p.moveLines());
             syncPlayPartialFromHistory();
             clearComputerAutoplayPauseState();
+            Game gSync = game();
+            if (playChessClockModel != null && gSync != null) {
+                if (gSync.getState() == GameState.PLAY || gSync.getState() == GameState.GAME_OVER) {
+                    notifyPlayChessClockHistoryNavigation();
+                } else {
+                    resetPlayChessClockToSetup();
+                }
+            }
             refreshAll();
             if (isNetworkClient()) {
                 setStatus("Síť — stav synchronizován.");
@@ -1432,6 +1500,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                 setStatus("Neplatný port.");
                 return;
             }
+            setStatus("Síť — zakládám server na portu %d…".formatted(port));
             arimaaNetwork().startHost(port);
             syncNetworkMenuState();
         } catch (NumberFormatException ex) {
@@ -1469,7 +1538,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                 setStatus("Neplatný port.");
                 return;
             }
-            arimaaNetwork().startClient(hostField.getText().trim(), port);
+            String host = hostField.getText().trim();
+            setStatus("Síť — připojuji se k %s:%d…".formatted(host, port));
+            arimaaNetwork().startClient(host, port);
             syncNetworkMenuState();
         } catch (NumberFormatException ex) {
             setStatus("Port musí být číslo.");

@@ -36,6 +36,7 @@ public final class WireMessages {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record SeatControlMessage(String seatControl) {}
 
+    /** Host → client: text save same as disk format ({@link #saveText()}). */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record StateSnapshotMessage(String saveText) {}
 

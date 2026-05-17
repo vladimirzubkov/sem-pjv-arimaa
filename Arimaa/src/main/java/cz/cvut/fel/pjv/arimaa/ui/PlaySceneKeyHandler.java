@@ -26,6 +26,9 @@ public final class PlaySceneKeyHandler {
             if (e.getTarget() instanceof TextInputControl t && t.isEditable()) {
                 return;
             }
+            if (PlayVictoryMediaSfx.interceptVictoryMediaKeyPress(e)) {
+                return;
+            }
             Game g = main.game();
             if (g != null && (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER)) {
                 if (!main.isLocalInteractiveTurn(g)) {

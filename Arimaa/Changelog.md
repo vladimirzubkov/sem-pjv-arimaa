@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.29
+
+- **Síť — UI:** při aktivní relaci titulek okna `Hra Arimaa | Server` / `Klient` + `Na tahu: …` (mimo síť beze změny); po `state_snapshot` klient znovu nastaví PLAY hodiny (`notifyPlayChessClockHistoryNavigation` / SETUP reset).
+- **Síť — menu:** položka **Zrušit čekání na klienta** během naslouchání hostitele; viditelnost **Hostovat / Připojit** vs **Odpojit**; `ArimaaNetworkCoordinator.isHostBeforeWelcomeDone()`; stavové řádky při zakládání serveru a připojení klienta.
+- **Boční panel:** vázání šířky zalamování textu (`statusLabel`, hráči, ruka) na šířku `VBox` (`wireSidePanelTextWrapToViewport`); `ScrollPane` — `prefViewportWidth` / `maxWidth` (delší „Stav:“ bez přerůstání layoutu přes desku).
+- **Výherní video:** hledání `assets/*.mp4` **nejdříve vedle JAR**; při chybě souboru **log WARN**; při přehrávání **mezerník** pauza/pokračování, **Escape** zavření (`PlayVictoryMediaSfx`, filtr ve `PlaySceneKeyHandler`).
+- **Wire / testy:** Javadoc u `StateSnapshotMessage`; test `snapshotIgnoresUnknownTopLevelJsonFields` (ignorace neznámých klíčů v JSON snapshotu).
+- **Verze v UI:** `HelpCzechTexts.FALLBACK_APP_VERSION` a popis v `pom.xml` sjednoceny na **0.9.29**.
+
 ## 0.9.28
 
 - **Síť / deska:** při aktivní síťové hře a vypnuté položce **„Otáčet desku — hráč na tahu dole“** má host (Gold) a klient (Silver) každý **lokálně** svou stranu vizuálně dole (`BoardViewOrientation` + lambdy v `MainController`); při zapnuté rotaci zůstává dosavadní pravidlo (tahující / vítěz). Žádná synchronizace orientace po síti.

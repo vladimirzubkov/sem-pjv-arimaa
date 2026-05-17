@@ -80,6 +80,15 @@ public final class ArimaaNetworkCoordinator {
         return role == NetworkRole.HOST;
     }
 
+    /**
+     * {@code true} while the host session has not yet finished sending the first {@code welcome} (listening on
+     * {@link ServerSocket#accept()}, reading {@code hello}, or running JavaFX setup). The user may cancel this phase
+     * via {@link #stopSession()} to close the listener without an active game.
+     */
+    public boolean isHostBeforeWelcomeDone() {
+        return role == NetworkRole.HOST && !hostHandshakeComplete;
+    }
+
     public void startHost(int port) {
         stopSocketsAndTasks();
         hostHandshakeComplete = false;

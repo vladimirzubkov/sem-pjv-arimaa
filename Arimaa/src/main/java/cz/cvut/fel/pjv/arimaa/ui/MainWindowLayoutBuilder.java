@@ -10,6 +10,7 @@ import javafx.application.Platform;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.text.TextAlignment;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.CustomMenuItem;
@@ -170,22 +171,20 @@ public final class MainWindowLayoutBuilder {
 
     static VBox buildSidePanel(MainController main) {
         main.handLabel.setWrapText(true);
-        main.handLabel.setMaxWidth(220);
         main.handLabel.setMinHeight(Region.USE_PREF_SIZE);
         main.handLabel.setMaxHeight(Region.USE_PREF_SIZE);
         main.handPieceGraphic.setPreserveRatio(true);
         main.handPieceGraphic.setSmooth(true);
 
         main.statusLabel.setWrapText(true);
-        main.statusLabel.setMaxWidth(240);
+        main.statusLabel.setTextAlignment(TextAlignment.LEFT);
 
         main.statusDetailLabel.setWrapText(true);
-        main.statusDetailLabel.setMaxWidth(240);
+        main.statusDetailLabel.setTextAlignment(TextAlignment.LEFT);
         main.statusDetailLabel.setVisible(false);
         main.statusDetailLabel.setManaged(false);
 
         main.playersAssignmentLabel.setWrapText(true);
-        main.playersAssignmentLabel.setMaxWidth(240);
         main.setStatus("Rozestavte Gold; pak Hotovo. Silver totéž.");
 
         VBox statusBlock =
@@ -468,14 +467,18 @@ public final class MainWindowLayoutBuilder {
         menuSit.setMnemonicParsing(true);
         main.networkHostMenuItem = new MenuItem("Hostovat…");
         main.networkHostMenuItem.setOnAction(e -> main.startNetworkHostDialog());
+        main.networkCancelHostWaitMenuItem = new MenuItem("Zrušit čekání na klienta");
+        main.networkCancelHostWaitMenuItem.setVisible(false);
+        main.networkCancelHostWaitMenuItem.setOnAction(e -> main.disconnectNetwork());
         main.networkConnectMenuItem = new MenuItem("Připojit se…");
         main.networkConnectMenuItem.setOnAction(e -> main.startNetworkClientDialog());
         main.networkDisconnectMenuItem = new MenuItem("Odpojit");
-        main.networkDisconnectMenuItem.setDisable(true);
+        main.networkDisconnectMenuItem.setVisible(false);
         main.networkDisconnectMenuItem.setOnAction(e -> main.disconnectNetwork());
         menuSit.getItems()
                 .addAll(
                         main.networkHostMenuItem,
+                        main.networkCancelHostWaitMenuItem,
                         main.networkConnectMenuItem,
                         new SeparatorMenuItem(),
                         main.networkDisconnectMenuItem);

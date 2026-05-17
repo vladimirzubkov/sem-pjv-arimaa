@@ -66,6 +66,19 @@ class NetworkJsonWireTest {
     }
 
     @Test
+    void snapshotIgnoresUnknownTopLevelJsonFields() throws IOException {
+        String line =
+                NetworkJson.mapper()
+                        .createObjectNode()
+                        .put("type", "state_snapshot")
+                        .put("saveText", "x")
+                        .put("futureField", 42)
+                        .toString();
+        WireMessages.StateSnapshotMessage s = NetworkJson.readSnapshot(NetworkJson.parseLine(line).node());
+        assertEquals("x", s.saveText());
+    }
+
+    @Test
     void pingPongLines() throws IOException {
         assertEquals("ping", NetworkJson.parseLine(NetworkJson.pingLine()).type());
         assertEquals("pong", NetworkJson.parseLine(NetworkJson.pongLine()).type());

@@ -6,6 +6,8 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaException;
 import javafx.scene.media.MediaPlayer;
@@ -84,22 +86,45 @@ final class PlayVictoryMediaSfx {
         Platform.runLater(PlayVictoryMediaSfx::dismissOnFxThread);
     }
 
+    /**
+     * When the victory overlay is visible: Space pauses/resumes, Escape stops. Call from a scene {@code KEY_PRESSED}
+     * filter (capture phase) before gameplay shortcuts.
+     *
+     * @return {@code true} if the event was consumed
+     */
+    static boolean interceptVictoryMediaKeyPress(KeyEvent e) {
+        if (overlayRoot == null || !overlayRoot.isVisible() || activePlayer == null) {
+            return false;
+        }
+        if (e.getCode() == KeyCode.SPACE && !e.isControlDown() && !e.isAltDown()) {
+            toggleVictoryPauseResume();
+            e.consume();
+            return true;
+        }
+        if (e.getCode() == KeyCode.ESCAPE) {
+            dismissOnFxThread();
+            e.consume();
+            return true;
+        }
+        return false;
+    }
+
     private record PlaybackTarget(String playbackUri, Path tempCopy) {}
 
     private static Optional<Path> resolveVictoryMediaPath(String fileName) {
         List<Path> candidates = new ArrayList<>();
-        candidates.add(Path.of(ASSETS_DIR, fileName));
+        Path jarAdjacent = tryJarAdjacentAsset(fileName);
+        if (jarAdjacent != null) {
+            candidates.add(jarAdjacent);
+        }
         String userDir = System.getProperty("user.dir", ".");
         candidates.add(Path.of(userDir, ASSETS_DIR, fileName));
         candidates.add(Path.of(userDir, "target", ASSETS_DIR, fileName));
+        candidates.add(Path.of(ASSETS_DIR, fileName));
         Path moduleRoot = tryResolveMavenModuleRoot();
         if (moduleRoot != null) {
             candidates.add(moduleRoot.resolve(ASSETS_DIR).resolve(fileName));
             candidates.add(moduleRoot.resolve("target").resolve(ASSETS_DIR).resolve(fileName));
-        }
-        Path jarAdjacent = tryJarAdjacentAsset(fileName);
-        if (jarAdjacent != null) {
-            candidates.add(jarAdjacent);
         }
         for (Path candidate : candidates) {
             Path abs = candidate.toAbsolutePath().normalize();
@@ -107,7 +132,23 @@ final class PlayVictoryMediaSfx {
                 return Optional.of(abs);
             }
         }
+        log.warn(
+                "victory media: soubor {} nenalezen (zkuste assets vedle .jar nebo v pracovním adresáři).",
+                fileName);
         return Optional.empty();
+    }
+
+    private static void toggleVictoryPauseResume() {
+        MediaPlayer player = activePlayer;
+        if (player == null) {
+            return;
+        }
+        MediaPlayer.Status st = player.getStatus();
+        if (st == MediaPlayer.Status.PLAYING) {
+            player.pause();
+        } else if (st == MediaPlayer.Status.PAUSED) {
+            player.play();
+        }
     }
 
     private static PlaybackTarget preparePlaybackTarget(Path sourceAbs) {

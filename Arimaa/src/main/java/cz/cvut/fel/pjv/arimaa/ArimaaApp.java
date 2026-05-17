@@ -7,9 +7,9 @@ import javafx.application.Application;
 /**
  * Entry point for the desktop application (JavaFX): configures logging from CLI args, then hands off to {@link JavafxApp}.
  */
-public final class ArimaaApp { // final - nelze dědit
+public final class ArimaaApp {
 
-    private ArimaaApp() { // zákaz vytváření objektu, potřebujeme pouze main
+    private ArimaaApp() {
     }
 
     /**

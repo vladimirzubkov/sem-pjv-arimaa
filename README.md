@@ -13,8 +13,8 @@ V GitLab Wiki je potřeba mít **aktuální** uživatelský manuál dle zadání
 
 ## Technická dokumentace (v repozitáři)
 
-- **PlantUML** zdroje: [`Dokumentace/*.puml`](Dokumentace/)  
-- Vygenerované **PNG**: [`Dokumentace/out/`](Dokumentace/out/) (diagram balíčků, model, UI, stavy; postup generování viz dřívější sekce v historii README / komentáře v `manual-hrace.md`)
+- **PlantUML** zdroje: [`Dokumentace/puml/`](Dokumentace/puml/)  
+- Vygenerované **PNG**: [`Dokumentace/puml/out/`](Dokumentace/puml/out/) (diagram balíčků, model, UI, stavy; přegenerování: `java -jar plantuml.jar -tpng -o out *.puml` ve složce `Dokumentace/puml/`)
 - **Síť:** protokol NDJSON přes TCP, typy zpráv v balíčku `cz.cvut.fel.pjv.arimaa.network` — pro detailní specifikaci viz zdrojové soubory a Javadoc u veřejných typů
 
 ## Splnění povinných požadavků kurzu (kontrolní seznam)

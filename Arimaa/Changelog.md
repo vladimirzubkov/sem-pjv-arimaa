@@ -4,6 +4,8 @@
 
 - **Pravidla:** validace sekvenčních kroků tahu rozložena na router + privátní metody pro slide, push a pull (`DefaultRuleEngine`, `GridMoveRules`) — nižší cyklomatická složitost, stejné chování.
 - **Média:** aktualizované výherní klipy `assets/gold-victory.mp4` a `assets/silver-victory.mp4`.
+- **Testy:** parametrizované JUnit testy validace kroků PLAY (`PlayStepValidationTest`, `PlayRuleTestFixtures`) — slide, push, pull a hraniční případy přes `DefaultRuleEngine.isValidPlayPrefix` a `Game.applyMove`.
+- **Dokumentace:** zdroje PlantUML přesunuty do `Dokumentace/puml/`, exportované PNG do `Dokumentace/puml/out/`; v `README.md` aktualizovány odkazy.
 
 ## 0.9.25
 

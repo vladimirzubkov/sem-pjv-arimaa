@@ -1,5 +1,19 @@
-/* Jednotné odsazení 10 px vlevo/vpravo: horní lišta a okraj popup menu.
- * Barva textu: na světlém pozadí popupu musí být tmavá (Modena / Windows někdy nechá bílý fill). */
+/*
+ * arimaa-menus.css — stylopis přidaný k hlavní Scene v MainController#attachToStage.
+ * Cíl: MenuBar (horní lišta) a vyskakovací ContextMenu (např. Hra → Nová hra).
+ * Desku, dialogy a jiné scény tento soubor sám o sobě nemění.
+ *
+ * Pozn.: po úpravě souboru v src/… je potřeba mvn compile (kopie do target/classes).
+ * Obnovení stylu za běhu: F5 jen pokud JVM běží s -Darimaa.devMenuCssF5=true (viz pom.xml / javafx plugin).
+ */
+
+/* ---------------------------------------------------------------------------
+ * Horní lišta (MenuBar) — jednotlivé položky v řádku (Hra, Tah, Nastavení, …)
+ * ---------------------------------------------------------------------------
+ * .menu-bar          … kontejner celé lišty (tady nestylujeme přímo).
+ * .menu-button       … jeden „tlačítkový“ uzel pro každé Menu v liště; padding
+ *                      určuje odsazení buňky od okrajů (svisle 4px, vodorovně 10px).
+ * .menu-button > .label … viditelný nápis v buňce; mění se mu barva textu. */
 
 .menu-bar .menu-button {
     -fx-padding: 4px 10px 4px 10px;
@@ -9,21 +23,62 @@
     -fx-text-fill: #141414;
 }
 
+/* Stejné položky lišty při najetí myši, fokusu z klávesnice a když je menu rozbalené (:showing). */
 .menu-bar .menu-button:hover > .label,
 .menu-bar .menu-button:focused > .label,
 .menu-bar .menu-button:showing > .label {
     -fx-text-fill: white;
 }
 
+/* ---------------------------------------------------------------------------
+ * Popup okno (ContextMenu) — pouze svislý „dýchací“ okraj
+ * ---------------------------------------------------------------------------
+ * Horizontální odsazení řeší výhradně .menu-item níže — jinak se sečte s paddingem
+ * řádku a okraje vypadají dvojnásobně široké (viz dřívější verze). */
+
 .context-menu {
+    -fx-padding: 4px 2px 4px 2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Řádky v popupu (Nová hra, Skin, zaškrtávací položky, …)
+ * ---------------------------------------------------------------------------
+ * Jedna vrstva 10px vlevo/vpravo od okraje řádku (ne od okraje celého popupu).
+ * Řádky typu Menu (podmenu, třída .menu i .menu-item) přepisují Modena výchozí
+ * .menu { padding 4×8px }, které by se jinak sčítalo s tímto pravidlem. */
+
+.context-menu .menu-item {
     -fx-padding: 4px 10px 4px 10px;
 }
 
+/* (Řádky .menu = podmenu mají třídu .menu i .menu-item; výše platí pro ně stejně
+ * a přebíjí Modena samostatné pravidlo .menu { padding … } vyšší specifičností.) */
+
+/* ---------------------------------------------------------------------------
+ * Uvnitř řádku: Modena má asymetrické paddingy (.label jen vpravo, .left-container
+ * větší vpravo než vlevo) — kvůli tomu vypadá víc místa vpravo než vlevo.
+ * Nastavíme symetrické hodnoty pro všechny běžné řádky v našem popup menu.
+ * --------------------------------------------------------------------------- */
+
+.context-menu .menu-item > .left-container {
+    -fx-padding: 0.35em 0.35em 0.35em 0.35em;
+}
+
+.context-menu .menu-item > .right-container {
+    -fx-padding: 0.35em 0.35em 0.35em 0.35em;
+}
+
+/* Barva popředí + stejný symetrický padding u popisků i u check/radio (Modena u .label často jen vpravo). */
 .context-menu .menu-item > .label,
 .context-menu .check-menu-item > .label,
 .context-menu .radio-menu-item > .label {
+    -fx-padding: 0 0.35em 0 0.35em;
     -fx-text-fill: #141414;
 }
+
+/* ---------------------------------------------------------------------------
+ * Barva textu v popupu při hover / fokusu (světlý výběr řádku)
+ * --------------------------------------------------------------------------- */
 
 .context-menu .menu-item:hover > .label,
 .context-menu .menu-item:focused > .label,

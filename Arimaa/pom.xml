@@ -9,7 +9,7 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>Arimaa</name>
-    <description>Semestrální projekt – hra Arimaa (JavaFX). Verze 0.9.24.</description>
+    <description>Semestrální projekt – hra Arimaa (JavaFX). Verze 0.9.27.</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -99,6 +99,10 @@
                 <version>0.0.8</version>
                 <configuration>
                     <mainClass>${app.mainClass}</mainClass>
+                    <!-- OpenJFX plugin passes VM options only via <options>, not -Djavafx.jvmArgs (see JavaFXBaseMojo). -->
+                    <options>
+                        <option>-Darimaa.devMenuCssF5=true</option>
+                    </options>
                 </configuration>
             </plugin>
             <!-- Single runnable JAR (dependencies + JavaFX) for distribution; build on the target OS (native libs). -->

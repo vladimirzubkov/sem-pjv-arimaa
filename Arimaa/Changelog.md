@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.27
+
+- **Menu (CSS):** `arimaa-menus.css` — komentáře po blocích; horizontální odsazení řádků v popup menu **10px** na `.context-menu .menu-item` bez součtu s širokým vnějším paddingem `.context-menu` (ten jen úzký okraj); přepsání **symetrických** vnitřních paddingů Modena u `.left-container`, `.label` a `.right-container` (dříve větší mez vpravo než vlevo).
+- **Vývoj / obnovení stylů:** `javafx-maven-plugin` v `pom.xml` — `-Darimaa.devMenuCssF5=true` přes `<options>` (OpenJFX 0.0.8 VM volby jinak než `-Djavafx.jvmArgs`); v hlavičce CSS stručná poznámka k `mvn compile` a F5.
+- **Verze v UI:** `HelpCzechTexts.FALLBACK_APP_VERSION` a popis v `pom.xml` sjednoceny na **0.9.27**.
+
 ## 0.9.26
 
 - **Pravidla:** validace sekvenčních kroků tahu rozložena na router + privátní metody pro slide, push a pull (`DefaultRuleEngine`, `GridMoveRules`) — nižší cyklomatická složitost, stejné chování.

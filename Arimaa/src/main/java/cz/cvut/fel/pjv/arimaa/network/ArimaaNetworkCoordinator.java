@@ -2,9 +2,6 @@ package cz.cvut.fel.pjv.arimaa.network;
 
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerControllerKind;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
-import cz.cvut.fel.pjv.arimaa.ui.MainController;
-
-import javafx.application.Platform;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +13,7 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,7 +31,8 @@ public final class ArimaaNetworkCoordinator {
 
     private static final Logger log = LoggerFactory.getLogger(ArimaaNetworkCoordinator.class);
 
-    private final MainController main;
+    private final NetworkGameBridge bridge;
+    private final FxExecutor fx;
     private final ExecutorService ioPool =
             Executors.newCachedThreadPool(
                     r -> {
@@ -59,13 +58,14 @@ public final class ArimaaNetworkCoordinator {
     private final Object writeMonitor = new Object();
     /**
      * While {@code false}, the host must not push {@code state_snapshot} lines — otherwise FX-thread
-     * {@code startNewGameAction()} can emit a snapshot before the IO thread sends {@code welcome}, and the client
+     * {@code startNewGameAfterNetworkHostReady()} can emit a snapshot before the IO thread sends {@code welcome}, and the client
      * would read {@code state_snapshot} first ({@code expected welcome, got state_snapshot}).
      */
     private volatile boolean hostHandshakeComplete;
 
-    public ArimaaNetworkCoordinator(MainController main) {
-        this.main = main;
+    public ArimaaNetworkCoordinator(NetworkGameBridge bridge, FxExecutor fx) {
+        this.bridge = Objects.requireNonNull(bridge, "bridge");
+        this.fx = Objects.requireNonNull(fx, "fx");
     }
 
     public NetworkRole getRole() {
@@ -93,8 +93,8 @@ public final class ArimaaNetworkCoordinator {
                                 listen = new ServerSocket(port);
                                 acceptingServerSocket = listen;
                                 log.info("network host listening on TCP port {}", port);
-                                Platform.runLater(
-                                        () -> main.setStatus("Síť — čekám na protihráče na portu %d…".formatted(port)));
+                                fx.runOnUiThread(
+                                        () -> bridge.setStatus("Síť — čekám na protihráče na portu %d…".formatted(port)));
                                 Socket s = listen.accept();
                                 configureSocket(s);
                                 log.info("network host accepted peer {}", s.getRemoteSocketAddress());
@@ -115,10 +115,8 @@ public final class ArimaaNetworkCoordinator {
                                 var parsed = NetworkJson.parseLine(first);
                                 if (!"hello".equals(parsed.type())) {
                                     throw new IOException(
-                                            "Očekáván typ „hello“, přišlo: „"
-                                                    + parsed.type()
-                                                    + "“. Úvod řádku: "
-                                                    + truncateForLog(first, 200));
+                                            "Očekáván typ „hello“, přišlo: „%s“. Úvod řádku: %s"
+                                                    .formatted(parsed.type(), truncateForLog(first, 200)));
                                 }
                                 var hello = NetworkJson.readHello(parsed.node());
                                 if (hello.protocolVersion() != NetworkJson.PROTOCOL_VERSION) {
@@ -129,7 +127,8 @@ public final class ArimaaNetworkCoordinator {
                                     synchronized (writeMonitor) {
                                         peerOut.println(
                                                 NetworkJson.errorLine(
-                                                        "Nepodporovaná verze protokolu: " + hello.protocolVersion()));
+                                                        "Nepodporovaná verze protokolu: %d"
+                                                                .formatted(hello.protocolVersion())));
                                     }
                                     return;
                                 }
@@ -139,7 +138,9 @@ public final class ArimaaNetworkCoordinator {
                                 } catch (IllegalArgumentException ex) {
                                     log.warn("network host rejecting hello: bad silverSeatControl", ex);
                                     synchronized (writeMonitor) {
-                                        peerOut.println(NetworkJson.errorLine("Neplatné silverSeatControl: " + ex.getMessage()));
+                                        peerOut.println(
+                                                NetworkJson.errorLine(
+                                                        "Neplatné silverSeatControl: %s".formatted(ex.getMessage())));
                                     }
                                     return;
                                 }
@@ -148,18 +149,18 @@ public final class ArimaaNetworkCoordinator {
                                         NetworkJson.PROTOCOL_VERSION,
                                         peerSilver);
                                 CountDownLatch latch = new CountDownLatch(1);
-                                Platform.runLater(
+                                fx.runOnUiThread(
                                         () -> {
                                             try {
-                                                main.prepareNetworkSessionAsHost(peerSilver);
-                                                main.startNewGameAction();
+                                                bridge.prepareNetworkSessionAsHost(peerSilver);
+                                                bridge.startNewGameAfterNetworkHostReady();
                                             } finally {
                                                 latch.countDown();
                                             }
                                         });
                                 latch.await();
-                                String goldWire = NetworkAssignmentCodec.encode(main.getGoldPlayerKind());
-                                String snap = main.buildNetworkSnapshotSaveText();
+                                String goldWire = NetworkAssignmentCodec.encode(bridge.getGoldPlayerKind());
+                                String snap = bridge.buildNetworkSnapshotSaveText();
                                 synchronized (writeMonitor) {
                                     String welcomeJson =
                                             NetworkJson.welcomeLine(
@@ -178,10 +179,10 @@ public final class ArimaaNetworkCoordinator {
                                 readHostLoop(in);
                             } catch (Exception ex) {
                                 log.warn("network host session failed", ex);
-                                Platform.runLater(
+                                fx.runOnUiThread(
                                         () -> {
-                                            main.setStatus("Síť — hostování selhalo: " + ex.getMessage());
-                                            main.clearNetworkSessionAfterDisconnect();
+                                            bridge.setStatus("Síť — hostování selhalo: %s".formatted(ex.getMessage()));
+                                            bridge.clearNetworkSessionAfterDisconnect();
                                         });
                             } finally {
                                 if (listen != null) {
@@ -192,7 +193,7 @@ public final class ArimaaNetworkCoordinator {
                                 }
                                 acceptingServerSocket = null;
                                 stopSocketsAndTasks();
-                                Platform.runLater(main::clearNetworkSessionAfterDisconnect);
+                                fx.runOnUiThread(bridge::clearNetworkSessionAfterDisconnect);
                             }
                         });
     }
@@ -208,17 +209,18 @@ public final class ArimaaNetworkCoordinator {
                                 log.info("network client connecting to {}:{} …", host, port);
                                 Socket s = new Socket(host, port);
                                 configureSocket(s);
-                                log.info("network client TCP connected (local {} → remote {})", s.getLocalSocketAddress(), s.getRemoteSocketAddress());
+                                log.info(
+                                        "network client TCP connected (local {} → remote {})",
+                                        s.getLocalSocketAddress(),
+                                        s.getRemoteSocketAddress());
                                 peerSocket = s;
                                 peerOut =
                                         new PrintWriter(
                                                 new java.io.OutputStreamWriter(
                                                         s.getOutputStream(), StandardCharsets.UTF_8),
                                                 true);
-                                String silverWire =
-                                        NetworkAssignmentCodec.encode(main.getSilverPlayerKind());
-                                String helloLine =
-                                        NetworkJson.helloLine(NetworkJson.PROTOCOL_VERSION, silverWire);
+                                String silverWire = NetworkAssignmentCodec.encode(bridge.getSilverPlayerKind());
+                                String helloLine = NetworkJson.helloLine(NetworkJson.PROTOCOL_VERSION, silverWire);
                                 synchronized (writeMonitor) {
                                     peerOut.println(helloLine);
                                 }
@@ -240,7 +242,7 @@ public final class ArimaaNetworkCoordinator {
                                     if ("error".equals(w.type())) {
                                         var err = NetworkJson.readError(w.node());
                                         log.warn("network client recv error from server: {}", err.message());
-                                        throw new IOException("Server: " + err.message());
+                                        throw new IOException("Server: %s".formatted(err.message()));
                                     }
                                     if ("state_snapshot".equals(w.type())) {
                                         log.error(
@@ -248,19 +250,14 @@ public final class ArimaaNetworkCoordinator {
                                                 truncateForLog(welcomeLine, 300));
                                     }
                                     throw new IOException(
-                                            "Očekáván řádek „welcome“, přišel typ „"
-                                                    + w.type()
-                                                    + "“. Úvod: "
-                                                    + truncateForLog(welcomeLine, 220));
+                                            "Očekáván řádek „welcome“, přišel typ „%s“. Úvod: %s"
+                                                    .formatted(w.type(), truncateForLog(welcomeLine, 220)));
                                 }
                                 WireMessages.WelcomeMessage welcome = NetworkJson.readWelcome(w.node());
                                 if (welcome.protocolVersion() != NetworkJson.PROTOCOL_VERSION) {
                                     throw new IOException(
-                                            "Nepodporovaná verze protokolu na serveru: "
-                                                    + welcome.protocolVersion()
-                                                    + " (klient "
-                                                    + NetworkJson.PROTOCOL_VERSION
-                                                    + ").");
+                                            "Nepodporovaná verze protokolu na serveru: %d (klient %d)."
+                                                    .formatted(welcome.protocolVersion(), NetworkJson.PROTOCOL_VERSION));
                                 }
                                 final PlayerControllerKind peerGold;
                                 try {
@@ -270,10 +267,10 @@ public final class ArimaaNetworkCoordinator {
                                 }
                                 log.info("network client applying welcome (peer Gold: {})", peerGold);
                                 CountDownLatch latch = new CountDownLatch(1);
-                                Platform.runLater(
+                                fx.runOnUiThread(
                                         () -> {
                                             try {
-                                                main.prepareNetworkSessionAsClient(peerGold);
+                                                bridge.prepareNetworkSessionAsClient(peerGold);
                                             } finally {
                                                 latch.countDown();
                                             }
@@ -282,14 +279,14 @@ public final class ArimaaNetworkCoordinator {
                                 readClientLoop(in);
                             } catch (Exception ex) {
                                 log.warn("network client session failed", ex);
-                                Platform.runLater(
+                                fx.runOnUiThread(
                                         () -> {
-                                            main.setStatus("Síť — připojení selhalo: " + ex.getMessage());
-                                            main.clearNetworkSessionAfterDisconnect();
+                                            bridge.setStatus("Síť — připojení selhalo: %s".formatted(ex.getMessage()));
+                                            bridge.clearNetworkSessionAfterDisconnect();
                                         });
                             } finally {
                                 stopSocketsAndTasks();
-                                Platform.runLater(main::clearNetworkSessionAfterDisconnect);
+                                fx.runOnUiThread(bridge::clearNetworkSessionAfterDisconnect);
                             }
                         });
     }
@@ -311,12 +308,12 @@ public final class ArimaaNetworkCoordinator {
                 case "intent" -> {
                     WireMessages.IntentMessage intent = NetworkJson.readIntent(p.node());
                     log.debug("network host recv intent: {}", intent.kind());
-                    Platform.runLater(
+                    fx.runOnUiThread(
                             () -> {
                                 if (stopped.get()) {
                                     return;
                                 }
-                                boolean ok = main.applyHostIntentFromNetwork(intent);
+                                boolean ok = bridge.applyHostIntentFromNetwork(intent);
                                 if (!ok) {
                                     log.info("network host rejected intent: {}", intent.kind());
                                     sendLine(NetworkJson.errorLine("Neplatný záměr nebo fáze hry."));
@@ -326,12 +323,12 @@ public final class ArimaaNetworkCoordinator {
                 case "pong" -> { /* ignore */ }
                 case "seat_control" -> {
                     WireMessages.SeatControlMessage sc = NetworkJson.readSeatControl(p.node());
-                    Platform.runLater(
+                    fx.runOnUiThread(
                             () -> {
                                 if (stopped.get()) {
                                     return;
                                 }
-                                main.applyNetworkPeerSilverSeatFromWire(sc.seatControl());
+                                bridge.applyNetworkPeerSilverSeatFromWire(sc.seatControl());
                             });
                 }
                 case "bye" -> stopped.set(true);
@@ -357,27 +354,27 @@ public final class ArimaaNetworkCoordinator {
                 case "state_snapshot" -> {
                     WireMessages.StateSnapshotMessage snap = NetworkJson.readSnapshot(p.node());
                     log.debug("network client recv state_snapshot ({} chars)", snap.saveText().length());
-                    Platform.runLater(
+                    fx.runOnUiThread(
                             () -> {
                                 if (stopped.get()) {
                                     return;
                                 }
-                                main.applyNetworkSnapshotSaveText(snap.saveText());
+                                bridge.applyNetworkSnapshotSaveText(snap.saveText());
                             });
                 }
                 case "error" -> {
                     WireMessages.ErrorMessage err = NetworkJson.readError(p.node());
-                    Platform.runLater(() -> main.setStatus("Síť — chyba: " + err.message()));
+                    fx.runOnUiThread(() -> bridge.setStatus("Síť — chyba: %s".formatted(err.message())));
                 }
                 case "ping" -> sendLine(NetworkJson.pongLine());
                 case "seat_control" -> {
                     WireMessages.SeatControlMessage sc = NetworkJson.readSeatControl(p.node());
-                    Platform.runLater(
+                    fx.runOnUiThread(
                             () -> {
                                 if (stopped.get()) {
                                     return;
                                 }
-                                main.applyNetworkPeerGoldSeatFromWire(sc.seatControl());
+                                bridge.applyNetworkPeerGoldSeatFromWire(sc.seatControl());
                             });
                 }
                 case "bye" -> stopped.set(true);
@@ -385,10 +382,10 @@ public final class ArimaaNetworkCoordinator {
             }
         }
         if (!stopped.get()) {
-            Platform.runLater(
+            fx.runOnUiThread(
                     () -> {
-                        main.setStatus("Síť — spojení ukončeno.");
-                        main.clearNetworkSessionAfterDisconnect();
+                        bridge.setStatus("Síť — spojení ukončeno.");
+                        bridge.clearNetworkSessionAfterDisconnect();
                     });
         }
     }
@@ -446,14 +443,14 @@ public final class ArimaaNetworkCoordinator {
     }
 
     public void broadcastSnapshotFromHostMainThread() {
-        if (role != NetworkRole.HOST || peerOut == null || main.isApplyingNetworkSnapshot()) {
+        if (role != NetworkRole.HOST || peerOut == null || bridge.isApplyingNetworkSnapshot()) {
             return;
         }
         if (!hostHandshakeComplete) {
             log.debug("network host: držím state_snapshot — handshake ještě nedokončen (welcome + první snapshot)");
             return;
         }
-        String text = main.buildNetworkSnapshotSaveText();
+        String text = bridge.buildNetworkSnapshotSaveText();
         synchronized (writeMonitor) {
             peerOut.println(NetworkJson.snapshotLine(text));
         }
@@ -471,7 +468,7 @@ public final class ArimaaNetworkCoordinator {
         }
         sendLine(NetworkJson.byeLine());
         stopSocketsAndTasks();
-        Platform.runLater(main::clearNetworkSessionAfterDisconnect);
+        fx.runOnUiThread(bridge::clearNetworkSessionAfterDisconnect);
     }
 
     private void configureSocket(Socket s) throws IOException {

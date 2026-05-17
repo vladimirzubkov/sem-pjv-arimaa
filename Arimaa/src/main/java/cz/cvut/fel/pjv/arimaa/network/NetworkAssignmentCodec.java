@@ -26,7 +26,7 @@ public final class NetworkAssignmentCodec {
             case "CPU0" -> PlayerControllerKind.COMPUTER_LEVEL_0;
             case "CPU1" -> PlayerControllerKind.COMPUTER_LEVEL_1;
             case "CPU2" -> PlayerControllerKind.COMPUTER_LEVEL_2;
-            default -> throw new IllegalArgumentException("unknown assignment: " + raw);
+            default -> throw new IllegalArgumentException("unknown assignment: %s".formatted(raw));
         };
     }
 }

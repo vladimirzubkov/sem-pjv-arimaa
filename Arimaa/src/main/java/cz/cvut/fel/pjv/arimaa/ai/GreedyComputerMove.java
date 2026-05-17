@@ -4,7 +4,6 @@ import cz.cvut.fel.pjv.arimaa.model.DefaultRuleEngine;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.GameMemento;
 import cz.cvut.fel.pjv.arimaa.model.Move;
-import cz.cvut.fel.pjv.arimaa.model.PlayHalfTurn;
 import cz.cvut.fel.pjv.arimaa.model.Step;
 import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
@@ -42,14 +41,17 @@ public final class GreedyComputerMove {
         if (!DefaultRuleEngine.existsLegalTurn(game)) {
             throw new IllegalStateException("no legal complete moves");
         }
+
+        GameMemento baseline = CpuMoveSupport.baseline(game);
         PlayerSide root = game.getSideToMove();
+        SearchSession session = SearchSession.fromGame(game);
         SearchBudget budget = new SearchBudget(SEARCH_BUDGET_MS);
         Set<String> seen = new HashSet<>();
         double bestScore = -Double.MAX_VALUE;
         List<Move> tied = new ArrayList<>();
 
         for (int n = 0; n < MAX_SAMPLES && !budget.isExpired(); n++) {
-            Optional<Move> opt = DefaultRuleEngine.sampleRandomLegalCompleteMove(game, random);
+            Optional<Move> opt = session.sampleRandomLegalMove(random);
             if (opt.isEmpty()) {
                 break;
             }
@@ -57,33 +59,29 @@ public final class GreedyComputerMove {
             if (!seen.add(stableSignature(raw))) {
                 continue;
             }
-            Move trial = PlayHalfTurn.copyMove(raw);
-            GameMemento snap = game.createMemento();
-            try {
-                game.applyMove(trial);
-                double score =
-                        HeuristicEvaluation.evaluateForRoot(game, root) + HeuristicEvaluation.turnShapeBonus(raw);
-                int cmp = Double.compare(score, bestScore);
-                if (cmp > 0) {
-                    bestScore = score;
-                    tied.clear();
-                    tied.add(raw);
-                } else if (cmp == 0) {
-                    tied.add(raw);
-                }
-            } finally {
-                game.restoreMemento(snap);
+            UndoRecord undo = session.applyTurn(raw);
+            double score = session.evaluateForRoot(root) + HeuristicEvaluation.turnShapeBonus(raw);
+            session.undoTurn(raw, undo);
+            int cmp = Double.compare(score, bestScore);
+            if (cmp > 0) {
+                bestScore = score;
+                tied.clear();
+                tied.add(raw);
+            } else if (cmp == 0) {
+                tied.add(raw);
             }
         }
 
+        CpuMoveSupport.restoreBaseline(game, baseline);
         if (tied.isEmpty()) {
+            Game probe = Game.restoredFromMemento(baseline);
             Move fallback =
-                    DefaultRuleEngine.sampleRandomLegalCompleteMove(game, random)
+                    DefaultRuleEngine.sampleRandomLegalCompleteMove(probe, random)
                             .orElseThrow(() -> new IllegalStateException("no legal complete moves"));
-            return PlayHalfTurn.copyMove(fallback);
+            return CpuMoveSupport.engineLegalCopy(baseline, fallback, random);
         }
         Move choice = tied.get(random.nextInt(tied.size()));
-        return PlayHalfTurn.copyMove(choice);
+        return CpuMoveSupport.engineLegalCopy(baseline, choice, random);
     }
 
     private static String stableSignature(Move m) {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.25
+
+- **CPU (úrovně 1–2):** vyhledávání na ploché desce `Piece[64]` s apply/undo polotahu (`SearchGrid`, `SearchSession`, `GridMoveRules`); po výběru tahu obnovení mementa a validace přes `Game.applyMove` (`CpuMoveSupport`) — oprava odmítnutých tahů počítače při PC vs PC.
+- **CPU (úroveň 2) — výkon:** alpha-beta s řazením tahů podle délky (in-place, statické komparátory), řídká kontrola času ve `SearchBudget`, méně alokací `Position` v heuristice a generátoru (`HomeTerritory` podle rank indexu, lazy `Position` v `GridMoveRules`).
+- **UI (konec partie / tah PC):** výherní video jen nad polem 8×8 (souřadnice viditelné); při odmítnutí tahu počítače zrušení draftu a obnova pohledu z historie.
+- **Kód:** `describeMove` přes stream; u výjimek a systémového logu `.formatted()` místo konkatenace.
+
 ## 0.9.24
 
 - **Zvuky tahů:** procedurální PCM **předpočítané při startu** (`PlayProceduralSfx`); přehrávání přes **jednu sdílenou** `SourceDataLine` na dedikovaném vlákně (méně výpadků na Windows než open/close u každého kroku); **počet úderů = počet přidaných kroků** (push/pull, síťová notace); původní timbre stoupání (520/980/1420 Hz).

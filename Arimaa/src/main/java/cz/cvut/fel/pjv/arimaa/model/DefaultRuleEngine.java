@@ -18,6 +18,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -164,13 +165,11 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (game.getState() != GameState.PLAY) {
             return false;
         }
-        try {
-            validateSequentialSteps(game, move, false, null);
-            return true;
-        } catch (IllegalArgumentException ex) {
-            log.debug("invalid play prefix: {}", ex.getMessage());
-            return false;
+        boolean ok = tryValidateSequentialSteps(game, move, false, null).isPresent();
+        if (!ok) {
+            log.debug("invalid play prefix");
         }
+        return ok;
     }
 
     /**
@@ -190,12 +189,12 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (prefix.getSteps().isEmpty()) {
             return copyOcc(root);
         }
-        try {
-            return validateSequentialSteps(game, copyMove(prefix), false, root);
-        } catch (IllegalArgumentException ex) {
-            log.debug("simulatePlayPrefix rejected: {}", ex.getMessage());
-            throw ex;
-        }
+        return tryValidateSequentialSteps(game, copyMove(prefix), false, root)
+                .orElseThrow(
+                        () -> {
+                            log.debug("simulatePlayPrefix rejected");
+                            return new IllegalMoveException("Illegal play prefix");
+                        });
     }
 
     /**
@@ -206,8 +205,8 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (game.getState() != GameState.PLAY) {
             return false;
         }
-        Map<Position, Piece> root = snapshotOccupancy(game.getBoard());
-        return dfsAnyLegalTurn(game, new Move(), root);
+        return GridMoveRules.existsLegalTurn(
+                GridMoveRules.snapshotFromBoard(game.getBoard()), game.getSideToMove());
     }
 
     /**
@@ -220,10 +219,8 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (game.getState() != GameState.PLAY) {
             return new ArrayList<>();
         }
-        Map<Position, Piece> root = snapshotOccupancy(game.getBoard());
-        List<Move> out = new ArrayList<>();
-        dfsCollectLegalCompleteMoves(game, new Move(), root, out);
-        return out;
+        return GridMoveRules.enumerateLegalCompleteMoves(
+                GridMoveRules.snapshotFromBoard(game.getBoard()), game.getSideToMove());
     }
 
     /**
@@ -237,8 +234,8 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (game.getState() != GameState.PLAY) {
             return Optional.empty();
         }
-        Map<Position, Piece> root = snapshotOccupancy(game.getBoard());
-        return dfsSampleRandomLegalCompleteMove(game, new Move(), root, rnd);
+        return GridMoveRules.sampleRandomLegalCompleteMove(
+                GridMoveRules.snapshotFromBoard(game.getBoard()), game.getSideToMove(), rnd);
     }
 
     private static Optional<Move> dfsSampleRandomLegalCompleteMove(Game game, Move prefix, Map<Position, Piece> root, Random rnd) {
@@ -247,19 +244,17 @@ public final class DefaultRuleEngine implements RuleEngine {
             return Optional.empty();
         }
         if (len == 4) {
-            try {
-                validateSequentialSteps(game, copyMove(prefix), true, root);
+            if (tryValidateSequentialSteps(game, copyMove(prefix), true, root).isPresent()) {
                 return Optional.of(copyMove(prefix));
-            } catch (IllegalArgumentException ignored) {
-                return Optional.empty();
             }
-        }
-        Map<Position, Piece> occAfter;
-        try {
-            occAfter = validateSequentialSteps(game, copyMove(prefix), false, root);
-        } catch (IllegalArgumentException ex) {
             return Optional.empty();
         }
+        Optional<Map<Position, Piece>> occAfterOpt =
+                tryValidateSequentialSteps(game, copyMove(prefix), false, root);
+        if (occAfterOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        Map<Position, Piece> occAfter = occAfterOpt.get();
         List<List<Step>> bundles = new ArrayList<>(enumerateStepBundles(occAfter, game.getSideToMove()));
         Collections.shuffle(bundles, rnd);
         for (List<Step> bundle : bundles) {
@@ -267,9 +262,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             for (Step st : bundle) {
                 extended.getSteps().add(copyStep(st));
             }
-            try {
-                validateSequentialSteps(game, copyMove(extended), false, root);
-            } catch (IllegalArgumentException ex) {
+            if (tryValidateSequentialSteps(game, copyMove(extended), false, root).isEmpty()) {
                 continue;
             }
             Optional<Move> fromChild = dfsSampleRandomLegalCompleteMove(game, extended, root, rnd);
@@ -277,44 +270,32 @@ public final class DefaultRuleEngine implements RuleEngine {
                 return fromChild;
             }
         }
-        if (len >= 1) {
-            try {
-                validateSequentialSteps(game, copyMove(prefix), true, root);
-                return Optional.of(copyMove(prefix));
-            } catch (IllegalArgumentException ignored) {
-                return Optional.empty();
-            }
+        if (len >= 1 && tryValidateSequentialSteps(game, copyMove(prefix), true, root).isPresent()) {
+            return Optional.of(copyMove(prefix));
         }
         return Optional.empty();
     }
 
     private static void dfsCollectLegalCompleteMoves(Game game, Move prefix, Map<Position, Piece> root, List<Move> out) {
         int len = prefix.getSteps().size();
-        if (len >= 1 && len <= 4) {
-            try {
-                validateSequentialSteps(game, copyMove(prefix), true, root);
-                out.add(copyMove(prefix));
-            } catch (IllegalArgumentException ignored) {
-                // not a complete legal turn at this length
-            }
+        if (len >= 1 && len <= 4 && tryValidateSequentialSteps(game, copyMove(prefix), true, root).isPresent()) {
+            out.add(copyMove(prefix));
         }
         if (len >= 4) {
             return;
         }
-        Map<Position, Piece> occAfter;
-        try {
-            occAfter = validateSequentialSteps(game, copyMove(prefix), false, root);
-        } catch (IllegalArgumentException ex) {
+        Optional<Map<Position, Piece>> occAfterOpt =
+                tryValidateSequentialSteps(game, copyMove(prefix), false, root);
+        if (occAfterOpt.isEmpty()) {
             return;
         }
+        Map<Position, Piece> occAfter = occAfterOpt.get();
         for (List<Step> bundle : enumerateStepBundles(occAfter, game.getSideToMove())) {
             Move extended = copyMove(prefix);
             for (Step st : bundle) {
                 extended.getSteps().add(copyStep(st));
             }
-            try {
-                validateSequentialSteps(game, copyMove(extended), false, root);
-            } catch (IllegalArgumentException ex) {
+            if (tryValidateSequentialSteps(game, copyMove(extended), false, root).isEmpty()) {
                 continue;
             }
             dfsCollectLegalCompleteMoves(game, extended, root, out);
@@ -323,31 +304,24 @@ public final class DefaultRuleEngine implements RuleEngine {
 
     private static boolean dfsAnyLegalTurn(Game game, Move prefix, Map<Position, Piece> root) {
         int len = prefix.getSteps().size();
-        if (len >= 1 && len <= 4) {
-            try {
-                validateSequentialSteps(game, copyMove(prefix), true, root);
-                return true;
-            } catch (IllegalArgumentException ignored) {
-                // not a complete legal turn
-            }
+        if (len >= 1 && len <= 4 && tryValidateSequentialSteps(game, copyMove(prefix), true, root).isPresent()) {
+            return true;
         }
         if (len >= 4) {
             return false;
         }
-        Map<Position, Piece> occAfter;
-        try {
-            occAfter = validateSequentialSteps(game, copyMove(prefix), false, root);
-        } catch (IllegalArgumentException ex) {
+        Optional<Map<Position, Piece>> occAfterOpt =
+                tryValidateSequentialSteps(game, copyMove(prefix), false, root);
+        if (occAfterOpt.isEmpty()) {
             return false;
         }
+        Map<Position, Piece> occAfter = occAfterOpt.get();
         for (List<Step> bundle : enumerateStepBundles(occAfter, game.getSideToMove())) {
             Move extended = copyMove(prefix);
             for (Step st : bundle) {
                 extended.getSteps().add(copyStep(st));
             }
-            try {
-                validateSequentialSteps(game, copyMove(extended), false, root);
-            } catch (IllegalArgumentException ex) {
+            if (tryValidateSequentialSteps(game, copyMove(extended), false, root).isEmpty()) {
                 continue;
             }
             if (dfsAnyLegalTurn(game, extended, root)) {
@@ -378,12 +352,8 @@ public final class DefaultRuleEngine implements RuleEngine {
                         slide.setKind(StepKind.SLIDE);
                         slide.setFrom(from);
                         slide.setTo(to);
-                        try {
-                            Map<Position, Piece> t = copyOcc(occ);
-                            validateSlideOnOcc(t, side, slide);
+                        if (canSlideOnOcc(occ, side, slide)) {
                             out.add(List.of(copyStep(slide)));
-                        } catch (IllegalArgumentException ignored) {
-                            // skip
                         }
                     }
                 }
@@ -428,12 +398,9 @@ public final class DefaultRuleEngine implements RuleEngine {
                         if (!PieceStrength.isStrictlyStronger(strong.getType(), weak.getType())) {
                             continue;
                         }
-                        try {
-                            Map<Position, Piece> t = copyOcc(occ);
-                            validatePullDragOnOcc(t, side, drag, vacated, strongNew);
+                        Map<Position, Piece> t = copyOcc(occ);
+                        if (canPullDragOnOcc(t, side, drag, vacated, strongNew)) {
                             out.add(List.of(copyStep(drag)));
-                        } catch (IllegalArgumentException ignored) {
-                            // skip
                         }
                     }
                 }
@@ -465,33 +432,130 @@ public final class DefaultRuleEngine implements RuleEngine {
                 a.setKind(StepKind.PUSH_ADVANCE_STRONGER);
                 a.setFrom(strongPos);
                 a.setTo(weakPos);
-                try {
-                    Map<Position, Piece> t = copyOcc(occ);
-                    List<Step> buf = new ArrayList<>();
-                    validatePushDisplaceOnOcc(t, side, d, buf);
+                Map<Position, Piece> t = copyOcc(occ);
+                List<Step> buf = new ArrayList<>();
+                if (canPushDisplaceOnOcc(t, side, d, buf)) {
                     applyOneStepOnOccupancy(t, d);
                     resolveTrapsOnOccupancy(t);
-                    buf.add(d);
-                    validatePushAdvanceOnOcc(t, side, a, weakPos, strongPos);
-                    out.add(List.of(copyStep(d), copyStep(a)));
-                } catch (IllegalArgumentException ignored) {
-                    // skip
+                    if (canPushAdvanceOnOcc(t, side, a, weakPos, strongPos)) {
+                        out.add(List.of(copyStep(d), copyStep(a)));
+                    }
                 }
             }
         }
     }
 
-    private static Map<Position, Piece> validateSequentialSteps(Game game, Move move, boolean requireFullTurn, Map<Position, Piece> initialOcc) {
+    private static Map<Position, Piece> validateSequentialSteps(
+            Game game, Move move, boolean requireFullTurn, Map<Position, Piece> initialOcc) {
+        return tryValidateSequentialSteps(game, move, requireFullTurn, initialOcc)
+                .orElseThrow(
+                        () ->
+                                validateSequentialStepsWithMessage(game, move, requireFullTurn, initialOcc));
+    }
+
+    /**
+     * Non-throwing validation for move generation and search (expected illegal prefixes return empty).
+     */
+    private static Optional<Map<Position, Piece>> tryValidateSequentialSteps(
+            Game game, Move move, boolean requireFullTurn, Map<Position, Piece> initialOcc) {
         List<Step> steps = move.getSteps();
         int n = steps.size();
         if (requireFullTurn) {
             if (n < 1 || n > 4) {
-                throw new IllegalMoveException("Turn must have 1–4 steps, got " + n);
+                return Optional.empty();
             }
-        } else {
-            if (n < 0 || n > 4) {
-                throw new IllegalMoveException("Prefix may have at most 4 steps, got " + n);
+        } else if (n < 0 || n > 4) {
+            return Optional.empty();
+        }
+        PlayerSide side = game.getSideToMove();
+        Map<Position, Piece> occ = initialOcc != null ? copyOcc(initialOcc) : snapshotOccupancy(game.getBoard());
+        for (int i = 0; i < n; ) {
+            Step s = steps.get(i);
+            StepKind k = kindOf(s);
+            switch (k) {
+                case SLIDE -> {
+                    if (!canSlideOnOcc(occ, side, s)) {
+                        return Optional.empty();
+                    }
+                    applyOneStepOnOccupancy(occ, s);
+                    resolveTrapsOnOccupancy(occ);
+                    i++;
+                    if (i < n && kindOf(steps.get(i)) == StepKind.PULL_DRAG_WEAKER) {
+                        Step drag = steps.get(i);
+                        Step vacate = steps.get(i - 1);
+                        if (!canPullDragOnOcc(occ, side, drag, vacate.getFrom(), vacate.getTo())) {
+                            return Optional.empty();
+                        }
+                        applyOneStepOnOccupancy(occ, drag);
+                        resolveTrapsOnOccupancy(occ);
+                        i++;
+                    }
+                }
+                case PUSH_DISPLACE_WEAKER -> {
+                    if (!canPushDisplaceOnOcc(occ, side, s, steps.subList(0, i))) {
+                        return Optional.empty();
+                    }
+                    applyOneStepOnOccupancy(occ, s);
+                    resolveTrapsOnOccupancy(occ);
+                    i++;
+                    if (i >= n) {
+                        return Optional.empty();
+                    }
+                    Step s2 = steps.get(i);
+                    if (kindOf(s2) != StepKind.PUSH_ADVANCE_STRONGER) {
+                        return Optional.empty();
+                    }
+                    if (!canPushAdvanceOnOcc(occ, side, s2, s.getFrom(), null)) {
+                        return Optional.empty();
+                    }
+                    applyOneStepOnOccupancy(occ, s2);
+                    resolveTrapsOnOccupancy(occ);
+                    i++;
+                }
+                case PUSH_ADVANCE_STRONGER, PULL_DRAG_WEAKER -> {
+                    return Optional.empty();
+                }
+                case PULL_VACATE_STRONGER -> {
+                    if (!canPullVacateOnOcc(occ, side, s, steps.subList(0, i))) {
+                        return Optional.empty();
+                    }
+                    Position strongOld = s.getFrom();
+                    applyOneStepOnOccupancy(occ, s);
+                    resolveTrapsOnOccupancy(occ);
+                    i++;
+                    if (i >= n) {
+                        return Optional.empty();
+                    }
+                    Step s2 = steps.get(i);
+                    if (kindOf(s2) != StepKind.PULL_DRAG_WEAKER) {
+                        return Optional.empty();
+                    }
+                    if (!canPullDragOnOcc(occ, side, s2, strongOld, s.getTo())) {
+                        return Optional.empty();
+                    }
+                    applyOneStepOnOccupancy(occ, s2);
+                    resolveTrapsOnOccupancy(occ);
+                    i++;
+                }
+                default -> {
+                    return Optional.empty();
+                }
             }
+        }
+        return Optional.of(occ);
+    }
+
+    /** Throws {@link IllegalMoveException} with a specific message (UI / applyMove). */
+    private static IllegalMoveException validateSequentialStepsWithMessage(
+            Game game, Move move, boolean requireFullTurn, Map<Position, Piece> initialOcc) {
+        List<Step> steps = move.getSteps();
+        int n = steps.size();
+        if (requireFullTurn) {
+            if (n < 1 || n > 4) {
+                return new IllegalMoveException("Turn must have 1–4 steps, got %d".formatted(n));
+            }
+        } else if (n < 0 || n > 4) {
+            return new IllegalMoveException("Prefix may have at most 4 steps, got %d".formatted(n));
         }
         PlayerSide side = game.getSideToMove();
         Map<Position, Piece> occ = initialOcc != null ? copyOcc(initialOcc) : snapshotOccupancy(game.getBoard());
@@ -520,18 +584,20 @@ public final class DefaultRuleEngine implements RuleEngine {
                     resolveTrapsOnOccupancy(occ);
                     i++;
                     if (i >= n) {
-                        throw new IllegalMoveException("Push missing advance step");
+                        return new IllegalMoveException("Push missing advance step");
                     }
                     Step s2 = steps.get(i);
                     if (kindOf(s2) != StepKind.PUSH_ADVANCE_STRONGER) {
-                        throw new IllegalMoveException("Push must be followed by PUSH_ADVANCE_STRONGER");
+                        return new IllegalMoveException("Push must be followed by PUSH_ADVANCE_STRONGER");
                     }
                     validatePushAdvanceOnOcc(occ, side, s2, s.getFrom(), null);
                     applyOneStepOnOccupancy(occ, s2);
                     resolveTrapsOnOccupancy(occ);
                     i++;
                 }
-                case PUSH_ADVANCE_STRONGER -> throw new IllegalMoveException("PUSH_ADVANCE without PUSH_DISPLACE");
+                case PUSH_ADVANCE_STRONGER -> {
+                    return new IllegalMoveException("PUSH_ADVANCE without PUSH_DISPLACE");
+                }
                 case PULL_VACATE_STRONGER -> {
                     validatePullVacateOnOcc(occ, side, s, steps.subList(0, i));
                     Position strongOld = s.getFrom();
@@ -539,36 +605,32 @@ public final class DefaultRuleEngine implements RuleEngine {
                     resolveTrapsOnOccupancy(occ);
                     i++;
                     if (i >= n) {
-                        throw new IllegalMoveException("Pull missing drag step");
+                        return new IllegalMoveException("Pull missing drag step");
                     }
                     Step s2 = steps.get(i);
                     if (kindOf(s2) != StepKind.PULL_DRAG_WEAKER) {
-                        throw new IllegalMoveException("Pull must be followed by PULL_DRAG_WEAKER");
+                        return new IllegalMoveException("Pull must be followed by PULL_DRAG_WEAKER");
                     }
                     validatePullDragOnOcc(occ, side, s2, strongOld, s.getTo());
                     applyOneStepOnOccupancy(occ, s2);
                     resolveTrapsOnOccupancy(occ);
                     i++;
                 }
-                case PULL_DRAG_WEAKER ->
-                        throw new IllegalMoveException("PULL_DRAG must follow SLIDE or PULL_VACATE");
-                default -> throw new IllegalMoveException("Unknown kind");
+                case PULL_DRAG_WEAKER -> {
+                    return new IllegalMoveException("PULL_DRAG must follow SLIDE or PULL_VACATE");
+                }
+                default -> {
+                    return new IllegalMoveException("Unknown kind");
+                }
             }
         }
-        return occ;
+        throw new IllegalStateException("unreachable");
     }
 
     private static String describeMove(Move move) {
-        StringBuilder sb = new StringBuilder();
-        List<Step> steps = move.getSteps();
-        for (int i = 0; i < steps.size(); i++) {
-            Step s = steps.get(i);
-            if (i > 0) {
-                sb.append("; ");
-            }
-            sb.append(kindOf(s)).append(' ').append(s.getFrom()).append("->").append(s.getTo());
-        }
-        return sb.toString();
+        return move.getSteps().stream()
+                .map(s -> "%s %s->%s".formatted(kindOf(s), s.getFrom(), s.getTo()))
+                .collect(Collectors.joining("; "));
     }
 
     private record TerminalEvaluation(PlayerSide winner, String reason) {
@@ -590,6 +652,28 @@ public final class DefaultRuleEngine implements RuleEngine {
         // Note: „opponent rabbit on goal row“ end-of-turn rule is not evaluated here — Silver may legally
         // occupy the top rank in the opening; detecting illegal *push* onto the goal row needs per-turn context.
         return new TerminalEvaluation(null, "none");
+    }
+
+    private static boolean canSlideOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step) {
+        Position from = step.getFrom();
+        Position to = step.getTo();
+        if (from == null || to == null) {
+            return false;
+        }
+        if (!isOrthogonalNeighbor(from, to)) {
+            return false;
+        }
+        Piece moving = occ.get(from);
+        if (moving == null || moving.getSide() != side) {
+            return false;
+        }
+        if (isFrozenOccupancy(occ, from)) {
+            return false;
+        }
+        if (occ.get(to) != null) {
+            return false;
+        }
+        return moving.getType() != PieceType.RABBIT || !isRabbitBackward(moving.getSide(), from, to);
     }
 
     private static void validateSlideOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step) {
@@ -615,6 +699,26 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
     }
 
+    private static boolean canPushDisplaceOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step, List<Step> ignored) {
+        Position weakFrom = step.getFrom();
+        Position weakTo = step.getTo();
+        if (weakFrom == null || weakTo == null || !isOrthogonalNeighbor(weakFrom, weakTo)) {
+            return false;
+        }
+        Piece weak = occ.get(weakFrom);
+        if (weak == null || weak.getSide() == side) {
+            return false;
+        }
+        if (occ.get(weakTo) != null) {
+            return false;
+        }
+        Position strongSquare = findStrongOrthNeighbor(occ, side, weakFrom, weak);
+        if (strongSquare == null) {
+            return false;
+        }
+        return !isFrozenOccupancy(occ, strongSquare);
+    }
+
     private static void validatePushDisplaceOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step, List<Step> ignored) {
         Position weakFrom = step.getFrom();
         Position weakTo = step.getTo();
@@ -637,6 +741,23 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
     }
 
+    private static boolean canPushAdvanceOnOcc(
+            Map<Position, Piece> occ, PlayerSide side, Step step, Position weakOld, Position ignoredStrongOld) {
+        Position from = step.getFrom();
+        Position to = step.getTo();
+        if (from == null || to == null || !isOrthogonalNeighbor(from, to)) {
+            return false;
+        }
+        Piece strong = occ.get(from);
+        if (strong == null || strong.getSide() != side) {
+            return false;
+        }
+        if (!to.equals(weakOld)) {
+            return false;
+        }
+        return occ.get(to) == null;
+    }
+
     private static void validatePushAdvanceOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step, Position weakOld, Position ignoredStrongOld) {
         Position from = step.getFrom();
         Position to = step.getTo();
@@ -655,6 +776,22 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
     }
 
+    private static boolean canPullVacateOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step, List<Step> ignored) {
+        Position from = step.getFrom();
+        Position to = step.getTo();
+        if (from == null || to == null || !isOrthogonalNeighbor(from, to)) {
+            return false;
+        }
+        Piece strong = occ.get(from);
+        if (strong == null || strong.getSide() != side) {
+            return false;
+        }
+        if (isFrozenOccupancy(occ, from)) {
+            return false;
+        }
+        return occ.get(to) == null;
+    }
+
     private static void validatePullVacateOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step, List<Step> ignored) {
         Position from = step.getFrom();
         Position to = step.getTo();
@@ -671,6 +808,30 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (occ.get(to) != null) {
             throw new IllegalMoveException("Pull vacate target must be empty");
         }
+    }
+
+    private static boolean canPullDragOnOcc(
+            Map<Position, Piece> occ, PlayerSide side, Step step, Position strongOld, Position strongNew) {
+        Position from = step.getFrom();
+        Position to = step.getTo();
+        if (from == null || to == null || !isOrthogonalNeighbor(from, to)) {
+            return false;
+        }
+        Piece weak = occ.get(from);
+        if (weak == null || weak.getSide() == side) {
+            return false;
+        }
+        if (!to.equals(strongOld)) {
+            return false;
+        }
+        if (occ.get(to) != null) {
+            return false;
+        }
+        Piece strong = occ.get(strongNew);
+        if (strong == null || strong.getSide() != side) {
+            return false;
+        }
+        return PieceStrength.isStrictlyStronger(strong.getType(), weak.getType());
     }
 
     private static void validatePullDragOnOcc(

@@ -17,6 +17,8 @@ import cz.cvut.fel.pjv.arimaa.model.Step;
 import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
 import cz.cvut.fel.pjv.arimaa.model.PlayHalfTurn;
 import cz.cvut.fel.pjv.arimaa.network.ArimaaNetworkCoordinator;
+import cz.cvut.fel.pjv.arimaa.network.FxExecutor;
+import cz.cvut.fel.pjv.arimaa.network.NetworkGameBridge;
 import cz.cvut.fel.pjv.arimaa.network.IntentKind;
 import cz.cvut.fel.pjv.arimaa.network.NetworkAssignmentCodec;
 import cz.cvut.fel.pjv.arimaa.network.NetworkLocalAddresses;
@@ -95,7 +97,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Undo / redo: menu Tah (Ctrl+Z / Ctrl+Y) and timeline / draft stack.
  * Gameplay → Skin: subfolders of {@code images/figure_sets/} (see {@link FigureSvgRasterCache#discoverSkinDirectoryNames()}).
  */
-public class MainController implements BoardViewHost {
+public class MainController implements BoardViewHost, NetworkGameBridge {
 
     private static final Logger log = LoggerFactory.getLogger(MainController.class);
 
@@ -321,6 +323,7 @@ public class MainController implements BoardViewHost {
         scroll.setStyle("-fx-background-color: transparent;");
 
         StackPane framedBoard = boardGrid.buildFramedBoardWithPerimeterCoordinates();
+        PlayVictoryMediaSfx.installOnCellArea(boardGrid.victoryOverlayHost());
         BoardGridView.BoardHostPane boardHost = new BoardGridView.BoardHostPane(framedBoard, framedOuterSize);
         boardHost.setMinWidth(0);
         boardHost.setMinHeight(0);
@@ -788,6 +791,7 @@ public class MainController implements BoardViewHost {
         Game g = game();
         if (g != null) {
             log.info("user action: new game");
+            PlayVictoryMediaSfx.dismiss();
             clearComputerAutoplayPauseState();
             clearPlayTurnUi();
             setupPhase.resetChessPresetRotation();
@@ -1035,9 +1039,15 @@ public class MainController implements BoardViewHost {
 
     ArimaaNetworkCoordinator arimaaNetwork() {
         if (arimaaNetworkCoordinator == null) {
-            arimaaNetworkCoordinator = new ArimaaNetworkCoordinator(this);
+            FxExecutor fx = Platform::runLater;
+            arimaaNetworkCoordinator = new ArimaaNetworkCoordinator(this, fx);
         }
         return arimaaNetworkCoordinator;
+    }
+
+    @Override
+    public void startNewGameAfterNetworkHostReady() {
+        startNewGameAction();
     }
 
     public boolean isNetworkHost() {
@@ -1223,7 +1233,7 @@ public class MainController implements BoardViewHost {
             }
         } catch (RuntimeException ex) {
             log.warn("network snapshot load failed", ex);
-            setStatus("Síť — nelze načíst stav: " + ex.getMessage());
+            setStatus("Síť — nelze načíst stav: %s".formatted(ex.getMessage()));
         } finally {
             applyingNetworkSnapshot = false;
             if (isNetworkClient()) {
@@ -1809,6 +1819,8 @@ public class MainController implements BoardViewHost {
             if (!gameController.submitHumanMove(submit)) {
                 log.info("computer play: submit rejected");
                 setStatus("Počítač — tah nebyl přijat.");
+                gameController.restoreTrailingDraftTurnStartForSubmit();
+                gameController.getPlayHistory().replaceTrailingDraftStepsFromMove(new Move());
                 gameController.applyPlayHistoryViewToGame();
                 return;
             }

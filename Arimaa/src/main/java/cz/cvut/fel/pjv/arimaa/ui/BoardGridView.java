@@ -73,6 +73,8 @@ public final class BoardGridView {
 
     private final BoardViewHost host;
     final StackPane[][] cells = new StackPane[BoardConstants.BOARD_SIZE][BoardConstants.BOARD_SIZE];
+    /** Victory video overlay; spans only the 8×8 cells (not file/rank coordinates). */
+    private StackPane victoryOverlayHost;
 
     public BoardGridView(BoardViewHost host) {
         this.host = host;
@@ -243,6 +245,12 @@ public final class BoardGridView {
             }
         }
 
+        victoryOverlayHost = new StackPane();
+        victoryOverlayHost.setAlignment(Pos.CENTER);
+        victoryOverlayHost.setMouseTransparent(true);
+        victoryOverlayHost.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        surface.add(victoryOverlayHost, 1, 1, BoardConstants.BOARD_SIZE, BoardConstants.BOARD_SIZE);
+
         StackPane framed = new StackPane();
         Rectangle frame = new Rectangle(outer, outer);
         frame.setFill(Color.TRANSPARENT);
@@ -258,6 +266,10 @@ public final class BoardGridView {
         StackPane.setMargin(surface, new Insets(FRAME_INSET));
         host.setFramedOuterSize(outer);
         return framed;
+    }
+
+    StackPane victoryOverlayHost() {
+        return victoryOverlayHost;
     }
 
     void paintBoard(Game g) {

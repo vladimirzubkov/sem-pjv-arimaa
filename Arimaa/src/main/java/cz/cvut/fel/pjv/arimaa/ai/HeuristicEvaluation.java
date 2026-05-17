@@ -43,18 +43,62 @@ public final class HeuristicEvaluation {
      * wins.
      */
     public static double evaluateForRoot(Game game, PlayerSide root) {
-        if (game.getState() == GameState.GAME_OVER) {
-            PlayerSide w = game.getMatchWinner();
-            if (w == root) {
+        return evaluateForRoot(
+                game.getState(), game.getMatchWinner(), game.getBoard(), game.isRanksMirroredForHomeCheck(), root);
+    }
+
+    static double evaluateForRoot(SearchGrid grid, PlayerSide root, boolean ranksMirrored) {
+        return evaluateForRoot(grid.state, grid.matchWinner, grid.cells, ranksMirrored, root);
+    }
+
+    private static double evaluateForRoot(
+            GameState state,
+            PlayerSide matchWinner,
+            Piece[] cells,
+            boolean ranksMirrored,
+            PlayerSide root) {
+        if (state == GameState.GAME_OVER) {
+            if (matchWinner == root) {
                 return WIN_SCORE;
             }
-            if (w != null) {
+            if (matchWinner != null) {
                 return -WIN_SCORE;
             }
             return 0.0;
         }
-        Board board = game.getBoard();
-        boolean mirrored = game.isRanksMirroredForHomeCheck();
+        double score = 0.0;
+        for (int idx = 0; idx < SearchGrid.CELL_COUNT; idx++) {
+            Piece p = cells[idx];
+            if (p == null) {
+                continue;
+            }
+            int r = idx / BoardConstants.BOARD_SIZE;
+            int sign = p.getSide() == root ? 1 : -1;
+            score += sign * pieceMaterial(p.getType());
+            if (p.getType() == PieceType.RABBIT) {
+                score += sign * rabbitAdvanceBonus(p.getSide(), r);
+            } else {
+                score += sign * developmentValue(p, r, ranksMirrored);
+            }
+        }
+        return score;
+    }
+
+    private static double evaluateForRoot(
+            GameState state,
+            PlayerSide matchWinner,
+            Board board,
+            boolean ranksMirrored,
+            PlayerSide root) {
+        if (state == GameState.GAME_OVER) {
+            if (matchWinner == root) {
+                return WIN_SCORE;
+            }
+            if (matchWinner != null) {
+                return -WIN_SCORE;
+            }
+            return 0.0;
+        }
         double score = 0.0;
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
             for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
@@ -68,15 +112,15 @@ public final class HeuristicEvaluation {
                 if (p.getType() == PieceType.RABBIT) {
                     score += sign * rabbitAdvanceBonus(p.getSide(), r);
                 } else {
-                    score += sign * developmentValue(p, pos, mirrored);
+                    score += sign * developmentValue(p, r, ranksMirrored);
                 }
             }
         }
         return score;
     }
 
-    private static double developmentValue(Piece p, Position pos, boolean ranksMirrored) {
-        if (HomeTerritory.contains(p.getSide(), pos, ranksMirrored)) {
+    private static double developmentValue(Piece p, int rankIndex, boolean ranksMirrored) {
+        if (HomeTerritory.contains(p.getSide(), rankIndex, ranksMirrored)) {
             return switch (p.getType()) {
                 case ELEPHANT -> -5;
                 case CAMEL, HORSE -> -22;

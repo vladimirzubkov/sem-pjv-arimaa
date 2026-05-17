@@ -1,10 +1,8 @@
 package cz.cvut.fel.pjv.arimaa.ai;
 
-import cz.cvut.fel.pjv.arimaa.model.DefaultRuleEngine;
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.GameMemento;
 import cz.cvut.fel.pjv.arimaa.model.Move;
-import cz.cvut.fel.pjv.arimaa.model.PlayHalfTurn;
 import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 
@@ -27,6 +25,15 @@ public final class AlphaBetaComputerMove {
     /** Do not spend longer than this on one search (worker thread); avoids multi‑second hangs in dense positions. */
     private static final long SEARCH_BUDGET_MS = 3500;
 
+    private static final Comparator<Move> BY_LEN_MAX =
+            Comparator.<Move>comparingInt(m -> m.getSteps().size())
+                    .reversed()
+                    .thenComparingInt(m -> System.identityHashCode(m) & 0x7fff);
+
+    private static final Comparator<Move> BY_LEN_MIN =
+            Comparator.comparingInt((Move m) -> m.getSteps().size())
+                    .thenComparingInt(m -> System.identityHashCode(m) & 0x7fff);
+
     private AlphaBetaComputerMove() {}
 
     public static Move chooseMove(Game game, Random random) {
@@ -35,31 +42,30 @@ public final class AlphaBetaComputerMove {
         if (game.getState() != GameState.PLAY) {
             throw new IllegalStateException("PLAY only");
         }
-        List<Move> moves = DefaultRuleEngine.enumerateLegalCompleteMoves(game);
+
+        GameMemento baseline = CpuMoveSupport.baseline(game);
+        SearchSession session = SearchSession.fromGame(game);
+        List<Move> moves = session.enumerateLegalMoves();
         if (moves.isEmpty()) {
             throw new IllegalStateException("no legal complete moves");
         }
+
         PlayerSide root = game.getSideToMove();
         int depth = moves.size() <= 28 ? MAX_DEPTH_FULL_TURNS : 1;
         SearchBudget budget = new SearchBudget(SEARCH_BUDGET_MS);
-        List<Move> ordered = orderMovesForNode(moves, game.getSideToMove() == root);
-        Move best = searchRootAtDepth(game, ordered, root, depth, random, budget);
-        return PlayHalfTurn.copyMove(best);
+        orderMovesForNodeInPlace(moves, game.getSideToMove() == root);
+        Move best = searchRootAtDepth(session, moves, root, depth, random, budget);
+        CpuMoveSupport.restoreBaseline(game, baseline);
+        return CpuMoveSupport.engineLegalCopy(baseline, best, random);
     }
 
     /** Prefer longer compound turns first to improve alpha-beta cutoffs (cheap ordering). */
-    private static List<Move> orderMovesForNode(List<Move> moves, boolean maximizing) {
-        List<Move> copy = new ArrayList<>(moves);
-        Comparator<Move> byLen =
-                maximizing
-                        ? Comparator.comparingInt((Move m) -> m.getSteps().size()).reversed()
-                        : Comparator.comparingInt(m -> m.getSteps().size());
-        copy.sort(byLen.thenComparingInt(m -> System.identityHashCode(m) & 0x7fff));
-        return copy;
+    private static void orderMovesForNodeInPlace(List<Move> moves, boolean maximizing) {
+        moves.sort(maximizing ? BY_LEN_MAX : BY_LEN_MIN);
     }
 
     private static Move searchRootAtDepth(
-            Game game,
+            SearchSession session,
             List<Move> moves,
             PlayerSide root,
             int depthFullTurns,
@@ -73,15 +79,9 @@ public final class AlphaBetaComputerMove {
             if (budget.isExpired()) {
                 break;
             }
-            Move trial = PlayHalfTurn.copyMove(raw);
-            GameMemento snap = game.createMemento();
-            double score;
-            try {
-                game.applyMove(trial);
-                score = minimax(game, depthFullTurns - 1, alpha, beta, root, budget);
-            } finally {
-                game.restoreMemento(snap);
-            }
+            UndoRecord undo = session.applyTurn(raw);
+            double score = minimax(session, depthFullTurns - 1, alpha, beta, root, budget);
+            session.undoTurn(raw, undo);
             score += HeuristicEvaluation.turnShapeBonus(raw);
             int cmp = Double.compare(score, bestScore);
             if (cmp > 0) {
@@ -100,59 +100,57 @@ public final class AlphaBetaComputerMove {
     }
 
     private static double minimax(
-            Game game, int depthRemaining, double alpha, double beta, PlayerSide root, SearchBudget budget) {
+            SearchSession session,
+            int depthRemaining,
+            double alpha,
+            double beta,
+            PlayerSide root,
+            SearchBudget budget) {
         if (budget.isExpired()) {
-            return HeuristicEvaluation.evaluateForRoot(game, root);
+            return session.evaluateForRoot(root);
         }
-        if (game.getState() == GameState.GAME_OVER) {
-            return HeuristicEvaluation.evaluateForRoot(game, root);
+        if (session.state() == GameState.GAME_OVER) {
+            return session.evaluateForRoot(root);
         }
         if (depthRemaining <= 0) {
-            return HeuristicEvaluation.evaluateForRoot(game, root);
+            return session.evaluateForRoot(root);
         }
-        List<Move> moves = DefaultRuleEngine.enumerateLegalCompleteMoves(game);
+
+        List<Move> moves = session.enumerateLegalMoves();
         if (moves.isEmpty()) {
-            return HeuristicEvaluation.evaluateForRoot(game, root);
+            return session.evaluateForRoot(root);
         }
-        boolean maximizing = game.getSideToMove() == root;
-        List<Move> ordered = orderMovesForNode(moves, maximizing);
+
+        boolean maximizing = session.sideToMove() == root;
+        orderMovesForNodeInPlace(moves, maximizing);
         if (maximizing) {
             double v = -Double.MAX_VALUE;
-            for (Move raw : ordered) {
+            for (Move raw : moves) {
                 if (budget.isExpired()) {
-                    return HeuristicEvaluation.evaluateForRoot(game, root);
+                    return session.evaluateForRoot(root);
                 }
-                Move trial = PlayHalfTurn.copyMove(raw);
-                GameMemento snap = game.createMemento();
-                try {
-                    game.applyMove(trial);
-                    v = Math.max(v, minimax(game, depthRemaining - 1, alpha, beta, root, budget));
-                    alpha = Math.max(alpha, v);
-                    if (beta <= alpha) {
-                        break;
-                    }
-                } finally {
-                    game.restoreMemento(snap);
+                UndoRecord undo = session.applyTurn(raw);
+                v = Math.max(v, minimax(session, depthRemaining - 1, alpha, beta, root, budget));
+                session.undoTurn(raw, undo);
+                alpha = Math.max(alpha, v);
+                if (beta <= alpha) {
+                    break;
                 }
             }
             return v;
         }
+
         double v = Double.MAX_VALUE;
-        for (Move raw : ordered) {
+        for (Move raw : moves) {
             if (budget.isExpired()) {
-                return HeuristicEvaluation.evaluateForRoot(game, root);
+                return session.evaluateForRoot(root);
             }
-            Move trial = PlayHalfTurn.copyMove(raw);
-            GameMemento snap = game.createMemento();
-            try {
-                game.applyMove(trial);
-                v = Math.min(v, minimax(game, depthRemaining - 1, alpha, beta, root, budget));
-                beta = Math.min(beta, v);
-                if (beta <= alpha) {
-                    break;
-                }
-            } finally {
-                game.restoreMemento(snap);
+            UndoRecord undo = session.applyTurn(raw);
+            v = Math.min(v, minimax(session, depthRemaining - 1, alpha, beta, root, budget));
+            session.undoTurn(raw, undo);
+            beta = Math.min(beta, v);
+            if (beta <= alpha) {
+                break;
             }
         }
         return v;

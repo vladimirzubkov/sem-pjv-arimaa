@@ -3,16 +3,14 @@ package cz.cvut.fel.pjv.arimaa.ui;
 import cz.cvut.fel.pjv.arimaa.model.enums.PlayerSide;
 import javafx.application.Platform;
 import javafx.geometry.Pos;
-import javafx.scene.Scene;
 import javafx.scene.control.Alert;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaException;
 import javafx.scene.media.MediaPlayer;
 import javafx.scene.media.MediaView;
-import javafx.stage.Modality;
 import javafx.stage.Stage;
-import javafx.stage.StageStyle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,27 +25,49 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Optional victory clip from {@code assets/gold-victory.mp4} or {@code assets/silver-victory.mp4}. Resolved from the
- * working directory, Maven module {@code assets/} or {@code target/assets/}, or {@code assets/} next to the running
- * JAR. Shown in a small modal window with {@link MediaView}.
+ * Optional victory clip from {@code assets/gold-victory.mp4} or {@code assets/silver-victory.mp4}, played as an overlay
+ * on the 8×8 cell area only ({@link #installOnCellArea}), scaled with the playing field (coordinates stay visible).
  *
  * <p>Recommended format: <strong>H.264 video + AAC audio</strong> in MP4. <strong>MP3 audio inside MP4</strong> often
- * triggers {@code ERROR_MEDIA_INVALID} with JavaFX Media (GStreamer) on Windows. Non-ASCII characters in the file
- * path are worked around by copying to a short temp path under {@code %TEMP%} before playback.
+ * triggers {@code ERROR_MEDIA_INVALID} with JavaFX Media (GStreamer) on Windows.
  */
 final class PlayVictoryMediaSfx {
 
     private static final Logger log = LoggerFactory.getLogger(PlayVictoryMediaSfx.class);
     private static final String ASSETS_DIR = "assets";
-    private static final double VIEW_WIDTH = 720;
-    private static final double VIEW_HEIGHT = 405;
 
-    private static Stage activeVictoryStage;
+    private static StackPane overlayRoot;
+    private static Region sizeHost;
+    private static MediaView mediaView;
+    private static MediaPlayer activePlayer;
+    private static Path activeTempCopy;
 
     private PlayVictoryMediaSfx() {}
 
-    static void playWinnerIfPresent(Stage owner, PlayerSide winner) {
-        if (winner == null) {
+    /**
+     * Adds an overlay on the 8×8 cell grid only (file/rank labels remain visible above and below). Call once from
+     * {@link MainController#attachToStage} after {@link BoardGridView#buildFramedBoardWithPerimeterCoordinates()}.
+     */
+    static void installOnCellArea(StackPane cellAreaHost) {
+        overlayRoot = new StackPane();
+        overlayRoot.setAlignment(Pos.CENTER);
+        overlayRoot.setStyle("-fx-background-color: rgba(0, 0, 0, 0.72);");
+        overlayRoot.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+        overlayRoot.setVisible(false);
+        overlayRoot.setManaged(false);
+        overlayRoot.setMouseTransparent(true);
+
+        sizeHost = cellAreaHost;
+        mediaView = new MediaView();
+        mediaView.setPreserveRatio(true);
+        mediaView.fitWidthProperty().bind(sizeHost.widthProperty());
+        mediaView.fitHeightProperty().bind(sizeHost.heightProperty());
+        overlayRoot.getChildren().add(mediaView);
+        cellAreaHost.getChildren().add(overlayRoot);
+    }
+
+    static void playWinnerIfPresent(Stage alertOwner, PlayerSide winner) {
+        if (winner == null || overlayRoot == null || mediaView == null) {
             return;
         }
         String name = winner == PlayerSide.GOLD ? "gold-victory.mp4" : "silver-victory.mp4";
@@ -56,7 +76,12 @@ final class PlayVictoryMediaSfx {
             return;
         }
         PlaybackTarget target = preparePlaybackTarget(sourcePath.get());
-        Platform.runLater(() -> playVideoOnFxThread(owner, target.playbackUri(), winner, target.tempCopy()));
+        Platform.runLater(() -> playOnBoardOverlay(alertOwner, target.playbackUri(), target.tempCopy()));
+    }
+
+    /** Stops playback and hides the board overlay (e.g. new game). */
+    static void dismiss() {
+        Platform.runLater(PlayVictoryMediaSfx::dismissOnFxThread);
     }
 
     private record PlaybackTarget(String playbackUri, Path tempCopy) {}
@@ -85,10 +110,6 @@ final class PlayVictoryMediaSfx {
         return Optional.empty();
     }
 
-    /**
-     * JavaFX Media on Windows often rejects {@code file:} URLs that contain non-ASCII in the path (e.g. {@code á} in
-     * folder names). Copy to an ASCII-only temp file when needed.
-     */
     private static PlaybackTarget preparePlaybackTarget(Path sourceAbs) {
         Path abs = sourceAbs.toAbsolutePath().normalize();
         if (!pathHasNonAscii(abs)) {
@@ -180,35 +201,21 @@ final class PlayVictoryMediaSfx {
         return null;
     }
 
-    private static void playVideoOnFxThread(Stage owner, String uri, PlayerSide winner, Path tempCopy) {
-        dismissActiveVictoryStage();
+    private static void playOnBoardOverlay(Stage alertOwner, String uri, Path tempCopy) {
+        dismissOnFxThread();
         try {
             Media media = new Media(uri);
             MediaPlayer player = new MediaPlayer(media);
-            MediaView view = new MediaView(player);
-            view.setPreserveRatio(true);
+            mediaView.setMediaPlayer(player);
+            activePlayer = player;
+            activeTempCopy = tempCopy;
 
-            StackPane root = new StackPane(view);
-            root.setAlignment(Pos.CENTER);
-            root.setStyle("-fx-background-color: black;");
+            overlayRoot.setVisible(true);
+            overlayRoot.setManaged(true);
 
-            Scene scene = new Scene(root, VIEW_WIDTH + 40, VIEW_HEIGHT + 80);
-            view.fitWidthProperty().bind(scene.widthProperty());
-            view.fitHeightProperty().bind(scene.heightProperty());
-
-            Stage victoryStage = new Stage(StageStyle.DECORATED);
-            victoryStage.initOwner(owner);
-            victoryStage.initModality(Modality.NONE);
-            victoryStage.setTitle(winner == PlayerSide.GOLD ? "Vítězství — Gold" : "Vítězství — Silver");
-            victoryStage.setScene(scene);
-            victoryStage.setMinWidth(320);
-            victoryStage.setMinHeight(200);
             Runnable closeAndDispose =
                     () -> {
-                        view.fitWidthProperty().unbind();
-                        view.fitHeightProperty().unbind();
-                        dismissActiveVictoryStage();
-                        disposeVictoryPlayer(player);
+                        dismissOnFxThread();
                         if (tempCopy != null) {
                             try {
                                 Files.deleteIfExists(tempCopy);
@@ -218,8 +225,6 @@ final class PlayVictoryMediaSfx {
                         }
                     };
 
-            victoryStage.setOnHidden(ev -> closeAndDispose.run());
-
             player.setOnEndOfMedia(() -> Platform.runLater(closeAndDispose));
             player.setOnError(
                     () -> {
@@ -227,22 +232,43 @@ final class PlayVictoryMediaSfx {
                         log.warn("victory media playback failed: {}", err != null ? err.getMessage() : "unknown");
                         Platform.runLater(
                                 () -> {
-                                    showVictoryDecodeErrorAlert(owner, err);
+                                    showVictoryDecodeErrorAlert(alertOwner, err);
                                     closeAndDispose.run();
                                 });
                     });
 
-            activeVictoryStage = victoryStage;
-            victoryStage.show();
             player.play();
         } catch (RuntimeException ex) {
             log.debug("victory media: {}", ex.toString());
+            dismissOnFxThread();
             if (tempCopy != null) {
                 try {
                     Files.deleteIfExists(tempCopy);
                 } catch (Exception ignored) {
                     // ignore
                 }
+            }
+        }
+    }
+
+    private static void dismissOnFxThread() {
+        if (overlayRoot != null) {
+            overlayRoot.setVisible(false);
+            overlayRoot.setManaged(false);
+        }
+        if (mediaView != null) {
+            mediaView.setMediaPlayer(null);
+        }
+        MediaPlayer player = activePlayer;
+        activePlayer = null;
+        Path tmp = activeTempCopy;
+        activeTempCopy = null;
+        disposeVictoryPlayer(player);
+        if (tmp != null) {
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (Exception ignored) {
+                // ignore
             }
         }
     }
@@ -263,18 +289,6 @@ final class PlayVictoryMediaSfx {
         }
         alert.setContentText(body.toString());
         alert.showAndWait();
-    }
-
-    private static void dismissActiveVictoryStage() {
-        Stage s = activeVictoryStage;
-        activeVictoryStage = null;
-        if (s != null) {
-            try {
-                s.close();
-            } catch (Exception ignored) {
-                // ignore
-            }
-        }
     }
 
     private static void disposeVictoryPlayer(MediaPlayer player) {

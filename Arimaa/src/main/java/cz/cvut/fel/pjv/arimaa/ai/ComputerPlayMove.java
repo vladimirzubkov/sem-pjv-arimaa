@@ -22,7 +22,7 @@ public final class ComputerPlayMove {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(random, "random");
         if (!cpuKind.isComputer()) {
-            throw new IllegalArgumentException("not a computer kind: " + cpuKind);
+            throw new IllegalArgumentException("not a computer kind: %s".formatted(cpuKind));
         }
         return switch (cpuKind) {
             case COMPUTER_LEVEL_0 -> RandomTrapAvoidingMoveChooser.chooseMove(game, random);

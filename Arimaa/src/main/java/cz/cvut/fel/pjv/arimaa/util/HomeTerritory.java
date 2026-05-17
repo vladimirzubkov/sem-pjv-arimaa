@@ -12,10 +12,11 @@ public final class HomeTerritory {
     }
 
     /**
+     * @param rankIndex board rank index ({@code 0} = algebraic rank {@code 1})
      * @param ranksMirrored if {@code true}, rank index is mirrored before testing Gold/Silver bands
      */
-    public static boolean contains(PlayerSide side, Position position, boolean ranksMirrored) {
-        int r = position.getRankIndex();
+    public static boolean contains(PlayerSide side, int rankIndex, boolean ranksMirrored) {
+        int r = rankIndex;
         if (ranksMirrored) {
             r = BoardConstants.BOARD_SIZE - 1 - r;
         }
@@ -23,5 +24,10 @@ public final class HomeTerritory {
             case GOLD -> r == 0 || r == 1;
             case SILVER -> r == BoardConstants.BOARD_SIZE - 2 || r == BoardConstants.BOARD_SIZE - 1;
         };
+    }
+
+    /** @see #contains(PlayerSide, int, boolean) */
+    public static boolean contains(PlayerSide side, Position position, boolean ranksMirrored) {
+        return contains(side, position.getRankIndex(), ranksMirrored);
     }
 }

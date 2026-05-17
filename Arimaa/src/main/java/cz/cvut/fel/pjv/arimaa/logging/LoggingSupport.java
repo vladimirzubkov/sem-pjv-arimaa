@@ -184,7 +184,8 @@ public final class LoggingSupport {
                 Files.createDirectories(parent);
             }
         } catch (Exception ex) {
-            System.err.println("Could not create log directory for " + absolute + ": " + ex.getMessage());
+            System.err.println(
+                    "Could not create log directory for %s: %s".formatted(absolute, ex.getMessage()));
             return false;
         }
 

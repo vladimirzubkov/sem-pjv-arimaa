@@ -303,7 +303,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         this.stage = primaryStage;
 
         boardOrientation = new BoardViewOrientation(
-                () -> rotateBoardToMoverItem != null && rotateBoardToMoverItem.isSelected());
+                () -> rotateBoardToMoverItem != null && rotateBoardToMoverItem.isSelected(),
+                this::isNetworkSessionActive,
+                () -> isNetworkSessionActive() && isNetworkHost());
 
         boardGrid = new BoardGridView(this);
         saveLoad = new ArimaaSaveLoadSupport(this);

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.28
+
+- **Síť / deska:** při aktivní síťové hře a vypnuté položce **„Otáčet desku — hráč na tahu dole“** má host (Gold) a klient (Silver) každý **lokálně** svou stranu vizuálně dole (`BoardViewOrientation` + lambdy v `MainController`); při zapnuté rotaci zůstává dosavadní pravidlo (tahující / vítěz). Žádná synchronizace orientace po síti.
+- **Verze v UI:** `HelpCzechTexts.FALLBACK_APP_VERSION` a popis v `pom.xml` sjednoceny na **0.9.28**.
+
 ## 0.9.27
 
 - **Menu (CSS):** `arimaa-menus.css` — komentáře po blocích; horizontální odsazení řádků v popup menu **10px** na `.context-menu .menu-item` bez součtu s širokým vnějším paddingem `.context-menu` (ten jen úzký okraj); přepsání **symetrických** vnitřních paddingů Modena u `.left-container`, `.label` a `.right-container` (dříve větší mez vpravo než vlevo).

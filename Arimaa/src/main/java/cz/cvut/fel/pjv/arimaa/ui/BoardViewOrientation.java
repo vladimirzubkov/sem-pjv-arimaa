@@ -11,41 +11,63 @@ import java.util.function.BooleanSupplier;
 
 /**
  * Maps between model coordinates (file/rank) and visual grid indices for the board view, depending on whether Gold is
- * shown at the bottom and optional “rotate board to mover”.
+ * shown at the bottom, optional “rotate board to mover”, and in an active network session (with rotation off) which
+ * seat is local (host = Gold at bottom, client = Silver at bottom).
  */
 public final class BoardViewOrientation {
 
     private final BooleanSupplier rotateBoardToMoverSelected;
+    private final BooleanSupplier networkSessionActive;
+    /** When {@link #networkSessionActive} is true: {@code true} if this app is the network host (Gold seat). */
+    private final BooleanSupplier networkLocalIsGoldSeat;
 
-    public BoardViewOrientation(BooleanSupplier rotateBoardToMoverSelected) {
+    public BoardViewOrientation(
+            BooleanSupplier rotateBoardToMoverSelected,
+            BooleanSupplier networkSessionActive,
+            BooleanSupplier networkLocalIsGoldSeat) {
         this.rotateBoardToMoverSelected = rotateBoardToMoverSelected;
+        this.networkSessionActive = networkSessionActive;
+        this.networkLocalIsGoldSeat = networkLocalIsGoldSeat;
     }
 
     /**
-     * When the gameplay option is on: PLAY shows mover's side at the bottom with a full 180° view (ranks and files
-     * mirrored relative to the Gold-at-bottom layout); GAME_OVER shows winner at the bottom the same way. Setup always
-     * uses Gold at the bottom (canonical coordinates).
+     * Whether the canonical “Gold at bottom” layout is used for coordinate mapping.
+     *
+     * <p>Priority: (1) If “rotate board to mover” is on: same as before — SETUP keeps Gold at bottom; PLAY puts the
+     * side to move at the bottom (180°); GAME_OVER puts the winner at the bottom. (2) Else if a network session is
+     * active and the game is in SETUP_GOLD, SETUP_SILVER, PLAY, or GAME_OVER: host sees Gold at bottom, client sees
+     * Silver at bottom (each player’s own side toward them). (3) Else: Gold at bottom (local hotseat default).
      */
     public boolean boardGoldVisualBottom(Game g) {
-        if (!rotateBoardToMoverSelected.getAsBoolean()) {
-            return true;
-        }
         if (g == null) {
             return true;
         }
-        GameState st = g.getState();
-        if (st == GameState.SETUP_GOLD || st == GameState.SETUP_SILVER) {
-            return true;
-        }
-        if (st == GameState.GAME_OVER) {
-            PlayerSide w = g.getMatchWinner();
-            if (w != null) {
-                return w == PlayerSide.GOLD;
+        if (rotateBoardToMoverSelected.getAsBoolean()) {
+            GameState st = g.getState();
+            if (st == GameState.SETUP_GOLD || st == GameState.SETUP_SILVER) {
+                return true;
+            }
+            if (st == GameState.GAME_OVER) {
+                PlayerSide w = g.getMatchWinner();
+                if (w != null) {
+                    return w == PlayerSide.GOLD;
+                }
+                return true;
+            }
+            if (st == GameState.PLAY) {
+                return g.getSideToMove() == PlayerSide.GOLD;
             }
             return true;
         }
-        if (st == GameState.PLAY) {
-            return g.getSideToMove() == PlayerSide.GOLD;
+        if (networkSessionActive.getAsBoolean()) {
+            GameState st = g.getState();
+            if (st == GameState.SETUP_GOLD
+                    || st == GameState.SETUP_SILVER
+                    || st == GameState.PLAY
+                    || st == GameState.GAME_OVER) {
+                return networkLocalIsGoldSeat.getAsBoolean();
+            }
+            return true;
         }
         return true;
     }

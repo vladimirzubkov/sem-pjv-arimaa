@@ -270,79 +270,90 @@ public final class GridMoveRules {
         }
         Piece[] occ = initialCells != null ? cloneCells(initialCells) : new Piece[CELL_COUNT];
         for (int i = 0; i < n; ) {
-            Step s = steps.get(i);
-            StepKind k = kindOf(s);
-            switch (k) {
-                case SLIDE -> {
-                    if (!canSlideOnOcc(occ, side, s)) {
-                        return Optional.empty();
-                    }
-                    applyOneStepOnOccupancy(occ, s);
-                    resolveTrapsOnOccupancy(occ);
-                    i++;
-                    if (i < n && kindOf(steps.get(i)) == StepKind.PULL_DRAG_WEAKER) {
-                        Step drag = steps.get(i);
-                        Step vacate = steps.get(i - 1);
-                        if (!canPullDragOnOcc(occ, side, drag, vacate.getFrom(), vacate.getTo())) {
-                            return Optional.empty();
-                        }
-                        applyOneStepOnOccupancy(occ, drag);
-                        resolveTrapsOnOccupancy(occ);
-                        i++;
-                    }
-                }
-                case PUSH_DISPLACE_WEAKER -> {
-                    if (!canPushDisplaceOnOcc(occ, side, s, steps.subList(0, i))) {
-                        return Optional.empty();
-                    }
-                    applyOneStepOnOccupancy(occ, s);
-                    resolveTrapsOnOccupancy(occ);
-                    i++;
-                    if (i >= n) {
-                        return Optional.empty();
-                    }
-                    Step s2 = steps.get(i);
-                    if (kindOf(s2) != StepKind.PUSH_ADVANCE_STRONGER) {
-                        return Optional.empty();
-                    }
-                    if (!canPushAdvanceOnOcc(occ, side, s2, s.getFrom(), null)) {
-                        return Optional.empty();
-                    }
-                    applyOneStepOnOccupancy(occ, s2);
-                    resolveTrapsOnOccupancy(occ);
-                    i++;
-                }
-                case PUSH_ADVANCE_STRONGER, PULL_DRAG_WEAKER -> {
-                    return Optional.empty();
-                }
-                case PULL_VACATE_STRONGER -> {
-                    if (!canPullVacateOnOcc(occ, side, s, steps.subList(0, i))) {
-                        return Optional.empty();
-                    }
-                    Position strongOld = s.getFrom();
-                    applyOneStepOnOccupancy(occ, s);
-                    resolveTrapsOnOccupancy(occ);
-                    i++;
-                    if (i >= n) {
-                        return Optional.empty();
-                    }
-                    Step s2 = steps.get(i);
-                    if (kindOf(s2) != StepKind.PULL_DRAG_WEAKER) {
-                        return Optional.empty();
-                    }
-                    if (!canPullDragOnOcc(occ, side, s2, strongOld, s.getTo())) {
-                        return Optional.empty();
-                    }
-                    applyOneStepOnOccupancy(occ, s2);
-                    resolveTrapsOnOccupancy(occ);
-                    i++;
-                }
-                default -> {
-                    return Optional.empty();
-                }
+            Optional<Integer> next =
+                    switch (kindOf(steps.get(i))) {
+                        case SLIDE -> tryApplySlideWithOptionalPullDrag(occ, side, steps, i, n);
+                        case PUSH_DISPLACE_WEAKER -> tryApplyPushPair(occ, side, steps, i, n);
+                        case PULL_VACATE_STRONGER -> tryApplyPullPair(occ, side, steps, i, n);
+                        case PUSH_ADVANCE_STRONGER, PULL_DRAG_WEAKER -> Optional.empty();
+                        default -> Optional.empty();
+                    };
+            if (next.isEmpty()) {
+                return Optional.empty();
             }
+            i = next.get();
         }
         return Optional.of(occ);
+    }
+
+    private static Optional<Integer> tryApplySlideWithOptionalPullDrag(
+            Piece[] occ, PlayerSide side, List<Step> steps, int slideIndex, int stepCount) {
+        Step slide = steps.get(slideIndex);
+        if (!canSlideOnOcc(occ, side, slide)) {
+            return Optional.empty();
+        }
+        applyOneStepOnOccupancy(occ, slide);
+        resolveTrapsOnOccupancy(occ);
+        int next = slideIndex + 1;
+        if (next < stepCount && kindOf(steps.get(next)) == StepKind.PULL_DRAG_WEAKER) {
+            Step drag = steps.get(next);
+            if (!canPullDragOnOcc(occ, side, drag, slide.getFrom(), slide.getTo())) {
+                return Optional.empty();
+            }
+            applyOneStepOnOccupancy(occ, drag);
+            resolveTrapsOnOccupancy(occ);
+            next++;
+        }
+        return Optional.of(next);
+    }
+
+    private static Optional<Integer> tryApplyPushPair(
+            Piece[] occ, PlayerSide side, List<Step> steps, int displaceIndex, int stepCount) {
+        Step displace = steps.get(displaceIndex);
+        if (!canPushDisplaceOnOcc(occ, side, displace, steps.subList(0, displaceIndex))) {
+            return Optional.empty();
+        }
+        applyOneStepOnOccupancy(occ, displace);
+        resolveTrapsOnOccupancy(occ);
+        int advanceIndex = displaceIndex + 1;
+        if (advanceIndex >= stepCount) {
+            return Optional.empty();
+        }
+        Step advance = steps.get(advanceIndex);
+        if (kindOf(advance) != StepKind.PUSH_ADVANCE_STRONGER) {
+            return Optional.empty();
+        }
+        if (!canPushAdvanceOnOcc(occ, side, advance, displace.getFrom(), null)) {
+            return Optional.empty();
+        }
+        applyOneStepOnOccupancy(occ, advance);
+        resolveTrapsOnOccupancy(occ);
+        return Optional.of(advanceIndex + 1);
+    }
+
+    private static Optional<Integer> tryApplyPullPair(
+            Piece[] occ, PlayerSide side, List<Step> steps, int vacateIndex, int stepCount) {
+        Step vacate = steps.get(vacateIndex);
+        if (!canPullVacateOnOcc(occ, side, vacate, steps.subList(0, vacateIndex))) {
+            return Optional.empty();
+        }
+        Position strongOld = vacate.getFrom();
+        applyOneStepOnOccupancy(occ, vacate);
+        resolveTrapsOnOccupancy(occ);
+        int dragIndex = vacateIndex + 1;
+        if (dragIndex >= stepCount) {
+            return Optional.empty();
+        }
+        Step drag = steps.get(dragIndex);
+        if (kindOf(drag) != StepKind.PULL_DRAG_WEAKER) {
+            return Optional.empty();
+        }
+        if (!canPullDragOnOcc(occ, side, drag, strongOld, vacate.getTo())) {
+            return Optional.empty();
+        }
+        applyOneStepOnOccupancy(occ, drag);
+        resolveTrapsOnOccupancy(occ);
+        return Optional.of(dragIndex + 1);
     }
 
     private static boolean canSlideOnOcc(Piece[] occ, PlayerSide side, Step step) {

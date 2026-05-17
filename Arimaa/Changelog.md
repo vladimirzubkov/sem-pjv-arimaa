@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.26
+
+- **Pravidla:** validace sekvenčních kroků tahu rozložena na router + privátní metody pro slide, push a pull (`DefaultRuleEngine`, `GridMoveRules`) — nižší cyklomatická složitost, stejné chování.
+- **Média:** aktualizované výherní klipy `assets/gold-victory.mp4` a `assets/silver-victory.mp4`.
+
 ## 0.9.25
 
 - **CPU (úrovně 1–2):** vyhledávání na ploché desce `Piece[64]` s apply/undo polotahu (`SearchGrid`, `SearchSession`, `GridMoveRules`); po výběru tahu obnovení mementa a validace přes `Game.applyMove` (`CpuMoveSupport`) — oprava odmítnutých tahů počítače při PC vs PC.

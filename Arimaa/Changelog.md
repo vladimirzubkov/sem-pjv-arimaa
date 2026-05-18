@@ -3,7 +3,7 @@
 ## 0.9.30
 
 - **SETUP (počítač):** šest strategií zaplnění domova — klasická šachová mapa, čtyři rotující presety (`SetupPresets`), jedno náhodné doplnění z rezervy na prázdná domovská pole; náhodné pořadí pokusů; zachován závěrečný fallback při neplatném stavu; Javadoc a komentář u obranné větve (`MainController.runComputerSetupStep`).
-- **Dokumentace:** rozšířen a upřesněn `manual-hrace.md` (CPU rozestavení, klávesové zkratky PLAY/SETUP, Tab cyklus pull/push vs. vlastní figury); doplněna `Technicka-dokumentace.md`, obrázky `Dokumentace/img/`, PlantUML `Dokumentace/puml/` (sekvenční diagram tahu).
+- **Dokumentace:** rozšířen a upřesněn `Manual-hrace.md` (CPU rozestavení, klávesové zkratky PLAY/SETUP, Tab cyklus pull/push vs. vlastní figury); doplněna `Technicka-dokumentace.md`, obrázky `Dokumentace/img/`, PlantUML `Dokumentace/puml/` (sekvenční diagram tahu).
 - **README:** úpravy v kořeni repozitáře.
 - **Verze v UI:** `HelpCzechTexts.FALLBACK_APP_VERSION` a popis v `pom.xml` sjednoceny na **0.9.30**.
 

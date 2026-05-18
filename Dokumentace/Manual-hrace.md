@@ -16,7 +16,7 @@ Tento dokument popisuje aplikaci studentské varianty hry **Arimaa** — pravidl
 
 Herní figurky v aplikaci používají obrázky z modulu, např. sada `default` (png):
 
-- příklad souboru v repositáři: <img src="../Arimaa/src/main/resources/images/figure_sets/default/gJumbo.png" alt="`Arimaa/src/main/resources/images/figure_sets/default/gJumbo.png`" style="zoom:5%;" /> (výchozí téma, „Jumbo“ = slon)
+- příklad souboru v repositáři: <img src="../Arimaa/src/main/resources/images/figure_sets/default/gJumbo.png" alt="gJumbo.png (Jumbo = slon)" width="48" /> (výchozí téma, „Jumbo“ = slon)
 
 ---
 
@@ -72,7 +72,7 @@ Po spuštění aplikace jste ve fázi **rozestavení**. Začíná **Gold** (kter
 
 **Ruční rozestavení:** v postranním panelu klikněte na **typ figurky v rezervě** (kolík u tlačítka ukazuje, kolik jich ještě máte). Pak klikněte na **volné pole na své domovské řadě** (pro Gold spodní dvě řady desky v základní orientaci, pro Silver horní dvě). Máte-li figurku „v ruce“ a pole se vám nelíbí, klikněte znovu na stejný typ v rezervě a výběr se zruší. **Klik na vlastní figurku na domovském poli** ji vrátí do rezervy.
 
-<img src="/img/rozestaveni_1.png" alt="rozestaveni_1" style="zoom:75%;" />
+<img src="img/rozestaveni_1.png" alt="rozestaveni_1" width="720" />
 
 **Tlačítko „Náhodně …“** (nebo **mezerník**, když jste na tahu vy a ne počítač):  
 
@@ -87,7 +87,7 @@ Po spuštění aplikace jste ve fázi **rozestavení**. Začíná **Gold** (kter
 
 3. **MH** a **4. HH** — další pojmenované diagramy z materiálů k rozestavení (Gold má vlastní vzory, Silver odpovídající zrcadlení / výjimka u indexu 1).
 
-   <img src="/img/rozestaveni_2.png" style="zoom:75%;" />
+   <img src="img/rozestaveni_2.png" alt="rozestaveni_2" width="720" />
 
 **Hotovo** potvrzuje rozestavení strany na tahu (**Ctrl+Enter** totéž). Druhá strana pak pokračuje stejně. V této fázi aplikace **Enter bez Ctrl** jako zkratku pro dokončení nepoužívá — spolehněte se na **Hotovo**, **Ctrl+Enter** nebo přehled v §6.
 
@@ -97,7 +97,7 @@ Po spuštění aplikace jste ve fázi **rozestavení**. Začíná **Gold** (kter
 
 Ve výchozím nastavení stříbrný soupeř má úroveň 1 složitosti, **pro demonstraci samostatné hry** stačí si vybrat kterýkoliv z počítačových úrovní složitostí u zlatého hráče — počítačové hráči si rozestaví figurky a projdou hru do vítěze jednoho z nich.  
 
-<img src="/img/pocatek_demostrace.png" style="zoom:75%;" />
+<img src="img/pocatek_demostrace.png" alt="pocatek_demostrace" width="720" />
 
 Přestože úroveň 2 byla myšlená coby 'chytřejší' varianta než 1, ve výsledku jsou si sobě rovné a první úroveň rovněž často vyhrává. Po začátku hry můžete kdykoliv přepnout do ručního ovládání a vyzkoušet tahy. Rychlost pohybu figurek lze rovněž upravit (viz příslušný posuvník). Pro přehlednost pozorování rovněž doporučujeme zapnout si otáčení desky při předání tahu. 
 
@@ -185,7 +185,7 @@ Protokol: **NDJSON** přes **UTF-8**, synchronizace stavu autoritativně u **hos
 4. Klient hraje za **Silver** — nastavení **Nastavení → Silver hráč** (člověk / počítač / síť se u klienta netýká „síťového peer“ pro vlastní sedadlo ve stejném smyslu jako druhá strana).
 
 Ukázka hry po síti — všimněte si zrcadlení desky pro hráče.
-<img src="/img/hra_po_siti.png" style="zoom:75%;" />
+<img src="img/hra_po_siti.png" alt="hra_po_siti" width="1000" />
 
 ### 8.3 Odpojení
 

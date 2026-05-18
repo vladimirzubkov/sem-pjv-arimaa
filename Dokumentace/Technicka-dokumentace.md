@@ -21,9 +21,37 @@ Cílem bylo maximálně oddělit herní logiku (Model) od grafického rozhraní 
 
 ## 2. Diagram sekvence: Zpracování tahu
 
-Tento diagram ilustruje interakci mezi uživatelem, UI vrstvou a modelem při provádění tahu.
+Tento diagram ilustruje interakci mezi uživatelem, UI vrstvou a modelem při provádění tahu. Jde o **zjednodušený** pohled (v produkčním kódu vstupy z desky zpracovává mimo jiné `MainController` / `PlayPhaseUiHandler`, nejen jedna metoda na `GameController`).
 
 ![Sequence Diagram](puml/out/sequence-move.png)
+
+Zdroj: [`puml/sequence-move.puml`](puml/sequence-move.puml). Po úpravě souboru je potřeba znovu vygenerovat PNG do `puml/out/` (rozšíření PlantUML, CLI `plantuml`, nebo nástroj z IDE).
+
+### 2.1 Další diagramy ze složky PlantUML
+
+Zdrojové `.puml` soubory leží v [`Dokumentace/puml/`](puml/). Exportované obrázky v [`Dokumentace/puml/out/`](puml/out/) — po změně diagramu je znovu vygenerujte, aby seděly s textem v repozitáři.
+
+**Struktura balíčků (zjednodušeně)**
+
+![Vrstvy balíčků](puml/out/package-structure.png)  
+Zdroj: [`puml/package-structure.puml`](puml/package-structure.puml).
+
+**Doménový model (kostra tříd)**
+
+![Doménový model](puml/out/class-model.png)  
+Zdroj: [`puml/class-model.puml`](puml/class-model.puml). Rozhraní `RuleEngine` / `MoveValidator` v kódu implementuje zejména `DefaultRuleEngine`.
+
+**JavaFX a MVC (kostra)**
+
+![UI a MVC](puml/out/class-ui.png)  
+Zdroj: [`puml/class-ui.puml`](puml/class-ui.puml). `MainController` dnes drží mnohem více odpovědností (viz § 3.4); diagram zachycuje jen jádrový vztah k `GameController` a `Game`.
+
+**Stavy aplikace (zjednodušeně)**
+
+![Stavy](puml/out/state-game.png)  
+Zdroj: [`puml/state-game.puml`](puml/state-game.puml). Toto **není** přímý výpis enumu `GameState` v modelu (tam jsou např. `SETUP_GOLD` / `SETUP_SILVER`), ale schematická navigace z pohledu uživatele (menu, síť, pauza).
+
+Síťový handshake a synchronizace stavu (`hello` / `welcome` / `state_snapshot` / `intent`) — viz **§ 3.7** a [`puml/sequence-network.puml`](puml/sequence-network.puml).
 
 ---
 
@@ -111,6 +139,12 @@ Kompletní vizuální část (JavaFX). Návrh nepoužívá FXML, všechny kompon
 
 ### 3.7. Síťová hra (`cz.cvut.fel.pjv.arimaa.network`)
 Pro hraní mezi dvěma vzdálenými počítači.
+
+**Diagram sekvence (handshake, intent Silvera, broadcast `state_snapshot`)**
+
+Následující diagram je zjednodušený: skutečné volání probíhá přes `FxExecutor` / JavaFX vlákno (`Platform.runLater`), IO smyčky hostitele a klienta jsou v `readHostLoop` / `readClientLoop`. Zdroj: [`puml/sequence-network.puml`](puml/sequence-network.puml).
+
+![Síť — sekvence](puml/out/sequence-network.png)
 
 - **`ArimaaNetworkCoordinator`**
   - *Charakteristika*: běží v samostatném vlákně a spravuje TCP sokety.

@@ -15,7 +15,7 @@ package "cz.cvut.fel.pjv.arimaa" as root {
   controller ..> model : uses
   persistence ..> model : uses
   ai ..> model : uses
-  network ..> model : optional\n(later)
+  network ..> model : uses
   util ..> model : uses
 }
 

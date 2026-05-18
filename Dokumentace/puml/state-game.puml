@@ -1,5 +1,5 @@
 @startuml state-game
-title Stavy aplikace a hry (CP2)
+title Stavy aplikace a hry (zjednodušeně, pohled UI / navigace)
 
 [*] --> MENU
 

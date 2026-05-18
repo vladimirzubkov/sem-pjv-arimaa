@@ -4,6 +4,11 @@ title Zpracování tahu (Sequence Diagram)
 actor Hráč as User
 boundary "BoardGridView" as Grid
 control "GameController" as Ctrl
+note right of Ctrl
+  Zjednodušení: část kroků v aplikaci
+  probíhá přes MainController
+  a PlayPhaseUiHandler.
+end note
 entity "Game" as Game
 entity "DefaultRuleEngine" as Engine
 boundary "PlayDraftNotationSupport" as Notation

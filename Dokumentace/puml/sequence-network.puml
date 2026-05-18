@@ -1,0 +1,57 @@
+@startuml sequence-network
+skinparam responseMessageBelowArrow true
+title Síť Arimaa — TCP / NDJSON (handshake a synchronizace stavu)
+
+actor "Hráč Silver\n(klient)" as Cs
+participant "ArimaaNetworkCoordinator\n(IO vlákno, CLIENT)" as Nc
+collections "TCP\nUTF-8 NDJSON" as Tcp
+participant "ArimaaNetworkCoordinator\n(IO vlákno, HOST)" as Nh
+participant "MainController\n(impl. NetworkGameBridge)" as Mh
+actor "Hráč Gold\n(host)" as Gh
+
+== Naslouchání a TCP spojení ==
+Gh -> Mh : menu Síť → Hostovat (port)
+Mh -> Nh : startHost(port)\n(ServerSocket.accept)
+Cs -> Mh : menu Síť → Připojit (host, port)
+Mh -> Nc : startClient(host, port)\n(Socket)
+
+== Handshake (pořadí řádků) ==
+Nc -> Tcp : řádek **hello**\n(protocolVersion, silverSeatControl)
+Tcp -> Nh : hello
+Nh -> Mh : **FX vlákno:**\nprepareNetworkSessionAsHost(peerSilver)\n+ startNewGameAfterNetworkHostReady()
+note right of Nh
+  Po přečtení hello musí host
+  nejdřív odeslat **welcome**,
+  až pak **state_snapshot**
+  (viz hostHandshakeComplete).
+end note
+Mh --> Nh : hra připravena na hostu
+Nh -> Tcp : řádek **welcome**
+Nh -> Tcp : řádek **state_snapshot**\n(serializovaný stav hry)
+Tcp -> Nc : welcome
+Nc -> Mh : **FX vlákno:**\nprepareNetworkSessionAsClient(peerGold)
+Tcp -> Nc : state_snapshot
+Nc -> Mh : **FX vlákno:**\napplyNetworkSnapshotSaveText()
+
+== Typický krok Silvera (intent → nový snapshot) ==
+Cs -> Mh : UI (SETUP / PLAY)
+Mh -> Nc : sendIntent(IntentMessage)\n(jen CLIENT)
+Nc -> Tcp : řádek **intent**
+Tcp -> Nh : intent
+Nh -> Mh : **FX vlákno:**\napplyHostIntentFromNetwork()
+Mh --> Nh : ok / zamítnuto
+alt úspěch
+    Mh -> Nh : hostBroadcastSnapshotIfNeeded()\n→ broadcastSnapshotFromHostMainThread()
+    Nh -> Tcp : řádek **state_snapshot**
+    Tcp -> Nc : state_snapshot
+    Nc -> Mh : **FX vlákno:**\napplyNetworkSnapshotSaveText()
+else zamítnutý intent
+    Nh -> Tcp : řádek **error**
+end
+
+note over Nc, Nh
+  Další wire typy: ping/pong, seat_control, bye
+  (viz NetworkJson / readHostLoop / readClientLoop).
+end note
+
+@enduml

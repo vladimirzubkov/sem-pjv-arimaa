@@ -1,58 +1,53 @@
 # Semestrální práce B0B36PJV — Arimaa
 
-Desktopová hra **Arimaa** v Javě 21 s GUI v **JavaFX**. Partie podporuje plná pravidla hry (tahy 1–4 kroky, tlačení, tažení, pasti, zmrazení, konec hry), **časovač** stran, **ukládání a načítání** v textové notaci, hru **dva lidé na jednom PC**, hru proti **počítači** (více úrovní než pouhý náhodný generátor) a **síťový režim** host–klient přes **TCP**.
+Tento projekt obsahuje implementaci logické deskové hry **Arimaa** pro předmět B0B36PJV (Programování v Javě) na ČVUT FEL.
 
-**Zadání kurzu (obecné):** [Semestrální práce — B0B36PJV](https://cw.fel.cvut.cz/wiki/courses/b0b36pjv/semestral/start)  
-**Zadání tématu Arimaa:** [Arimaa — semestrální práce](https://cw.fel.cvut.cz/wiki/courses/b0b36pjv/semestral/arima)
+Aplikace je vytvořena v jazyce Java (verze 21) s grafickým uživatelským rozhraním v JavaFX. 
+Architektura je navržena dle MVC návrhového vzoru. Byla implementována plná pravidla hry, včetně tahání, tlačení, mrznutí a pastí. 
+Hra podporuje režimy pro dva hráče na jednom počítači, hru proti umělé inteligenci (využívající algoritmus Minimax s Alpha-Beta prořezáváním) a síťovou hru přes TCP s využitím vlastního NDJSON protokolu.
 
-## Uživatelská dokumentace
+## Dokumentace k projektu
 
-- **[Uživatelský manuál](Dokumentace/manual-hrace.md)** — pravidla (shrnutí), ovládání, klávesové zkratky, úrovně AI, rozestavení, spuštění na Windows/Linux/macOS, síť (host **7788**, klient).
+Kompletní dokumentace je uložena ve složce `Dokumentace/` a je rozdělena na dvě hlavní části:
 
-V GitLab Wiki je potřeba mít **aktuální** uživatelský manuál dle zadání CP3; obsah tohoto souboru lze do wiki zkopírovat nebo na něj odkázat.
+- **[Uživatelský manuál](Dokumentace/Manual-hrace.md)**: návod k obsluze aplikace, popis ovládání, klávesových zkratek, nastavení AI a možností síťové hry.
+- **[Technická dokumentace](Dokumentace/Technicka-dokumentace.md)**: popis vnitřní struktury programu, rozdělení do balíčků, klíčové třídy a diagramy (PlantUML) architektury a toků. 
 
-## Technická dokumentace (v repozitáři)
+## Splnění povinných požadavků kurzu
 
-- **PlantUML** zdroje: [`Dokumentace/puml/`](Dokumentace/puml/)  
-- Vygenerované **PNG**: [`Dokumentace/puml/out/`](Dokumentace/puml/out/) (diagram balíčků, model, UI, stavy; přegenerování: `java -jar plantuml.jar -tpng -o out *.puml` ve složce `Dokumentace/puml/`)
-- **Síť:** protokol NDJSON přes TCP, typy zpráv v balíčku `cz.cvut.fel.pjv.arimaa.network` — pro detailní specifikaci viz zdrojové soubory a Javadoc u veřejných typů
+Následující tabulka obsahuje seznam povinných požadavků na semestrální práci a způsob jejich naplnění v projektu.
 
-## Splnění povinných požadavků kurzu (kontrolní seznam)
+| # | Požadavek | Status <span style="color:#2e7d32">✓</span> = Splněno | Podrobnosti / Komentář |
+|---|-----------|--------|------------------------|
+| 1 | Java ≥ 21, projekt pod **Maven** | <span style="color:#2e7d32">✓</span> | Projekt používá Java 21 (`maven.compiler.release` 21). Sestavení probíhá přes `pom.xml`. |
+| 2 | Průběžné commity na **GitLab**, rozumná historie | <span style="color:#2e7d32">✓</span> | Vývoj probíhal průběžně, commity jsou uspořádány, pro oddělení práce využívána větev `CP3` a tagy. |
+| 3 | **JavaFX** GUI; netriviální část **bez Scene Builderu** | <span style="color:#2e7d32">✓</span> | Vůbec nebyl použit Scene Builder / FXML. Všechny komponenty (např. `BoardGridView`) a logika jsou tvořeny dynamicky v Javě. |
+| 4 | **Vlákna** mimo triviální `Timer`; u JavaFX typicky **Task** / **Service** | <span style="color:#2e7d32">✓</span> | Použito pro síťovou komunikaci (TCP server/klient běží na pozadí), pro výpočet tahů AI a pro odpočítávání herních hodin (`PlayChessClockTicker`). |
+| 5 | **Unit testy** nebo funkční testy (JUnit) | <span style="color:#2e7d32">✓</span> | JUnit 5. Testy pokrývají herní model, serializaci, parsování notace, algoritmy AI i validaci pravidel (např. `PlayStepValidationTest`). |
+| 6 | **Loggery** (SLF4J/Logback), zap/vyp **bez editace kódu** | <span style="color:#2e7d32">✓</span> | Integrován Logback. Úroveň logování lze měnit přes CLI argumenty, JVM properties nebo přímo v menu aplikace za běhu. Lze zapnout i výpis do souboru. |
+| 7 | **Uložení stavu** aplikace / partie | <span style="color:#2e7d32">✓</span> | Stav hry a historie se ukládá/načítá v textové notaci přes `GameSerializer`. |
+| 8 | **Javadoc** u netriviálních public API | <span style="color:#2e7d32">✓</span> | Důležité veřejné třídy a metody mají JavaDoc dokumentaci popisující vstupy, výstupy a chování. |
+| 9 | Komentáře u netriviálních částí | <span style="color:#2e7d32">✓</span> | Místa s náročnou logikou (např. `DefaultRuleEngine` nebo `SearchGrid`) jsou průběžně komentována. |
+| 10 | **Uživatelský manuál** a **technická dokumentace** | <span style="color:#2e7d32">✓</span> | Uloženo v repozitáři viz výše, připraveno pro vložení do GitLab Wiki (požadavek CP3). |
+| 11 | Kód a komentáře **anglicky**; uživ./tech. dokumentace **CS/SK** | <span style="color:#2e7d32">✓</span> | Zdrojový kód, komentáře v něm a commit zprávy většinou v AJ. Manuály a technická dokumentace jsou v češtině. |
 
-Přehled vůči stránce [Semestrální práce — nutné požadavky](https://cw.fel.cvut.cz/wiki/courses/b0b36pjv/semestral/start).
+### Téma Arimaa — specifické požadavky
 
-| # | Požadavek | Status |
-|---|-----------|--------|
-| 1 | Java ≥ 21, projekt pod **Maven** | Ano (`Arimaa/pom.xml`, `maven.compiler.release` 21) |
-| 2 | Průběžné commity na **GitLab**, rozumná historie | Zodpovědnost týmu / cvičícího hodnocení |
-| 3 | **JavaFX** GUI; alespoň jedna netriviální část **bez Scene Builderu** | Ano — např. `MainController`, `BoardGridView`, herní layout a logika v kódu |
-| 4 | **Vlákna** mimo triviální `Timer`; u JavaFX typicky **Task** / **Service** | Ano — např. `PlayChessClockTicker` + `Task`, síťové IO na thread poolu, animace tahu PC |
-| 5 | **Unit testy** nebo funkční testy (JUnit) | Ano — více testových tříd v `Arimaa/src/test/java` (model, AI, perzistence, síťová serializace, …) |
-| 6 | **Loggery** (SLF4J/Logback), zap/vyp **bez editace kódu** | Ano — CLI `--log-level` / JVM vlastnost, menu **Log → Logback Level**, volitelný soubor |
-| 7 | **Uložení stavu** aplikace / partie | Ano — ukládání/načítání přes serializer (`GameSerializer`, soubor) |
-| 8 | **Javadoc** u netriviálních public API | Ano — povinné prvky mají Javadoc (kontinuálně doplňováno) |
-| 9 | Komentáře u netriviálních částí | Ano |
-| 10 | **Uživatelský manuál** a **technická dokumentace** (není to Javadoc) | Uživatelský: `Dokumentace/manual-hrace.md` + diagramy; technická: diagramy + balíčky/network v kódu — **wiki GitLab** dle CP3 |
-| 11 | Kód a komentáře **anglicky**; uživ./tech. dokumentace **CS/SK** povoleno | Ano — tento README a manuál česky; zdrojáky anglicky |
-
-### Téma Arimaa — očekávané funkce dle wiki
-
-Z [zadání Arimaa](https://cw.fel.cvut.cz/wiki/courses/b0b36pjv/semestral/arima):
-
-| Funkce dle zadání | Status |
-|-------------------|--------|
-| Tahy 1–4, tlačení, tažení | Implementováno (`DefaultRuleEngine`, …) |
-| Pasti, zmrazení | Implementováno |
-| Králík na poslední řádek, blokace / konec hry | Implementováno |
-| **Hrací hodiny** (čas přemýšlení) | Implementováno (`PlayChessClockModel`, UI tabulka) |
-| Uložení, načtení, krokování tazy, **oficiální notace** | Implementováno (textový formát, historie) |
-| Dva hráči na **jednom PC** | Ano |
-| Hra proti **počítači** (minimum náhodné tahy) | Ano — úrovně 0–2 (`PlayerControllerKind`, AI balíček) |
+| Funkce dle zadání | Status | Podrobnosti / Komentář |
+|-------------------|--------|------------------------|
+| Tahy 1–4, tlačení, tažení | <span style="color:#2e7d32">✓</span> | Implementováno plně v `DefaultRuleEngine` (router s rozpadem na separátní logiku a pravidla). |
+| Pasti, zmrazení | <span style="color:#2e7d32">✓</span> | Implementováno, u vizualizace mají zmrazené figurky sníženou opacitu. |
+| Králík na poslední řádek, blokace / konec hry | <span style="color:#2e7d32">✓</span> | Hra správně detekuje stav GAME_OVER na základě všech možných situací, včetně znemožnění tahu. |
+| **Hrací hodiny** (čas přemýšlení) | <span style="color:#2e7d32">✓</span> | Implementováno (`PlayChessClockModel`), reálný čas se ukazuje v UI v postranním panelu. |
+| Uložení, načtení, krokování tahů, **oficiální notace** | <span style="color:#2e7d32">✓</span> | Hra má interaktivní panel „Historie tahů“, který dovoluje listovat historií, vracet tahy a generovat notaci v oficiálním textovém formátu. |
+| Dva hráči na **jednom PC** | <span style="color:#2e7d32">✓</span> | Základní režim v aplikaci. |
+| Hra proti **počítači** | <span style="color:#2e7d32">✓</span> | Úrovně od 0 (náhodné pohyby chránící před pastí) do 2 (Alpha-Beta vyhledávání). |
 
 ## Modul Maven a spuštění
 
-Zdroje: **[`Arimaa/`](Arimaa/)**
+Zdrojové kódy a nastavení naleznete ve složce **[`Arimaa/`](Arimaa/)**
 
+Pro zkompilování a spuštění aplikace použijte:
 ```bash
 mvn -f Arimaa/pom.xml compile
 mvn -f Arimaa/pom.xml javafx:run
@@ -60,36 +55,4 @@ mvn -f Arimaa/pom.xml javafx:run
 
 **Hlavní třída:** `cz.cvut.fel.pjv.arimaa.ArimaaApp`
 
-### Logování
-
-- **Výchozí:** tichý režim (`OFF`) na konzoli.
-- **Argumenty / JVM:** `--log-level=DEBUG` nebo `-Dcz.cvut.fel.pjv.arimaa.log.level=INFO`
-- **Za běhu:** menu **Log → Logback Level**, **Log → Zapisovat do souboru**
-
-Podrobnosti viz [Uživatelský manuál — sekce Spuštění](Dokumentace/manual-hrace.md).
-
-## Použité technologie (shrnutí)
-
-| Oblast | Technologie |
-|--------|-------------|
-| Jazyk | Java 21 |
-| Build | Maven |
-| GUI | JavaFX (controls, media, web pro nápovědu) |
-| Logování | SLF4J + Logback |
-| Testy | JUnit 5 |
-| Serializace / JSON (síť) | Jackson (dle modulu) |
-| Ostatní | Batik pro rasterizaci SVG figurek |
-
-## Struktura balíčků (MVC orientace)
-
-- **`model`** — `Game`, `Board`, pravidla (`DefaultRuleEngine`), historie, notace
-- **`controller`** — `GameController`
-- **`ui`** — JavaFX obrazovka, menu, klávesnice, síťové dialogy
-- **`persistence`** — ukládání/načítání
-- **`ai`** — tahy počítače
-- **`network`** — TCP host/klient, wire zprávy
-- **`logging`** — konfigurace Logbacku z CLI a UI
-
----
-
-*Text README je určen pro cvičícího a kontrolu souladu se zadáním; neobsahuje nástroje editoru ani interní postupy vývoje.*
+Další pokyny ohledně spuštění (nastavení logování) naleznete v [Uživatelském manuálu](Dokumentace/Manual-hrace.md).

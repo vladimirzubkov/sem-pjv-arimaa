@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.30
+
+- **SETUP (počítač):** šest strategií zaplnění domova — klasická šachová mapa, čtyři rotující presety (`SetupPresets`), jedno náhodné doplnění z rezervy na prázdná domovská pole; náhodné pořadí pokusů; zachován závěrečný fallback při neplatném stavu; Javadoc a komentář u obranné větve (`MainController.runComputerSetupStep`).
+- **Dokumentace:** rozšířen a upřesněn `manual-hrace.md` (CPU rozestavení, klávesové zkratky PLAY/SETUP, Tab cyklus pull/push vs. vlastní figury); doplněna `Technicka-dokumentace.md`, obrázky `Dokumentace/img/`, PlantUML `Dokumentace/puml/` (sekvenční diagram tahu).
+- **README:** úpravy v kořeni repozitáře.
+- **Verze v UI:** `HelpCzechTexts.FALLBACK_APP_VERSION` a popis v `pom.xml` sjednoceny na **0.9.30**.
+
 ## 0.9.29
 
 - **Síť — UI:** při aktivní relaci titulek okna `Hra Arimaa | Server` / `Klient` + `Na tahu: …` (mimo síť beze změny); po `state_snapshot` klient znovu nastaví PLAY hodiny (`notifyPlayChessClockHistoryNavigation` / SETUP reset).

@@ -14,17 +14,15 @@ Tento dokument popisuje aplikaci studentské varianty hry **Arimaa** — pravidl
 | **Maven** | 3.x — ke kompilaci a spuštění přes profil OpenJFX |
 | **Síť (volitelně)** | pro hru dvou lidí přes TCP — otevřený port na počítači hostitele (firewall/router) |
 
-Herní figurky v aplikaci používají obrázky z modulu, např. sada `default` (PNG):
+Herní figurky v aplikaci používají obrázky z modulu, např. sada `default` (png):
 
-- příklad souboru v repozitáři: [`Arimaa/src/main/resources/images/figure_sets/default/gJumbo.png`](../Arimaa/src/main/resources/images/figure_sets/default/gJumbo.png) (zvířecí téma; „Jumbo“ = slon)
-
-**Snímky obrazovky:** pro odevzdání nebo wiki je vhodné doplnit 2–4 screenshoty: hlavní okno v rozestavení, okno ve fázi PLAY, dialog síťového hostitele, případně dialog načtení partie. V tomto manuálu zatím nejsou vložené obrázky.
+- příklad souboru v repositáři: <img src="../Arimaa/src/main/resources/images/figure_sets/default/gJumbo.png" alt="`Arimaa/src/main/resources/images/figure_sets/default/gJumbo.png`" style="zoom:5%;" /> (výchozí téma, „Jumbo“ = slon)
 
 ---
 
 ## 2. Spuštění aplikace
 
-Pracovní adresář předpokládáme **kořen klonovaného repozitáře** (kde leží `README.md` a složka `Arimaa/`).
+Pracovní adresář předpokládáme **kořen klonovaného repositáře** (kde leží `README.md` a složka `Arimaa/`).
 
 ### 2.1 Windows, Linux, macOS — přes Maven (doporučeno)
 
@@ -70,28 +68,52 @@ Cílem je dostat **králíka** (v aplikaci jde o typ figurky „Hare“ / král�
 
 ## 4. Jak začít — rozestavení (SETUP)
 
-1. Po spuštění jste ve fázi **rozestavení**. **Gold** začíná (spodní / domovská strana dle orientace desky).
-2. V postranním panelu vyberte **figuru z rezervy**, poté klikněte na **povolené pole** na domovské řadě. Klik na figurku na desce ji může vrátit do rezervy.
-3. **Předvolby (presety):** v aplikaci jsou k dispozici uložené rozestavení (např. typické rozložení); vybírejte dle popisků v UI.
-4. **Náhodné rozestavení:** tlačítko / **Mezerník** — doplní náhodně zbytek nebo přehází již umístěné (viz text tlačítka).
-5. **Šachové mapování:** **Ctrl+Mezerník** — rychlé rozestavení podle mapování z klasické výchozí šachové pozice (specifikace v kódu `SetupPresets`).
-6. Po dokončení klikněte na **Hotovo** na řadě, která je na tahu — nebo **Ctrl+Enter**.
+Po spuštění aplikace jste ve fázi **rozestavení**. Začíná **Gold** (která strana je „dole“ na obrazovce závisí na položce **Nastavení → Otáčet desku — hráč na tahu dole** a případně na síťové hře — viz nápověda v aplikaci).
 
-**Nastavení (menu):** pro každou stranu (**Gold hráč**, **Silver hráč**) lze zvolit **člověka**, **počítač (úroveň 0–2)** nebo **protihráče po síti**. Pro lokální hru dvou lidí na jednom PC nechte obě strany jako člověk.
+**Ruční rozestavení:** v postranním panelu klikněte na **typ figurky v rezervě** (kolík u tlačítka ukazuje, kolik jich ještě máte). Pak klikněte na **volné pole na své domovské řadě** (pro Gold spodní dvě řady desky v základní orientaci, pro Silver horní dvě). Máte-li figurku „v ruce“ a pole se vám nelíbí, klikněte znovu na stejný typ v rezervě a výběr se zruší. **Klik na vlastní figurku na domovském poli** ji vrátí do rezervy.
+
+<img src="/img/rozestaveni_1.png" alt="rozestaveni_1" style="zoom:75%;" />
+
+**Tlačítko „Náhodně …“** (nebo **mezerník**, když jste na tahu vy a ne počítač):  
+
+- ještě nemáte všechny figurky na desce → **doplní zbytek náhodně** na domovské řady (musí to jít pravidly kapacit);  
+- už máte všech šestnáct na domovských řadách → **přehází je náhodně** mezi políčky na těchto řadách.
+
+**„Šachová rozestavení“** (tlačítko nebo **Ctrl+mezerník**): nejde o jednu šablonu z šachovnice, ale o **čtyři pevné oficiální rozložení** (stejný počet figurek každého typu jako v pravidlech Arimaa), které aplikace bere z dokumentovaných diagramů (viz kód `SetupPresets`). Při každém stisku se použije **další varianta v cyklu** (po čtvrté zase první; po **Nové hře** se cyklus resetuje). Ve stavovém řádku uvidíte krátký popis a „1/4“ až „4/4“:
+
+1. **opačné šachy** — silné figury v zadní řadě v opačném pořadí než v běžné „šachové“ mapě;  
+
+2. **symetrické** — u **Gold** rozložení ve stylu diagramu *99of9*; u **Silver** u stejného kroku v cyklu jiné pojmenované rozložení (*Fritzlein*), aby seděl multiset;  
+
+3. **MH** a **4. HH** — další pojmenované diagramy z materiálů k rozestavení (Gold má vlastní vzory, Silver odpovídající zrcadlení / výjimka u indexu 1).
+
+   <img src="/img/rozestaveni_2.png" style="zoom:75%;" />
+
+**Hotovo** potvrzuje rozestavení strany na tahu (**Ctrl+Enter** totéž). Druhá strana pak pokračuje stejně. V této fázi aplikace **Enter bez Ctrl** jako zkratku pro dokončení nepoužívá — spolehněte se na **Hotovo**, **Ctrl+Enter** nebo přehled v §6.
+
+**Počítač** při rozestavení vezme **šest** možností, jak zaplnit domovské řady: **klasické rozložení ve stylu šachovnice** (sloni do rohů, osm králíků vpřed), **čtyři střídající se varianty** z toho samého souboru, na který odkazuje tlačítko „Šachová rozestavení“, a **jedno čistě náhodné** rozházení figurek z panelu na volná domovská pole (stejná myšlenka jako u náhodného doplnění u člověka, jen bez předlohy). Těchto **šest možností** si **náhodně promíchá**, pak je v tomto pořadí **zkouší jednu po druhé** a použije **první, která vyjde**.
+
+**Nastavení (menu):** u **Gold hráč** a **Silver hráč** volíte **člověka**, **počítač (úroveň 0–2)** nebo u síťové hry příslušného **protihráče ze sítě**. Dva lidé na jednom PC: obě strany **člověk**. 
+
+Ve výchozím nastavení stříbrný soupeř má úroveň 1 složitosti, **pro demonstraci samostatné hry** stačí si vybrat kterýkoliv z počítačových úrovní složitostí u zlatého hráče — počítačové hráči si rozestaví figurky a projdou hru do vítěze jednoho z nich.  
+
+<img src="/img/pocatek_demostrace.png" style="zoom:75%;" />
+
+Přestože úroveň 2 byla myšlená coby 'chytřejší' varianta než 1, ve výsledku jsou si sobě rovné a první úroveň rovněž často vyhrává. Po začátku hry můžete kdykoliv přepnout do ručního ovládání a vyzkoušet tahy. Rychlost pohybu figurek lze rovněž upravit (viz příslušný posuvník). Pro přehlednost pozorování rovněž doporučujeme zapnout si otáčení desky při předání tahu. 
 
 ---
 
 ## 5. Průběh partie (PLAY)
 
-- Klikání na figury a zvýrazněná cílová pole odpovídá **legálním** krokům, tahům a tlačením.
-- **Enter** — odeslání celého tahu (**1–4 kroky** musí být vyčerpány v souladu s pravidly).
-- **Esc** — zrušení rozpracovaného tahu (draft).
+**Tah myší:** klikněte na svou figurku — zvýrazní se **povolená** pole (krok, tažení, tlačení podle pravidel). Skládáte **1–4 ortogonální kroky** v jednom tahu. Další klik přidá krok; špatný cíl se většinou prostě neprovede.
 
-**Časovač:** v PLAY se zobrazuje souhrnný čas přemýšlení (Gold/Silver) — viz panel v UI (sloupce Celkem, průměr na tah).
+**Enter** dělá totéž co tlačítko **Konec tahu**: uzavře celý rozpracovaný tah (musí být legální a správný počet kroků). Po potvrzení se tah zapíše do historie; u **síťové** hry ho aplikace odešle hostiteli stejně jako při kliknutí na **Konec tahu** (když jste na tahu vy za svou stranu). **Esc** zahodí rozpracovaný tah (**draft**) a vrátí pozici k stavu na začátku tohoto polotahu. Další zkratky (Tab, mezerník, šipky…) jsou v §6.
 
-**Historie tahů:** seznam s oficiální notací; jděte zpět/vpřed přes menu **Tah** nebo navigaci v seznamu; **Page Up / Down** — posun výběru po stránce (u klienta v síti může být omezeno).
+**Časovač** v panelu ukazuje u každé strany **součet** času a **průměr na dokončený polotah**. Je to pomůcka v této instanci aplikace; při síti se stav partie bere z hostitele, ale **čísla na displeji hodin nemusí být stejná** jako na druhém počítači (nejsou součástí síťového protokolu).
 
-**Uložení / načtení:** menu **Hra → Uložit / Načíst** — textový formát stavu partie včetně historie (viz technická dokumentace).
+**Historie tahů:** seznam řádků v oficiální notaci; výběrem řádku nebo přes menu **Tah** můžete prohlížet dřívější stavy (kde to pravidla a režim hry dovolí). Klávesy **Page Up / Page Down** posunují výběr po stránce — **ne jako síťový klient** (tam zůstává myš a menu).
+
+**Uložit / Načíst** v menu **Hra** používá stejný textový zápis stavu jako vnitřní ukládání partie (včetně historie).
 
 ---
 
@@ -101,12 +123,12 @@ Cílem je dostat **králíka** (v aplikaci jde o typ figurky „Hare“ / král�
 
 | Klávesa | Účinek |
 |---------|--------|
-| **Enter** | Ukončit a potvrdit tah |
+| **Enter** | Ukončit a potvrdit tah (= tlačítko **Konec tahu**; u síťové hry způsob odeslání je stejný jako u tlačítka, jste-li na tahu) |
 | **Esc** | Zrušit rozpracovaný tah |
-| **Tab** / **Shift+Tab** | Cyklus cílů: nejdříve tahnutí (pull), pak varianty tlačení (push), jinak vlastní figury |
-| **Ctrl+Tab** / **Ctrl+Shift+Tab** | **Jen vlastní figury** (např. při tlačení) |
+| **Tab** / **Shift+Tab** | Cyklus cílů: nejdříve táhnutí (pull), pak varianty tlačení (push), jinak když nejsou žádné cíle táhnutí ani tlačení — přepíná mezi vlastními figurami v pořadí jejich síly |
+| **Ctrl+Tab** / **Ctrl+Shift+Tab** | Vracení se k vlastním figurám z režimu tažení/tlačení |
 | **Page Up** / **Page Down** | Historie tahů — posun výběru po stránce |
-| **Mezerník** | Tahnutí nebo tlačení podle žlutého **fokusu** z Tabu; bez fokusu nejdřív pull, jinak push |
+| **Mezerník** | Táhnutí nebo tlačení podle zvýrazněného žlutě políčka/fokusu z Tabu; bez fokusu pull, jinak push |
 | **Šipky** / **WASD** | Pohyb kurzoru po šachovnici po výběru figury |
 
 ### Rozestavení (SETUP)
@@ -115,10 +137,12 @@ Cílem je dostat **králíka** (v aplikaci jde o typ figurky „Hare“ / král�
 |---------|--------|
 | **Mezerník** | Náhodné rozestavení / doplnění (jako tlačítko) |
 | **Ctrl+Mezerník** | Šachové rozestavení |
-| **Ctrl+Enter** | Dokončit rozestavení (Hotovo) |
+| **Ctrl+Enter** | Dokončit rozestavení (= tlačítko **Hotovo**); samotné **Enter** v SETUP není zkratkou dokončení |
 | **Mezerník** (je-li na tahu počítač) | Pauza automatického přehrávání tahu počítače |
 
 Menu **Hra** obsahuje zkratky pro novou hru, uložení, načtení, ukončení; menu **Tah** — zpět / vpřed.
+
+Menu **Nastavení**, **Síť** a **Nápověda** lze navigovat pomoci Alt+písmenko. 
 
 ---
 
@@ -128,7 +152,7 @@ V menu **Nastavení** nastavte u **Gold** nebo **Silver** položku **počítač 
 
 | Úroveň | Chování |
 |--------|--------|
-| **0** | Náhodný **legální celý tah** (1–4 kroky); preferuje tahy bez okamžité ztráty figurky pastí; po mnoha pokusech vezme libovolný legální tah |
+| **0** | Náhodný **legální celý tah** (1–4 kroky); preferuje tahy bez okamžité ztráty figurky do pastí; po mnoha pokusech vezme libovolný legální tah |
 | **1** | „Greedy“: v časovém limitu **vzorkuje** náhodné legální tahy, ohodnocuje je **statickou heuristikou** koncové pozice, bere nejlepší |
 | **2** | **Alfa-beta** minimax přes **celé tahy** s omezenou hloubkou a pevným časovým rozpočtem (aby UI nezamrzlo) |
 
@@ -153,9 +177,15 @@ Protokol: **NDJSON** přes **UTF-8**, synchronizace stavu autoritativně u **hos
 ### 8.2 Klient
 
 1. **Síť → Připojit se…**
+
 2. **Host:** IP adresa nebo hostname hostitele (např. `192.168.0.10` nebo veřejná IP; lokálně `localhost`).
+
 3. **Port:** stejný jako u hostitele (výchozí **7788**).
+
 4. Klient hraje za **Silver** — nastavení **Nastavení → Silver hráč** (člověk / počítač / síť se u klienta netýká „síťového peer“ pro vlastní sedadlo ve stejném smyslu jako druhá strana).
+
+Ukázka hry po síti — všimněte si zrcadlení desky pro hráče.
+<img src="/img/hra_po_siti.png" style="zoom:75%;" />
 
 ### 8.3 Odpojení
 
@@ -175,7 +205,7 @@ Protokol: **NDJSON** přes **UTF-8**, synchronizace stavu autoritativně u **hos
 
 Menu **Nápověda** — **Pravidla**, **Ovládání**, **O počítačovém soupeři**, dialog **O programu**.
 
-Verze uvedená v aplikaci odpovídá `HelpCzechTexts.FALLBACK_APP_VERSION` / manifestu (aktuálně směrováno na vývojovou verzi 0.9.24).
+Verze uvedená v aplikaci odpovídá `HelpCzechTexts.FALLBACK_APP_VERSION` / manifestu (aktuálně směrováno na vývojovou verzi 0.9.30).
 
 ---
 

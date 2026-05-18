@@ -1,0 +1,33 @@
+@startuml sequence-move
+title Zpracování tahu (Sequence Diagram)
+
+actor Hráč as User
+boundary "BoardGridView" as Grid
+control "GameController" as Ctrl
+entity "Game" as Game
+entity "DefaultRuleEngine" as Engine
+boundary "PlayDraftNotationSupport" as Notation
+
+User -> Grid: Kliknutí na pole / tahnutí
+Grid -> Ctrl: handleCellClick(Position)
+Ctrl -> Game: Je pole validní pro tah?
+Game --> Ctrl: true
+Ctrl -> Game: simulatePlayPrefix(draft)
+Game -> Engine: tryValidateSequentialSteps()
+Engine --> Game: Map<Position, Piece> (nový stav)
+Game --> Ctrl: úspěch
+
+alt Draft je kompletní (konec tahu)
+    User -> Ctrl: Konec tahu (Enter)
+    Ctrl -> Game: applyMove(move)
+    Game -> Engine: validateSequentialStepsWithMessage()
+    Engine --> Game: ok
+    Game -> Game: aktualizace stavu
+    Game -> Game: resolve traps, check win
+    Game --> Ctrl: úspěch
+    Ctrl -> Notation: formatFullTurn()
+    Notation --> Ctrl: "1g c3n"
+    Ctrl -> Grid: refreshAll()
+end
+
+@enduml

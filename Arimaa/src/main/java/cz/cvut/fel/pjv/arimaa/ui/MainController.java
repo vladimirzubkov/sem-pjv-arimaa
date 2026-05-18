@@ -92,6 +92,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiPredicate;
 
 /**
  * Primary window: board, setup controls (manual placement, presets via {@link cz.cvut.fel.pjv.arimaa.model.SetupPresets}),
@@ -1744,24 +1745,36 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
     }
 
     /**
-     * Fills the mover's home from reserve: tries chess-mapped presets (classic {@code -1} and rotations) in random
-     * order, then {@link Game#placeRemainingPiecesRandomly(PlayerSide)} if none apply.
+     * Fills the mover's home during SETUP: builds <strong>six</strong> strategies — classic chess-mapped layout
+     * ({@code preset -1}), the four rotating {@link Game#CHESS_SETUP_ROTATION_COUNT} Wikibooks-style presets
+     * ({@code 0..3}), and one {@linkplain Game#placeRemainingPiecesRandomly(PlayerSide) random permutation} of tray
+     * pieces onto empty home squares (same idea as the human „Náhodně“ fill, but without a chess diagram). The list is
+     * shuffled and each is tried until one succeeds. A final {@code placeRemainingPiecesRandomly} call is kept as a
+     * defensive duplicate for corrupted saves or impossible tray/home counts (should not happen through normal UI).
      */
     private void runComputerSetupStep(Game g) {
         PlayerSide side = g.getSideToMove();
-        List<Integer> presets = new ArrayList<>();
-        presets.add(-1);
+        List<BiPredicate<Game, PlayerSide>> attempts = new ArrayList<>(6);
+        attempts.add((game, s) -> game.applyChessMappedSetup(s, -1));
         for (int i = 0; i < Game.CHESS_SETUP_ROTATION_COUNT; i++) {
-            presets.add(i);
+            final int preset = i;
+            attempts.add((game, s) -> game.applyChessMappedSetup(s, preset));
         }
-        Collections.shuffle(presets, ThreadLocalRandom.current());
+        attempts.add(Game::placeRemainingPiecesRandomly);
+        Collections.shuffle(attempts, ThreadLocalRandom.current());
         boolean placed = false;
-        for (int preset : presets) {
-            if (g.applyChessMappedSetup(side, preset)) {
+        for (BiPredicate<Game, PlayerSide> attempt : attempts) {
+            if (attempt.test(g, side)) {
                 placed = true;
                 break;
             }
         }
+        /*
+         * Belt-and-suspenders: with a state built only through setup UI invariants, the six shuffled attempts above
+         * should already include a successful path (the random slot-fill is in the pool). This branch covers truncated
+         * saves, manual memento wiring in tests, or future callers that bypass placement rules — same as repeating the
+         * random strategy after all chess-mapped layouts refused.
+         */
         if (!placed) {
             placed = g.placeRemainingPiecesRandomly(side);
         }

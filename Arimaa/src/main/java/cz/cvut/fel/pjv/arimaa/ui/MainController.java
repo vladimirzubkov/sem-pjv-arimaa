@@ -1296,6 +1296,8 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             return;
         }
         applyingNetworkSnapshot = true;
+        GameState stateBefore =
+                game() != null ? game().getState() : null;
         try {
             GameSerializer ser = new GameSerializer();
             GameSerializer.ParsedTxtGame p = ser.parse(text);
@@ -1312,7 +1314,21 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                 }
             }
             refreshAll();
-            if (isNetworkClient()) {
+            Game gAfter = game();
+            boolean newlyGameOver =
+                    isNetworkClient()
+                            && gAfter != null
+                            && gAfter.getState() == GameState.GAME_OVER
+                            && stateBefore != GameState.GAME_OVER;
+            if (newlyGameOver) {
+                PlayerSide w = gAfter.getMatchWinner();
+                setStatus(
+                        w == null
+                                ? "Konec hry."
+                                : "Konec hry — vyhrál %s.".formatted(sideName(w)));
+                playVictoryWinnerMediaIfEnabled(w);
+            }
+            if (isNetworkClient() && !newlyGameOver) {
                 setStatus("Síť — stav synchronizován.");
             }
         } catch (RuntimeException ex) {
@@ -1486,7 +1502,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Hostovat");
         dialog.setHeaderText(
-                "Server — Gold (vy), klient Silver. Člověk/počítač pro Gold nastavte v menu Nastavení → Gold hráč.");
+                "Server — Gold (vy), klient Silver. Člověk/počítač pro Gold nastavte v menu Nastavení → Gold hráč.\n\n"
+                        + "Protihráč zadá jednu z IPv4 níže (ne localhost). Při více řádcích preferujte 192.168.x.x. "
+                        + "Povolte příchozí TCP na zvolený port ve firewalli Windows.");
         DialogPane pane = dialog.getDialogPane();
         pane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
@@ -1515,7 +1533,10 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                 setStatus("Neplatný port.");
                 return;
             }
-            setStatus("Síť — zakládám server na portu %d…".formatted(port));
+            setStatus(
+                    "Síť — server na portu %d. Klient použije IPv4 z dialogu (LAN). "
+                            + "Když se nikdo nepřipojí: ve Windows povolte příchozí TCP %d pro Java/arimaa."
+                                    .formatted(port, port));
             arimaaNetwork().startHost(port);
             syncNetworkMenuState();
         } catch (NumberFormatException ex) {
@@ -1528,7 +1549,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Připojit se");
         dialog.setHeaderText(
-                "Klient — Silver (vy), server Gold. Člověk/počítač pro Silver nastavte v menu Nastavení → Silver hráč.");
+                "Klient — Silver (vy), server Gold. Člověk/počítač pro Silver nastavte v menu Nastavení → Silver hráč.\n\n"
+                        + "Host zadejte přesně z dialogu Hostovat na druhém PC (192.168.x.x v LAN). "
+                        + "localhost jen při hře na jednom počítači.");
         DialogPane pane = dialog.getDialogPane();
         pane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
@@ -1592,16 +1615,6 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         if (computerAutoplayPaused) {
             return;
         }
-        if (g.getState() == GameState.SETUP_SILVER
-                && isNetworkClient()
-                && isComputerControlled(PlayerSide.SILVER)) {
-            computerActionPending = true;
-            arimaaNetwork()
-                    .sendIntent(
-                            new WireMessages.IntentMessage(
-                                    IntentKind.SETUP_SILVER_CPU_AUTOFILL, null, null, null, null));
-            return;
-        }
         computerActionPending = true;
         if (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER) {
             Platform.runLater(() -> {
@@ -1609,6 +1622,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                     Game g2 = game();
                     if (g2 != null && shouldOfferComputerStep(g2) && !computerAutoplayPaused) {
                         runComputerSetupStep(g2);
+                        if (isNetworkHost()) {
+                            hostBroadcastSnapshotIfNeeded();
+                        }
                     }
                 } finally {
                     computerActionPending = false;
@@ -1690,12 +1706,27 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         });
     }
 
+    /**
+     * Whether the given seat is driven by CPU for scheduling: local menu assignment, or the peer’s assignment in a
+     * network game (host models Silver via {@link #networkPeerSilverKind}, client models Gold via
+     * {@link #networkPeerGoldKind}).
+     */
+    private boolean seatActsAsComputer(PlayerSide side) {
+        if (isNetworkHost() && side == PlayerSide.SILVER && networkPeerSilverKind != null) {
+            return networkPeerSilverKind.isComputer();
+        }
+        if (isNetworkClient() && side == PlayerSide.GOLD && networkPeerGoldKind != null) {
+            return networkPeerGoldKind.isComputer();
+        }
+        return isComputerControlled(side);
+    }
+
     /* True when the side that should act next (setup or PLAY) is controlled by a CPU kind. */
     private boolean shouldOfferComputerStep(Game g) {
         return switch (g.getState()) {
-            case SETUP_GOLD -> isComputerControlled(PlayerSide.GOLD);
-            case SETUP_SILVER -> isComputerControlled(PlayerSide.SILVER);
-            case PLAY -> isComputerControlled(g.getSideToMove());
+            case SETUP_GOLD -> seatActsAsComputer(PlayerSide.GOLD);
+            case SETUP_SILVER -> seatActsAsComputer(PlayerSide.SILVER);
+            case PLAY -> seatActsAsComputer(g.getSideToMove());
             default -> false;
         };
     }
@@ -1804,13 +1835,25 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             return;
         }
         if (g.getState() == GameState.PLAY) {
-            gameController.enterPlayPhaseBootstrap();
-            notifyPlayChessClockEnterPlay();
+            onEnteredPlayPhaseFromSetup();
             setStatus(statusPlayerOnTurn(g.getSideToMove()));
         } else {
+            clearComputerAutoplayPauseState();
             recordTimeline();
             setStatus("Nová hra — rozestavuje %s.".formatted(sideName(g.getSideToMove())));
         }
+    }
+
+    /**
+     * After SETUP → PLAY: bootstrap PLAY history, clocks, and clear CPU autoplay pause (Space during SETUP only
+     * toggles pause; without this, CPU vs CPU waits until the user presses Space twice).
+     */
+    void onEnteredPlayPhaseFromSetup() {
+        clearComputerAutoplayPauseState();
+        if (gameController != null) {
+            gameController.enterPlayPhaseBootstrap();
+        }
+        notifyPlayChessClockEnterPlay();
     }
 
     /* Client sends host a full notation line for Silver CPU turn (intent PLAY_SUBMIT_NOTATION). */

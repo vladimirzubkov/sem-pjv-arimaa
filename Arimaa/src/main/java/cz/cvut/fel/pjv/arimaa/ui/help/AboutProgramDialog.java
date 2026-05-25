@@ -1,6 +1,6 @@
 package cz.cvut.fel.pjv.arimaa.ui.help;
 
-import cz.cvut.fel.pjv.arimaa.ArimaaApp;
+import cz.cvut.fel.pjv.arimaa.AppVersion;
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.concurrent.Worker;
@@ -262,19 +262,9 @@ public final class AboutProgramDialog {
         stage.showAndWait();
     }
 
-    /* First line of the left column: JAR Implementation-Version or dev fallback text (Czech). */
+    /* First line of the left column: nearest Git tag from build or {@code git describe} (Czech). */
     private static String resolveImplementationVersionLine() {
-        Package p = ArimaaApp.class.getPackage();
-        if (p != null) {
-            String v = p.getImplementationVersion();
-            if (v != null && !v.isBlank()) {
-                return "Verze (manifest): " + v;
-            }
-        }
-        return "Verze: "
-                + HelpCzechTexts.FALLBACK_APP_VERSION
-                + "\n"
-                + "(vývojová sestavení — v manifestu JAR chybí Implementation-Version)";
+        return AppVersion.aboutVersionLine();
     }
 
     /* Long Czech “runtime / stack” blurb for the About dialog (Java, JavaFX, SLF4J, Jackson, Batik, Maven, video URLs). */

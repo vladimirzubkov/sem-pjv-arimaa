@@ -9,7 +9,7 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>Arimaa</name>
-    <description>Semestrální projekt – hra Arimaa (JavaFX). Verze 0.9.30.</description>
+    <description>Semestrální projekt – hra Arimaa (JavaFX). Verze 0.9.32.</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -19,6 +19,7 @@
         <slf4j.version>2.0.12</slf4j.version>
         <logback.version>1.5.6</logback.version>
         <maven-shade.version>3.6.0</maven-shade.version>
+        <git-commit-id.version>9.0.1</git-commit-id.version>
         <app.mainClass>cz.cvut.fel.pjv.arimaa.ArimaaApp</app.mainClass>
     </properties>
 
@@ -91,6 +92,30 @@
         </resources>
         <plugins>
             <plugin>
+                <groupId>io.github.git-commit-id</groupId>
+                <artifactId>git-commit-id-maven-plugin</artifactId>
+                <version>${git-commit-id.version}</version>
+                <executions>
+                    <execution>
+                        <id>revision</id>
+                        <goals>
+                            <goal>revision</goal>
+                        </goals>
+                        <phase>initialize</phase>
+                    </execution>
+                </executions>
+                <configuration>
+                    <generateGitPropertiesFile>true</generateGitPropertiesFile>
+                    <includeOnlyProperties>
+                        <includeOnlyProperty>^git\.closest\.tag\.name$</includeOnlyProperty>
+                        <includeOnlyProperty>^git\.commit\.id\.abbrev$</includeOnlyProperty>
+                        <includeOnlyProperty>^git\.dirty$</includeOnlyProperty>
+                    </includeOnlyProperties>
+                    <failOnNoGitDirectory>false</failOnNoGitDirectory>
+                    <failOnUnableToExtractRepoInfo>false</failOnUnableToExtractRepoInfo>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.12.1</version>
@@ -132,6 +157,10 @@
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>${app.mainClass}</mainClass>
+                                    <manifestEntries>
+                                        <Implementation-Title>Arimaa</Implementation-Title>
+                                        <Implementation-Version>${git.closest.tag.name}</Implementation-Version>
+                                    </manifestEntries>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>

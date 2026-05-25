@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.32
+
+- **Výherní video:** klipy z **`Arimaa/assets/`** se při buildu vkládají do JAR (`pom.xml` resources); override z **`assets/` vedle spuštěného JAR** má přednost před vloženými soubory.
+- **Výherní video (síť):** klient při **`GAME_OVER`** z `state_snapshot` spustí výherní klip (dříve jen host při lokálním ukončení tahu).
+- **Síť — hostování:** v dialogu **Hostovat** jsou IPv4 seřazeny — nejdříve **LAN** (`192.168.x.x`, `10.x.x.x`), pak ostatní adaptéry; upozornění na firewall a správnou adresu pro klienta; při **`ConnectException`** nápověda k IP z dialogu Hostovat.
+- **Síť — CPU rozestavení:** host autoritativně spustí **Silver CPU setup**, když je protihráč počítač (`seatActsAsComputer` / `networkPeerSilverKind`); po dokončení **snapshot** na klienta; oprava prázdné Silver rozestavení na serveru bez dvojitého mezerníku.
+- **CPU autoplay:** po přechodu **SETUP → další fáze** a při vstupu do **PLAY** se zruší **pauza** (mezerník během CPU setupu už neblokuje start hry).
+- **Verze v UI (O programu):** `AppVersion` načítá **nejbližší git tag** při buildu (`git-commit-id-maven-plugin` → `git.properties`, manifest JAR); při spuštění z IDE fallback `git describe`; odstraněna ruční konstanta `FALLBACK_APP_VERSION`.
+
 ## 0.9.30
 
 - **SETUP (počítač):** šest strategií zaplnění domova — klasická šachová mapa, čtyři rotující presety (`SetupPresets`), jedno náhodné doplnění z rezervy na prázdná domovská pole; náhodné pořadí pokusů; zachován závěrečný fallback při neplatném stavu; Javadoc a komentář u obranné větve (`MainController.runComputerSetupStep`).

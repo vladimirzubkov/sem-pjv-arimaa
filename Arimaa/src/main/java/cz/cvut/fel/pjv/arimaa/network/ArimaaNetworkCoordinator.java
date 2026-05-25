@@ -298,7 +298,13 @@ public final class ArimaaNetworkCoordinator {
                                 log.warn("network client session failed", ex);
                                 fx.runOnUiThread(
                                         () -> {
-                                            bridge.setStatus("Síť — připojení selhalo: %s".formatted(ex.getMessage()));
+                                            String hint =
+                                                    ex instanceof java.net.ConnectException
+                                                            ? " Zkontrolujte IPv4 hostitele (řádek 192.168.x.x z dialogu Hostovat) a firewall."
+                                                            : "";
+                                            bridge.setStatus(
+                                                    "Síť — připojení selhalo: %s.%s"
+                                                            .formatted(ex.getMessage(), hint));
                                             bridge.clearNetworkSessionAfterDisconnect();
                                         });
                             } finally {

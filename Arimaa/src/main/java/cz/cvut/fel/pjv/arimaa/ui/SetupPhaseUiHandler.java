@@ -123,12 +123,9 @@ final class SetupPhaseUiHandler {
         PlayerSide side = g.getSideToMove();
         if (g.tryCompleteSetup(side)) {
             main.setStatus("Rozestavení dokončeno.");
-                if (g.getState() == GameState.PLAY) {
-                    if (main.gameController != null) {
-                        main.gameController.enterPlayPhaseBootstrap();
-                    }
-                    main.notifyPlayChessClockEnterPlay();
-                } else {
+            if (g.getState() == GameState.PLAY) {
+                main.onEnteredPlayPhaseFromSetup();
+            } else {
                 main.recordTimeline();
             }
         } else {

@@ -442,6 +442,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         playChessClockModel.resetForHistoryOrLoad(g);
     }
 
+    /* Pauses clock charging for CPU when autoplay is paused mid-PLAY (matches shouldOfferComputerStep). */
     private void syncPlayChessClockCpuPause() {
         if (playChessClockModel == null) {
             return;
@@ -546,6 +547,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /* Side panel line: local CPU/network peer labels for Gold and Silver (Czech UI strings). */
     private void refreshPlayersAssignmentLabel() {
         String goldLine =
                 goldPlayerKind == PlayerControllerKind.NETWORK_PEER
@@ -562,6 +564,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         playersAssignmentLabel.setText("Gold: %s%nSilver: %s".formatted(goldLine, silverLine));
     }
 
+    /** Full UI refresh: board, side panels, notation, menus, CPU scheduling, clocks (call after any model change). */
     void refreshAll() {
         refreshPlayersAssignmentLabel();
         Game g = game();
@@ -668,6 +671,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         return boardOrientation.visualColFromModelFile(modelFile, g);
     }
 
+    /* Top/bottom a–h labels from current board orientation (called from refreshAll). */
     private void updateFileCoordLabels(Game g) {
         if (fileCoordLabelsTop[0] == null) {
             return;
@@ -680,6 +684,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /* Left/right rank numbers from current board orientation (called from refreshAll). */
     private void updateRankCoordLabels(Game g) {
         if (rankCoordLabelsLeft[0] == null) {
             return;
@@ -692,6 +697,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /* Refreshes trap/home cell paint then PLAY draft highlights when in PLAY with a partial turn. */
     private void paintPlayHighlights(Game g) {
         boardGrid.refreshAllSquareDecorations(g);
         if (g == null || !MainUiLayoutPhase.isPlay(g) || playDraft.nextFrom == null) {
@@ -706,6 +712,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                 g, playDraft, this::reconcilePlayPartialWithHistoryView, this::isValidPlaySuffixFromViewHalfStart);
     }
 
+    /* Maps model position to grid CellData for PlayBoardHighlighter (visual row/col from orientation). */
     private BoardGridView.CellData cellDataAt(Position pos) {
         Game g = game();
         int visualRow = visualRowFromModelRank(pos.getRankIndex(), g);
@@ -724,13 +731,14 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         return gameController.getPlayHistory().viewPrefixRemovesPieceViaTrap(g);
     }
 
-    /** Gameplay option: block cancel / draft undo·redo while this holds. */
+    /* Settings: forbid draft undo/redo after a trap removal in the viewed prefix. */
     private boolean draftEditsBlockedByTrapMenuOption() {
         return forbidCancelAfterTrapItem != null
                 && forbidCancelAfterTrapItem.isSelected()
                 && viewPrefixRemovesPieceViaTrap();
     }
 
+    /* Status line for setup hand / PLAY step count / game-over message under the board. */
     private void refreshHandLabel(Game g) {
         if (g.getState() == GameState.GAME_OVER) {
             PlayerSide w = g.getMatchWinner();
@@ -768,6 +776,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /* Hand/status label: optional piece icon plus text (setup hand vs PLAY step count vs game over). */
     private void updateHandLabel(Image imageOrNull, String text) {
         if (imageOrNull != null) {
             handPieceGraphic.setImage(imageOrNull);
@@ -781,6 +790,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         handLabel.setText(text);
     }
 
+    /* Stage title: phase, side to move, and network peer label when a session is active. */
     private void updateWindowTitle(Game g) {
         String phase = switch (g.getState()) {
             case SETUP_GOLD -> "rozestavení Gold";
@@ -855,6 +865,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /* Enables/disables undo·redo from SETUP vs PLAY scrub rules and network client restrictions. */
     private void refreshHistoryMenus() {
         Game g = game();
         if (isNetworkClient()) {
@@ -911,7 +922,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         draftUi.discardRedoBranch();
     }
 
-    /** Trailing open draft, view at its end (not scrubbing inside the prefix). */
+    /* Trailing open draft, view at its end (not scrubbing inside the prefix). */
     private boolean isTrailingDraftAtLiveEnd() {
         if (gameController == null) {
             return false;
@@ -922,6 +933,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                 && ph.appliedPrefixSteps() == ph.trailingUncommittedStepCount();
     }
 
+    /** Menu/keyboard undo: SETUP timeline, PLAY draft pop, or history scrub back (respects trap-lock option). */
     void performUndo() {
         Game g = game();
         if (g == null || gameController == null) {
@@ -1174,6 +1186,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /* Syncs RadioMenuItem selection from stored PlayerControllerKind (skips NETWORK_PEER sentinel). */
     private static void selectPlayerKindInMenuGroup(ToggleGroup group, PlayerControllerKind kind) {
         if (group == null || kind == PlayerControllerKind.NETWORK_PEER) {
             return;
@@ -1231,9 +1244,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
-    /**
-     * Wraps long „Stav:“ lines by binding label {@code maxWidth} to the side {@link VBox} width. Avoid binding the
-     * VBox {@code prefWidth} to the {@link ScrollPane} viewport — that can inflate the pane and hide the board.
+    /*
+     * Binds status/hand label maxWidth to side panel width so long Czech lines wrap; avoids binding VBox prefWidth
+     * to the scroll viewport (would grow the panel and shrink the board).
      */
     private void wireSidePanelTextWrapToViewport(VBox sidePanel) {
         DoubleBinding textMax =
@@ -1468,6 +1481,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /** Dialog to bind TCP host (Gold) and start {@link cz.cvut.fel.pjv.arimaa.network.ArimaaNetworkCoordinator#startHost}. */
     void startNetworkHostDialog() {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Hostovat");
@@ -1509,6 +1523,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /** Dialog for Silver client: host address/port and {@link cz.cvut.fel.pjv.arimaa.network.ArimaaNetworkCoordinator#startClient}. */
     void startNetworkClientDialog() {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("Připojit se");
@@ -1562,6 +1577,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         computerStepDelayMs = Math.max(MIN_COMPUTER_STEP_DELAY_MS, Math.min(MAX_COMPUTER_STEP_DELAY_MS, ms));
     }
 
+    /* Queues CPU setup/PLAY when the side to move is computer-controlled and autoplay is not paused. */
     private void scheduleComputerTurnIfNeeded() {
         Game g = game();
         if (g == null || stage == null) {
@@ -1674,6 +1690,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         });
     }
 
+    /* True when the side that should act next (setup or PLAY) is controlled by a CPU kind. */
     private boolean shouldOfferComputerStep(Game g) {
         return switch (g.getState()) {
             case SETUP_GOLD -> isComputerControlled(PlayerSide.GOLD);
@@ -1683,6 +1700,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         };
     }
 
+    /* Stops the per-step CPU animation Timeline and drops the reference (history scrub / disconnect). */
     private void stopComputerPlayTurnTimelineIfAny() {
         Timeline t = computerPlayTurnTimeline;
         if (t != null) {
@@ -1691,6 +1709,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /* Clears pause flag, invalidates in-flight CPU work, stops timeline (new game / human takes over). */
     private void clearComputerAutoplayPauseState() {
         computerAutoplayPaused = false;
         computerPlayInvalidateGen.incrementAndGet();
@@ -1699,6 +1718,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         updateComputerPauseOverlay();
     }
 
+    /* Shows or hides the Space-to-continue overlay when CPU autoplay is paused on CPU’s turn. */
     private void updateComputerPauseOverlay() {
         if (computerPauseOverlay == null) {
             return;
@@ -1744,13 +1764,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         syncPlayChessClockCpuPause();
     }
 
-    /**
-     * Fills the mover's home during SETUP: builds <strong>six</strong> strategies — classic chess-mapped layout
-     * ({@code preset -1}), the four rotating {@link Game#CHESS_SETUP_ROTATION_COUNT} Wikibooks-style presets
-     * ({@code 0..3}), and one {@linkplain Game#placeRemainingPiecesRandomly(PlayerSide) random permutation} of tray
-     * pieces onto empty home squares (same idea as the human „Náhodně“ fill, but without a chess diagram). The list is
-     * shuffled and each is tried until one succeeds. A final {@code placeRemainingPiecesRandomly} call is kept as a
-     * defensive duplicate for corrupted saves or impossible tray/home counts (should not happen through normal UI).
+    /*
+     * CPU setup: shuffled chess presets + random fill, then tryCompleteSetup; extra random call below is a fallback
+     * if every preset fails (bad saves / tests).
      */
     private void runComputerSetupStep(Game g) {
         PlayerSide side = g.getSideToMove();
@@ -1797,6 +1813,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /* Client sends host a full notation line for Silver CPU turn (intent PLAY_SUBMIT_NOTATION). */
     private void submitNetworkClientSilverCpuPlayTurn(Move chosen) {
         try {
             Game g = game();
@@ -1817,6 +1834,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         refreshAll();
     }
 
+    /* Starts stepped Timeline for local CPU PLAY, or commits immediately if zero steps or wrong state. */
     private void beginComputerPlayAnimation(Move chosen) {
         stopComputerPlayTurnTimelineIfAny();
         Game g = game();
@@ -1843,11 +1861,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         buildAndStartComputerPlayTurnTimeline(chosen, n, delayMs);
     }
 
-    /**
-     * Applies step {@code k} of {@code n} of computer move {@code full} to play history view and game model.
-     *
-     * @param refreshUi when {@code true}, runs {@link #refreshAll()}; when {@code false}, only updates model/history
-     *     view state. {@link #finishComputerPlayCommit} ends with a full {@link #refreshAll()}.
+    /*
+     * Applies CPU step k/n to trailing draft + model (refreshUi true runs full refresh; finishComputerPlayCommit ends
+     * with refreshAll).
      */
     private void applyComputerPlayStepView(Move full, int k, int n, boolean refreshUi) {
         Game g = game();
@@ -1873,6 +1889,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /* KeyFrames: each step at delayMs, then finishComputerPlayCommit; stores timeline for pause/cancel. */
     private void buildAndStartComputerPlayTurnTimeline(Move full, int n, long delayMs) {
         stopComputerPlayTurnTimelineIfAny();
         Timeline tl = new Timeline();
@@ -1891,6 +1908,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         tl.play();
     }
 
+    /* After animated CPU steps: submit turn, append notation/history, broadcast in network games, refresh UI. */
     private void finishComputerPlayCommit(Move full) {
         try {
             Game g = game();
@@ -1996,6 +2014,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         selectNotationHistoryLine(cur);
     }
 
+    /* Selects list row and applies that history line (suppresses list listener recursion; scrolls after). */
     private void selectNotationHistoryLine(int cur) {
         suppressHistoryListEvents = true;
         notationHistoryList.getSelectionModel().select(cur);
@@ -2116,6 +2135,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
     }
 
+    /* Builds visible „Historie tahů“ lines from PlayTurnHistory (CPU step prefix option, pending CPU flag). */
     private List<String> buildNotationHistoryLines() {
         if (gameController == null) {
             return new ArrayList<>();

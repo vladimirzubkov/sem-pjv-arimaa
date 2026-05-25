@@ -157,6 +157,7 @@ public final class PlayChessClockModel {
         }
     }
 
+    /* Elapsed nanos for the live segment, or frozen span when CPU pause holds the clock. */
     private long segmentElapsedNanosLocked() {
         if (!inPlayPhase || frozenGameOver) {
             return 0;
@@ -167,6 +168,7 @@ public final class PlayChessClockModel {
         return System.nanoTime() - segmentStartNanos;
     }
 
+    /* Adds completed segment time to the side that just finished moving. */
     private void addToSideInst(PlayerSide side, long nanos) {
         if (side == PlayerSide.GOLD) {
             goldAccumNanos += nanos;
@@ -175,6 +177,7 @@ public final class PlayChessClockModel {
         }
     }
 
+    /* mm:ss from non-negative nanoseconds (clock table cells). */
     private static String formatMmSs(long nanos) {
         long sec = Math.max(0L, nanos / 1_000_000_000L);
         long m = sec / 60;
@@ -182,6 +185,7 @@ public final class PlayChessClockModel {
         return "%02d:%02d".formatted(m, s);
     }
 
+    /* Average time per completed turn for one side, or em dash when no moves yet. */
     private static String formatAvg(long completedNanos, int moves) {
         if (moves <= 0) {
             return "—";

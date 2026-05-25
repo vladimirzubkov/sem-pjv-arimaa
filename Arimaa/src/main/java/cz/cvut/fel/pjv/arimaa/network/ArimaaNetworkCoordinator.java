@@ -63,6 +63,7 @@ public final class ArimaaNetworkCoordinator {
      */
     private volatile boolean hostHandshakeComplete;
 
+    /** Bridges UI/game mutations to the wire; all socket IO runs off the JavaFX thread via {@link FxExecutor}. */
     public ArimaaNetworkCoordinator(NetworkGameBridge bridge, FxExecutor fx) {
         this.bridge = Objects.requireNonNull(bridge, "bridge");
         this.fx = Objects.requireNonNull(fx, "fx");
@@ -89,6 +90,10 @@ public final class ArimaaNetworkCoordinator {
         return role == NetworkRole.HOST && !hostHandshakeComplete;
     }
 
+    /**
+     * Binds TCP host: accept, read {@code hello}, prepare game on FX thread, send {@code welcome} + first snapshot, then
+     * read Silver intents. Invoked from the host dialog.
+     */
     public void startHost(int port) {
         stopSocketsAndTasks();
         hostHandshakeComplete = false;
@@ -207,6 +212,9 @@ public final class ArimaaNetworkCoordinator {
                         });
     }
 
+    /**
+     * Silver client: TCP connect, send {@code hello}, read {@code welcome} + snapshot on FX, then process host lines.
+     */
     public void startClient(String host, int port) {
         stopSocketsAndTasks();
         role = NetworkRole.CLIENT;
@@ -300,6 +308,7 @@ public final class ArimaaNetworkCoordinator {
                         });
     }
 
+    /* Host IO thread: applies Silver intents and seat updates from the client line stream. */
     private void readHostLoop(BufferedReader in) throws IOException {
         while (!stopped.get()) {
             String line = in.readLine();
@@ -346,6 +355,7 @@ public final class ArimaaNetworkCoordinator {
         }
     }
 
+    /* Client IO thread: applies host snapshots, errors, seat updates; answers {@code ping} with {@code pong}. */
     private void readClientLoop(BufferedReader in) throws IOException {
         while (!stopped.get()) {
             String line = in.readLine();
@@ -399,6 +409,7 @@ public final class ArimaaNetworkCoordinator {
         }
     }
 
+    /* Periodic {@code ping} so dead TCP sessions are detected while the match is open. */
     private void startHostPingLoop() {
         if (pingFuture != null) {
             pingFuture.cancel(false);
@@ -416,6 +427,7 @@ public final class ArimaaNetworkCoordinator {
                         TimeUnit.SECONDS);
     }
 
+    /** Sends a Silver-side gameplay intent to the host (client role only). */
     public void sendIntent(WireMessages.IntentMessage intent) {
         if (peerOut == null || role != NetworkRole.CLIENT) {
             return;
@@ -441,6 +453,7 @@ public final class ArimaaNetworkCoordinator {
         sendLine(NetworkJson.seatControlLine(silverSeatWire));
     }
 
+    /** Thread-safe write of one NDJSON line to the peer (used for intents, snapshots, pings). */
     public void sendLine(String line) {
         PrintWriter w = peerOut;
         if (w == null) {
@@ -451,6 +464,9 @@ public final class ArimaaNetworkCoordinator {
         }
     }
 
+    /**
+     * Pushes current save text to the client after model changes (host only; skipped until handshake + first snapshot).
+     */
     public void broadcastSnapshotFromHostMainThread() {
         if (role != NetworkRole.HOST || peerOut == null || bridge.isApplyingNetworkSnapshot()) {
             return;
@@ -466,6 +482,7 @@ public final class ArimaaNetworkCoordinator {
         log.debug("network host sent state_snapshot ({} chars)", text.length());
     }
 
+    /** Closes listener/socket, sends {@code bye}, and clears bridge state (user cancel or error). */
     public void stopSession() {
         stopped.set(true);
         ServerSocket acc = acceptingServerSocket;
@@ -480,10 +497,12 @@ public final class ArimaaNetworkCoordinator {
         fx.runOnUiThread(bridge::clearNetworkSessionAfterDisconnect);
     }
 
+    /* Low-latency mode for small JSON lines over localhost/LAN. */
     private void configureSocket(Socket s) throws IOException {
         s.setTcpNoDelay(true);
     }
 
+    /* Shortens and sanitizes wire text for SLF4J (avoids huge snapshot lines in logs). */
     private static String truncateForLog(String s, int maxChars) {
         if (s == null) {
             return "";
@@ -495,7 +514,7 @@ public final class ArimaaNetworkCoordinator {
         return t.substring(0, maxChars) + "…";
     }
 
-    /** Ukončení socketů a úloh po skončení relace nebo chybě. */
+    /** Closes sockets, cancels ping/session tasks, and resets role after a session ends. */
     private void stopSocketsAndTasks() {
         stopped.set(true);
         hostHandshakeComplete = false;

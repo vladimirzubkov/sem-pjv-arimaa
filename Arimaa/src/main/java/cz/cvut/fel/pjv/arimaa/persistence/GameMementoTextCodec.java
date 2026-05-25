@@ -92,7 +92,7 @@ public final class GameMementoTextCodec {
                 capS);
     }
 
-    /** {@code R1} … {@code R8} with whitespace after rank digit; excludes {@code RESERVE_*} lines. */
+    /* True for sparse save lines {@code R1}…{@code R8} with payload after the rank label (not RESERVE_*). */
     private static boolean isSparseGridRowLine(String trimmed) {
         if (trimmed.length() < 4 || trimmed.charAt(0) != 'R') {
             return false;
@@ -107,6 +107,7 @@ public final class GameMementoTextCodec {
         return Character.isWhitespace(trimmed.charAt(2));
     }
 
+    /* Parses {@code R1}…{@code R8} label into zero-based rank index. */
     private static int parseRowLabelIndex(String trimmed) {
         char d = trimmed.charAt(1);
         int n = d - '0';
@@ -116,6 +117,7 @@ public final class GameMementoTextCodec {
         return n - 1;
     }
 
+    /* Fills one board row from the eight-character payload after the row label. */
     private static void fillRowFromLine(GameMemento.CellSnap[][] grid, int rowIndex, String rowLine) {
         String trimmed = rowLine.trim();
         int space = trimmed.indexOf(' ');
@@ -138,6 +140,7 @@ public final class GameMementoTextCodec {
             boolean mirror) {
     }
 
+    /* Parses {@code META state side mirror winner} line from save file. */
     private static Meta parseMeta(String line) {
         String[] p = line.trim().split("\\s+");
         if (p.length < 5 || !"META".equals(p[0])) {
@@ -150,6 +153,7 @@ public final class GameMementoTextCodec {
                 "1".equals(p[3]));
     }
 
+    /* Encodes lifecycle, side to move, home-rank mirror flag, and optional winner into one line. */
     private static String metaLine(GameMemento m) {
         String win = m.matchWinner() == null ? "-" : m.matchWinner().name();
         return "META "
@@ -162,6 +166,7 @@ public final class GameMementoTextCodec {
                 + win;
     }
 
+    /* {@code HAND -} or piece letter + side tag for setup hand held off-board. */
     private static String handLine(GameMemento.CellSnap hand) {
         if (hand == null) {
             return "HAND -";
@@ -170,6 +175,7 @@ public final class GameMementoTextCodec {
         return "HAND " + encodeCell(hand) + sideTag;
     }
 
+    /* Parses {@code HAND} line into a {@link GameMemento.CellSnap} or {@code null} when empty. */
     private static GameMemento.CellSnap parseHandLine(String line) {
         String[] p = line.trim().split("\\s+");
         if (p.length < 2 || !"HAND".equals(p[0])) {
@@ -184,6 +190,7 @@ public final class GameMementoTextCodec {
         return new GameMemento.CellSnap(decodePieceLetter(ch), side);
     }
 
+    /* Explicit {@code g}/{@code s} suffix on hand token (preferred over letter case). */
     private static PlayerSide sideFromGs(char c) {
         return switch (c) {
             case 'g' -> PlayerSide.GOLD;
@@ -192,10 +199,12 @@ public final class GameMementoTextCodec {
         };
     }
 
+    /* Fallback side from E/e style piece letter when no {@code g}/{@code s} tag is present. */
     private static PlayerSide sideFromCase(char letter) {
         return Character.isUpperCase(letter) ? PlayerSide.GOLD : PlayerSide.SILVER;
     }
 
+    /* One board cell: uppercase Gold / lowercase Silver piece letter. */
     private static char encodeCell(GameMemento.CellSnap c) {
         char letter =
                 switch (c.type()) {
@@ -209,6 +218,7 @@ public final class GameMementoTextCodec {
         return c.side() == PlayerSide.GOLD ? letter : Character.toLowerCase(letter);
     }
 
+    /* {@code '.'} empty square; otherwise piece type + side from letter case. */
     private static GameMemento.CellSnap decodeCell(char ch) {
         if (ch == '.') {
             return null;
@@ -217,6 +227,7 @@ public final class GameMementoTextCodec {
         return new GameMemento.CellSnap(decodePieceLetter(ch), side);
     }
 
+    /* Maps save-file piece letters to {@link PieceType} (case-insensitive). */
     private static PieceType decodePieceLetter(char ch) {
         return switch (Character.toUpperCase(ch)) {
             case 'E' -> PieceType.ELEPHANT;
@@ -229,6 +240,7 @@ public final class GameMementoTextCodec {
         };
     }
 
+    /* Space-separated piece letters for a side tray in {@code RESERVE_*} lines. */
     private static String encodeReserveLetters(List<GameMemento.CellSnap> reserve) {
         StringBuilder sb = new StringBuilder();
         for (GameMemento.CellSnap c : reserve) {
@@ -240,6 +252,7 @@ public final class GameMementoTextCodec {
         return sb.toString();
     }
 
+    /* Parses {@code RESERVE_GOLD|SILVER} line into tray snapshots (side from prefix). */
     private static List<GameMemento.CellSnap> decodeReserveLine(String line) {
         String trimmed = line.trim();
         int sp = trimmed.indexOf(' ');
@@ -263,6 +276,7 @@ public final class GameMementoTextCodec {
         return out;
     }
 
+    /* Trap-capture log: lowercase letters only (types taken by opponent from traps). */
     private static String encodeCaptureTypes(List<PieceType> types) {
         if (types.isEmpty()) {
             return "";
@@ -284,6 +298,7 @@ public final class GameMementoTextCodec {
         return sb.toString();
     }
 
+    /* Parses {@code CAPTURES_GOLD|SILVER} trap credit list back into {@link PieceType} tokens. */
     private static List<PieceType> decodeCapturesLine(String line) {
         String trimmed = line.trim();
         int sp = trimmed.indexOf(' ');

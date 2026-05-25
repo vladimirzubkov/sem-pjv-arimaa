@@ -13,6 +13,7 @@ public class JavafxApp extends Application {
 
     private MainController mainController;
 
+    /** Builds model + controller, wires {@link MainController} to {@code primaryStage} (app entry from {@link cz.cvut.fel.pjv.arimaa.ArimaaApp}). */
     @Override
     public void start(Stage primaryStage) {
         Game game = new Game();
@@ -26,6 +27,7 @@ public class JavafxApp extends Application {
         mainController.attachToStage(primaryStage);
     }
 
+    /** Stops background tickers (chess clock) when the JavaFX runtime shuts down. */
     @Override
     public void stop() {
         if (mainController != null) {

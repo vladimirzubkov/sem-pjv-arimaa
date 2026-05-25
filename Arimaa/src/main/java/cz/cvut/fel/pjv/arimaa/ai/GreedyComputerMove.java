@@ -32,6 +32,10 @@ public final class GreedyComputerMove {
 
     private GreedyComputerMove() {}
 
+    /**
+     * Samples distinct legal turns under a time budget, scores them for the mover, then returns an engine-legal copy.
+     * Called from {@link ComputerPlayMove} for level-1 CPU.
+     */
     public static Move chooseMove(Game game, Random random) {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(random, "random");
@@ -84,6 +88,7 @@ public final class GreedyComputerMove {
         return CpuMoveSupport.engineLegalCopy(baseline, choice, random);
     }
 
+    /* Dedup key from step endpoints and kinds so the sampler does not score the same turn shape repeatedly. */
     private static String stableSignature(Move m) {
         StringBuilder sb = new StringBuilder(m.getSteps().size() * 10);
         for (Step st : m.getSteps()) {

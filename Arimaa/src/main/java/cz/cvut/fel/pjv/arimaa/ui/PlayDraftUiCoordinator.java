@@ -19,6 +19,7 @@ import java.util.List;
  */
 final class PlayDraftUiCoordinator {
 
+    /* Immutable snapshot of partial move and UI anchors after Esc / “cancel draft” (one-shot Vpřed restore). */
     private record CancelledDraftSnapshot(
             Move move,
             Position playNextFromOrNull,

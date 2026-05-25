@@ -35,6 +35,7 @@ final class SearchGrid {
 
     private SearchGrid() {}
 
+    /** Copies live game board and turn state into a search-only grid (CPU / tests). */
     static SearchGrid fromGame(Game game) {
         SearchGrid g = new SearchGrid();
         Board board = game.getBoard();
@@ -49,6 +50,7 @@ final class SearchGrid {
         return g;
     }
 
+    /** Writes current {@link #cells} into a UI/game {@link Board} after search (e.g. tests, sync). */
     void writeBoardTo(Board board) {
         board.clear();
         for (int idx = 0; idx < CELL_COUNT; idx++) {
@@ -59,6 +61,10 @@ final class SearchGrid {
         }
     }
 
+    /**
+     * Applies Arimaa compound-step semantics (slide/push/pull pairs) and records trap removals into {@code trapOut}.
+     * Used by {@link SearchSession#applyTurn}.
+     */
     void applyMoveSteps(Move move, List<UndoRecord.TrapCapture> trapOut) {
         List<Step> steps = move.getSteps();
         for (int i = 0; i < steps.size(); i++) {
@@ -89,6 +95,7 @@ final class SearchGrid {
         }
     }
 
+    /** Reverses only piece motion (call {@link #restoreTrapCaptures} first when undoing a full turn). */
     void undoMoveSteps(Move move) {
         List<Step> steps = move.getSteps();
         for (int i = steps.size() - 1; i >= 0; i--) {
@@ -97,6 +104,7 @@ final class SearchGrid {
         }
     }
 
+    /** Puts trap-removed pieces back (reverse order) during {@link SearchSession#undoTurn}. */
     void restoreTrapCaptures(List<UndoRecord.TrapCapture> captures) {
         for (int i = captures.size() - 1; i >= 0; i--) {
             UndoRecord.TrapCapture c = captures.get(i);
@@ -133,10 +141,12 @@ final class SearchGrid {
         return Position.of(idx % BoardConstants.BOARD_SIZE, idx / BoardConstants.BOARD_SIZE);
     }
 
+    /* Moves one piece between indices and updates its {@link Piece#setPosition}. */
     private void movePiece(Position from, Position to) {
         movePiece(index(from), index(to));
     }
 
+    /* Clears source, places on target; no-op if source empty. */
     private void movePiece(int from, int to) {
         Piece moving = cells[from];
         if (moving == null) {
@@ -147,11 +157,13 @@ final class SearchGrid {
         moving.setPosition(position(to));
     }
 
+    /* Used when undoing trap captures: restores piece reference and square index. */
     private void placePiece(int idx, Piece piece) {
         cells[idx] = piece;
         piece.setPosition(position(idx));
     }
 
+    /* Removes unsupported pieces on trap squares and appends to {@code trapOut} for undo. */
     private void resolveTraps(List<UndoRecord.TrapCapture> trapOut) {
         for (int trapIdx : TRAP_INDICES) {
             Piece victim = cells[trapIdx];
@@ -166,6 +178,7 @@ final class SearchGrid {
         }
     }
 
+    /* True if any orthogonal neighbor of the trap square is a friendly piece (trap support). */
     private boolean hasOrthogonalFriendly(int squareIndex, PlayerSide side) {
         int f = squareIndex % BoardConstants.BOARD_SIZE;
         int r = squareIndex / BoardConstants.BOARD_SIZE;
@@ -196,6 +209,7 @@ final class SearchGrid {
         return p != null && p.getSide() == side;
     }
 
+    /* Win-by-goal check: any rabbit of {@code side} on algebraic rank {@code rankIndex}. */
     private boolean hasRabbitOnRank(PlayerSide side, int rankIndex) {
         for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
             Piece p = cells[index(f, rankIndex)];
@@ -206,6 +220,7 @@ final class SearchGrid {
         return false;
     }
 
+    /* Used for rabbit-elimination terminal: zero rabbits means loss. */
     private int countRabbits(PlayerSide side) {
         int n = 0;
         for (int idx = 0; idx < CELL_COUNT; idx++) {
@@ -217,6 +232,7 @@ final class SearchGrid {
         return n;
     }
 
+    /* Precomputes trap cell indices once for hot trap resolution loops. */
     private static int[] trapIndices() {
         Position[] traps = BoardConstants.trapSquares();
         int[] out = new int[traps.length];

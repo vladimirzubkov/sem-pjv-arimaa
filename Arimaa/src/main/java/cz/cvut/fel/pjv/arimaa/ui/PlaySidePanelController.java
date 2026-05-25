@@ -98,6 +98,7 @@ final class PlaySidePanelController {
         }
     }
 
+    /* Rebuilds one captures FlowPane from Game trap snapshot (icons or notation letters). */
     private void fillCaptureFlow(FlowPane pane, Game g, PlayerSide capturer) {
         pane.getChildren().clear();
         List<PieceType> types = new ArrayList<>(g.getTrapCapturesSnapshot(capturer));

@@ -93,6 +93,7 @@ public final class BoardGridView {
         return 2 * COORD + boardBlockPixels() + 2 * BOARD_GAP;
     }
 
+    /* Top-left corner tile in the coordinate frame (fixed size so the grid lines up). */
     private static Region cornerSpacer() {
         Region r = new Region();
         r.setPrefSize(COORD, COORD);
@@ -100,6 +101,7 @@ public final class BoardGridView {
         return r;
     }
 
+    /* File or rank letter box on the board margin (alignment differs for horizontal vs vertical strip). */
     private static Label coordLabel(String text, double prefW, double prefH, boolean fileRow) {
         Label lab = new Label(text);
         lab.setFont(COORD_FONT);
@@ -115,6 +117,7 @@ public final class BoardGridView {
         return lab;
     }
 
+    /* One board cell: background, trap styling, piece and hover layers, hover listener and click routing to host. */
     private StackPane createCell(int fileIndex, int visualRow) {
         Rectangle bg = new Rectangle(CELL, CELL);
         bg.setStrokeType(StrokeType.INSIDE);
@@ -321,6 +324,7 @@ public final class BoardGridView {
         }
     }
 
+    /* Frozen rule only in PLAY / GAME_OVER; delegates to engine static helper for the model board. */
     private static boolean isFrozenForDisplay(Game g, Position pos) {
         if (g == null || g.getBoard() == null) {
             return false;

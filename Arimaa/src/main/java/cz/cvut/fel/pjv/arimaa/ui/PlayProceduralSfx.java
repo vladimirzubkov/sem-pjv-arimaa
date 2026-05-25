@@ -79,6 +79,7 @@ final class PlayProceduralSfx {
         SFX_EXECUTOR.execute(() -> playSequence(woods, trapWails));
     }
 
+    /* Plays wood taps on the audio thread; attaches trap wail to the last tap when captures increased. */
     private static void playSequence(int woodCount, int trapWailCount) {
         try {
             synchronized (LINE_LOCK) {
@@ -101,6 +102,7 @@ final class PlayProceduralSfx {
         }
     }
 
+    /* Writes one precomputed PCM buffer to the shared line (caller holds LINE_LOCK). */
     private static void playCached(byte[] pcm) throws LineUnavailableException {
         SourceDataLine line = ensureOpenLine();
         line.start();
@@ -109,6 +111,7 @@ final class PlayProceduralSfx {
         line.flush();
     }
 
+    /* Lazily opens or reopens the shared SourceDataLine if the previous instance died. */
     private static SourceDataLine ensureOpenLine() throws LineUnavailableException {
         if (sharedLine != null && sharedLine.isOpen()) {
             return sharedLine;
@@ -121,6 +124,7 @@ final class PlayProceduralSfx {
         return line;
     }
 
+    /* Closes sharedLine on errors or before reopening; swallows exceptions (best effort). */
     private static void closeSharedLineQuietly() {
         if (sharedLine == null) {
             return;
@@ -136,6 +140,7 @@ final class PlayProceduralSfx {
         sharedLine = null;
     }
 
+    /* Short decaying multi-sine “wood” tap; used for move feedback in static initializer. */
     private static short[] synthesizeWoodTap(Random rnd) {
         int n = (int) (SAMPLE_RATE * 0.036);
         double tau = SAMPLE_RATE * 0.0105;
@@ -160,6 +165,7 @@ final class PlayProceduralSfx {
         return out;
     }
 
+    /* Downward frequency sweep with envelope for trap-capture cue (static initializer). */
     private static short[] synthesizeTrapWail(Random rnd) {
         int n = (int) (SAMPLE_RATE * 0.46);
         double fHi = 640;
@@ -191,6 +197,7 @@ final class PlayProceduralSfx {
         return out;
     }
 
+    /* Scales samples so the peak matches targetPeak (in-sample normalization). */
     private static void normalizePeak(short[] samples, int targetPeak) {
         int max = 1;
         for (short s : samples) {
@@ -211,6 +218,7 @@ final class PlayProceduralSfx {
         }
     }
 
+    /* Converts signed 16-bit samples to little-endian PCM bytes for SourceDataLine.write. */
     private static byte[] shortsToLittleEndianPcm16(short[] samples) {
         byte[] b = new byte[samples.length * 2];
         int di = 0;

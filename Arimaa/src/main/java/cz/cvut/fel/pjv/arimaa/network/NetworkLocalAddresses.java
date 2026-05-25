@@ -11,6 +11,9 @@ public final class NetworkLocalAddresses {
 
     private NetworkLocalAddresses() {}
 
+    /**
+     * Human-readable list of this machine’s non-loopback IPv4 addresses (host dialog “your IP” block).
+     */
     public static String ipv4TextBlock() {
         LinkedHashSet<String> seen = new LinkedHashSet<>();
         try {

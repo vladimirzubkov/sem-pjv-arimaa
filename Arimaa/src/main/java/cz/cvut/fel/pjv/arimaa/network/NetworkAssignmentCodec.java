@@ -7,6 +7,7 @@ public final class NetworkAssignmentCodec {
 
     private NetworkAssignmentCodec() {}
 
+    /** Wire token for {@code seat_control} / hello payloads (not {@link PlayerControllerKind#NETWORK_PEER}). */
     public static String encode(PlayerControllerKind k) {
         return switch (k) {
             case HUMAN -> "HUMAN";
@@ -17,6 +18,7 @@ public final class NetworkAssignmentCodec {
         };
     }
 
+    /** Parses handshake / seat_control assignment tokens from the network layer. */
     public static PlayerControllerKind decode(String raw) {
         if (raw == null || raw.isBlank()) {
             throw new IllegalArgumentException("missing assignment");

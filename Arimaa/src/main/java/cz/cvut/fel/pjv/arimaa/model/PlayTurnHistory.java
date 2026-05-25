@@ -23,6 +23,7 @@ public final class PlayTurnHistory {
 
     public PlayTurnHistory() {}
 
+    /** Drops all half-turns and view cursor (new match or full reset). */
     public void clear() {
         halfTurns.clear();
         viewHalfIndex = 0;
@@ -47,14 +48,17 @@ public final class PlayTurnHistory {
         appliedPrefixSteps = 0;
     }
 
+    /** Start snapshot at PLAY index 0 (anchor); used when saving or rebuilding notation from scratch. */
     public GameMemento anchorStartSnap() {
         return halfTurns.getFirst().startSnap();
     }
 
+    /** Read-only list of half-turn entries for UI/debug. */
     public List<PlayHalfTurn> halfTurnsUnmodifiable() {
         return Collections.unmodifiableList(halfTurns);
     }
 
+    /** Direct access to one half-turn row (committed line or draft). */
     public PlayHalfTurn halfAt(int index) {
         return halfTurns.get(index);
     }
@@ -107,6 +111,7 @@ public final class PlayTurnHistory {
         return out;
     }
 
+    /** Maps a visible notation row to scrubbing the end of that half-turn (list selection in UI). */
     public void navigateToVisibleLine(int visibleIndex, boolean includeNonEmptyDraft) {
         List<Integer> vis = visibleHalfIndicesForDisplay(includeNonEmptyDraft);
         if (visibleIndex < 0 || visibleIndex >= vis.size()) {
@@ -115,6 +120,7 @@ public final class PlayTurnHistory {
         navigateToEndOfHalf(vis.get(visibleIndex));
     }
 
+    /** Positions the scrubber at the full end of half {@code halfIndex} (all steps visible). */
     public void navigateToEndOfHalf(int halfIndex) {
         if (halfIndex < 1 || halfIndex >= halfTurns.size()) {
             return;
@@ -123,6 +129,7 @@ public final class PlayTurnHistory {
         appliedPrefixSteps = halfTurns.get(halfIndex).steps().size();
     }
 
+    /** Sets which half is viewed and how many prefix steps are applied (keyboard scrub / step preview). */
     public void setViewPrefix(int halfIndex, int prefixSteps) {
         if (halfIndex < 1 || halfIndex >= halfTurns.size()) {
             return;
@@ -168,6 +175,7 @@ public final class PlayTurnHistory {
         game.applyPlayPrefix(m);
     }
 
+    /** True when the view sits on the live draft tail with all draft steps applied (editable in UI). */
     public boolean isAtEditableDraftTail() {
         if (halfTurns.size() < 2) {
             return false;
@@ -180,6 +188,7 @@ public final class PlayTurnHistory {
         return viewHalfIndex == lastIdx && appliedPrefixSteps == last.steps().size();
     }
 
+    /** Moves scrubber to the end of the trailing draft after edits (append/pop/truncate). */
     public void syncViewToDraftTail() {
         if (halfTurns.isEmpty()) {
             return;
@@ -215,6 +224,7 @@ public final class PlayTurnHistory {
         syncViewToDraftTail();
     }
 
+    /** Appends one step copy to the open draft; used by mouse/keyboard play input. */
     public void appendStepCopyToTrailingDraft(Step s) {
         PlayHalfTurn last = halfTurns.getLast();
         if (last.committed()) {
@@ -255,6 +265,10 @@ public final class PlayTurnHistory {
         return m;
     }
 
+    /**
+     * Commits the trailing draft as a full turn, stores notation and end snapshot, then opens a new draft if still PLAY.
+     * Called from {@link cz.cvut.fel.pjv.arimaa.controller.GameController#recordCommittedPlayTurn}.
+     */
     public void finalizeCommittedDraft(Game gameAfterFullMove, String notationLine, Move submittedMove) {
         PlayHalfTurn tail = halfTurns.getLast();
         if (tail.committed()) {
@@ -274,6 +288,7 @@ public final class PlayTurnHistory {
         appliedPrefixSteps = halfTurns.getLast().steps().size();
     }
 
+    /** Copies the currently scrubbed prefix steps into {@code target} (submit / preview alignment). */
     public void copyViewPrefixStepsTo(Move target) {
         target.getSteps().clear();
         if (halfTurns.isEmpty()) {
@@ -285,6 +300,7 @@ public final class PlayTurnHistory {
         }
     }
 
+    /** True if the scrubber targets the open (uncommitted) last half-turn. */
     public boolean isViewOnTrailingDraftHalf() {
         if (halfTurns.isEmpty()) {
             return false;
@@ -293,6 +309,7 @@ public final class PlayTurnHistory {
         return !last.committed() && viewHalfIndex == halfTurns.size() - 1;
     }
 
+    /** Clears the in-progress draft steps and notation preview (new turn / cancel draft content). */
     public void clearTrailingDraftSteps() {
         PlayHalfTurn last = halfTurns.getLast();
         if (last.committed()) {
@@ -303,21 +320,25 @@ public final class PlayTurnHistory {
         syncViewToDraftTail();
     }
 
+    /** Undo scrub within the current half: step prefix count back (used by controller undo in PLAY). */
     public boolean canStepViewBack() {
         return appliedPrefixSteps > 0;
     }
 
+    /** Redo scrub within the same half-turn without crossing into the next line. */
     public boolean canStepViewForwardWithinHalf() {
         PlayHalfTurn ht = halfTurns.get(viewHalfIndex);
         return appliedPrefixSteps < ht.steps().size();
     }
 
+    /** Decrements applied prefix steps for the viewed half (keyboard / menu undo within turn). */
     public void stepViewBack() {
         if (canStepViewBack()) {
             appliedPrefixSteps--;
         }
     }
 
+    /** Increments applied prefix steps within the viewed half-turn. */
     public void stepViewForwardWithinHalf() {
         if (canStepViewForwardWithinHalf()) {
             appliedPrefixSteps++;
@@ -342,6 +363,7 @@ public final class PlayTurnHistory {
         return !p.byGold().isEmpty() || !p.bySilver().isEmpty();
     }
 
+    /** All committed notation lines in order for the side panel and file export. */
     public List<String> committedNotationLinesInOrder() {
         ArrayList<String> out = new ArrayList<>();
         for (int h = 1; h < halfTurns.size(); h++) {
@@ -356,6 +378,7 @@ public final class PlayTurnHistory {
         return out;
     }
 
+    /** Next line prefix such as {@code 2s} from committed half-turn headers (draft notation in UI). */
     public String nextPlayNotationPrefix() {
         boolean nextGold = true;
         int goldNum = 1;

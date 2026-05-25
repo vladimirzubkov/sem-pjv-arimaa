@@ -61,25 +61,26 @@ public final class AboutProgramDialog {
 
     private AboutProgramDialog() {}
 
+    /* Same frameless ScrollPane chrome removal as other help dialogs (transparent track). */
     private static void styleFramelessScroll(ScrollPane scroll) {
         scroll.setStyle(
                 "-fx-background-color: transparent; -fx-background: transparent; "
                         + "-fx-border-color: transparent; -fx-padding: 0;");
     }
 
-    /** Loads the official embed page inside WebView (preferred for error 153 vs. {@code loadContent} wrappers). */
+    /* Loads YouTube embed URL in WebView with a Chrome-like UA (mitigates WebKit embed error 153). */
     private static void applyYoutubeEmbedInWebView(WebEngine engine) {
         engine.setUserAgent(WEBVIEW_CHROME_LIKE_USER_AGENT);
         engine.load(YOUTUBE_EMBED_TOP_URL);
     }
 
-    /** Full Shorts URL — different player path; use if embed still shows 153 in WebKit. */
+    /* Fallback: full Shorts page load when the compact embed still fails in JavaFX WebKit. */
     private static void applyYoutubeShortsPageInWebView(WebEngine engine) {
         engine.setUserAgent(WEBVIEW_CHROME_LIKE_USER_AGENT);
         engine.load(YOUTUBE_SHORTS_SHARE_URL);
     }
 
-    /** Stops media and navigation so audio does not continue after the modal closes. */
+    /* Cancels load worker and navigates to about:blank so video/audio stops when the About dialog closes. */
     private static void unloadWebEngine(WebEngine engine) {
         if (engine == null) {
             return;
@@ -96,6 +97,7 @@ public final class AboutProgramDialog {
         }
     }
 
+    /* Opens the Shorts share URL in the desktop browser (hyperlink fallback). */
     private static void openShortsInSystemBrowser() {
         try {
             if (Desktop.isDesktopSupported()) {
@@ -260,6 +262,7 @@ public final class AboutProgramDialog {
         stage.showAndWait();
     }
 
+    /* First line of the left column: JAR Implementation-Version or dev fallback text (Czech). */
     private static String resolveImplementationVersionLine() {
         Package p = ArimaaApp.class.getPackage();
         if (p != null) {
@@ -274,6 +277,7 @@ public final class AboutProgramDialog {
                 + "(vývojová sestavení — v manifestu JAR chybí Implementation-Version)";
     }
 
+    /* Long Czech “runtime / stack” blurb for the About dialog (Java, JavaFX, SLF4J, Jackson, Batik, Maven, video URLs). */
     private static String buildTechnicalBlock(String versionBlock) {
         String javafx = System.getProperty("javafx.version");
         String javafxLine =
@@ -330,6 +334,7 @@ public final class AboutProgramDialog {
                 + "\n";
     }
 
+    /* Reads Implementation-Version from a library class Package, or empty when missing (About text). */
     private static String safeImplVersion(Class<?> clazz) {
         try {
             Package p = clazz.getPackage();

@@ -268,10 +268,7 @@ public class Game {
         return countTypeOnHome(side, setupHand.getType()) < maxPerType(setupHand.getType());
     }
 
-    /**
-     * Chooses the next tray piece for continuous placement UX after {@link #confirmSetupHandPlacement(Position)}: same type
-     * if available, else strongest remaining (official {@link PieceType} order).
-     */
+    /* After a confirmed placement, picks the next tray piece (same type if left, else first available in enum order). */
     private void beginAutoPickNextInHandAfterPlacement(PlayerSide side, PieceType placedType) {
         if (!isSetupPhaseForSide(side)) {
             return;
@@ -563,6 +560,7 @@ public class Game {
         trapCapturesBySilver.addAll(m.trapCapturesBySilver());
     }
 
+    /* Clears this side's home ranks onto the tray (used by chess presets and on failed preset placement). */
     private void liftAllFriendlyPiecesFromHomeToReserve(PlayerSide side) {
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
             for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
@@ -579,6 +577,7 @@ public class Game {
         }
     }
 
+    /* Lists empty squares on this side's home territory (random fill must match reserve size). */
     private List<Position> listEmptyHomeSquares(PlayerSide side) {
         List<Position> out = new ArrayList<>();
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
@@ -592,7 +591,7 @@ public class Game {
         return out;
     }
 
-    /** All squares in {@code side}'s home territory (sixteen coordinates). */
+    /* All sixteen home coordinates for this side (shuffle and layout helpers). */
     private List<Position> listHomeSquares(PlayerSide side) {
         List<Position> out = new ArrayList<>(16);
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
@@ -606,6 +605,7 @@ public class Game {
         return out;
     }
 
+    /* Counts friendly pieces on home ranks (setup completion and random placement checks). */
     private int countPiecesOnHome(PlayerSide side) {
         int n = 0;
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
@@ -623,6 +623,7 @@ public class Game {
         return n;
     }
 
+    /* False if any enemy piece sits on this side's home (illegal during that side's setup). */
     private boolean allOccupantsOnHomeAreFriendly(PlayerSide side) {
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
             for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
@@ -639,6 +640,7 @@ public class Game {
         return true;
     }
 
+    /* True when the multiset of friendly pieces on home matches a legal starting set. */
     private boolean multisetOnHomeMatchesOfficial(PlayerSide side) {
         List<Piece> onHome = new ArrayList<>();
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
@@ -656,6 +658,7 @@ public class Game {
         return isOfficialMultiset(onHome);
     }
 
+    /* Whether sixteen pieces have counts 1×E, 1×M, 2×H/D/C, 8×R (Arimaa starting multiset). */
     private static boolean isOfficialMultiset(List<Piece> pieces) {
         if (pieces.size() != 16) {
             return false;
@@ -672,10 +675,12 @@ public class Game {
                 && counts.getOrDefault(PieceType.RABBIT, 0) == 8;
     }
 
+    /* Uses HomeTerritory.contains with the rank-mirror flag (setup / home checks). */
     private boolean homeContains(PlayerSide side, Position position) {
         return HomeTerritory.contains(side, position, ranksMirroredForHomeCheck);
     }
 
+    /* True when game state is this side's setup phase (Gold or Silver). */
     private boolean isSetupPhaseForSide(PlayerSide side) {
         if (state == null) {
             return false;
@@ -684,14 +689,17 @@ public class Game {
                 || (state == GameState.SETUP_SILVER && side == PlayerSide.SILVER);
     }
 
+    /* Tray list for the given side (setup reserve). */
     private List<Piece> reserveList(PlayerSide side) {
         return side == PlayerSide.GOLD ? goldReserve : silverReserve;
     }
 
+    /* Returns a held setup piece to its side's tray without placing on the board. */
     private void returnToReserve(Piece piece) {
         reserveList(piece.getSide()).add(piece);
     }
 
+    /* Takes one piece of the given type off the reserve list (preset placement consumes pool). */
     private static Piece removeFirstOfType(List<Piece> reserve, PieceType type) {
         for (int i = 0; i < reserve.size(); i++) {
             if (reserve.get(i).getType() == type) {
@@ -701,6 +709,7 @@ public class Game {
         return null;
     }
 
+    /* How many of this type are already on home (enforces per-type setup quotas). */
     private int countTypeOnHome(PlayerSide side, PieceType type) {
         int n = 0;
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
@@ -718,6 +727,7 @@ public class Game {
         return n;
     }
 
+    /* Official maximum count per type that may appear on the board after setup. */
     private static int maxPerType(PieceType type) {
         return switch (type) {
             case ELEPHANT, CAMEL -> 1;
@@ -726,6 +736,7 @@ public class Game {
         };
     }
 
+    /* Builds a new sixteen-piece tray for startNewGame() in a fixed stacking order. */
     private static List<Piece> createReserve(PlayerSide side) {
         List<Piece> out = new ArrayList<>(16);
         for (int i = 0; i < 8; i++) {

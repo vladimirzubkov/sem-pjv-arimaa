@@ -40,6 +40,7 @@ final class CpuMoveSupport {
         return PlayHalfTurn.copyMove(legal.get(random.nextInt(legal.size())));
     }
 
+    /* Probes whether {@link Game#applyMove} accepts the turn on a throwaway copy (search validation). */
     private static boolean canApplyFullTurn(Game game, Move move) {
         try {
             Game trial = Game.restoredFromMemento(GameMemento.fromGame(game));

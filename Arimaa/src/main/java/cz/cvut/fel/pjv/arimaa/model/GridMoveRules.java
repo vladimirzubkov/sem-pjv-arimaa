@@ -26,6 +26,7 @@ public final class GridMoveRules {
 
     private GridMoveRules() {}
 
+    /** Pole 64 figur z desky. Použití: {@link DefaultRuleEngine} delegace, AI {@link SearchGrid}. */
     public static Piece[] snapshotFromBoard(Board board) {
         Piece[] cells = new Piece[CELL_COUNT];
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
@@ -36,29 +37,36 @@ public final class GridMoveRules {
         return cells;
     }
 
+    /** Existence legálního tahu na mřížce. Použití: {@link DefaultRuleEngine#existsLegalTurn}. */
     public static boolean existsLegalTurn(Piece[] cells, PlayerSide sideToMove) {
         if (cells == null || cells.length != CELL_COUNT) {
             return false;
         }
+        /* DFS existence tahu. Použití: existsLegalTurn. */
         return dfsAnyLegalTurn(sideToMove, new Move(), cells);
     }
 
+    /** Všechny legální tahy na mřížce. Použití: DefaultRuleEngine, AI. */
     public static List<Move> enumerateLegalCompleteMoves(Piece[] cells, PlayerSide sideToMove) {
         if (cells == null || cells.length != CELL_COUNT) {
             return List.of();
         }
         List<Move> out = new ArrayList<>();
+      /* DFS sběr tahů. Použití: enumerateLegalCompleteMoves. */
         dfsCollectLegalCompleteMoves(sideToMove, new Move(), cells, out);
         return out;
     }
 
+    /** Randomized DFS sample of one legal turn; used by {@link DefaultRuleEngine#sampleRandomLegalCompleteMove}. */
     public static Optional<Move> sampleRandomLegalCompleteMove(Piece[] cells, PlayerSide sideToMove, Random rnd) {
         if (cells == null || cells.length != CELL_COUNT) {
             return Optional.empty();
         }
+        /* DFS náhodný tah na Piece[]. Použití: sampleRandomLegalCompleteMove. */
         return dfsSampleRandomLegalCompleteMove(sideToMove, new Move(), cells, rnd);
     }
 
+    /* Random DFS over step bundles on flat occupancy (shared with {@link DefaultRuleEngine} logic). */
     private static Optional<Move> dfsSampleRandomLegalCompleteMove(
             PlayerSide side, Move prefix, Piece[] root, Random rnd) {
         int len = prefix.getSteps().size();
@@ -97,6 +105,8 @@ public final class GridMoveRules {
         return Optional.empty();
     }
 
+    /* DFS listing of every legal complete turn extending {@code prefix} (can be large). */
+    /* DFS sběr tahů. Použití: enumerateLegalCompleteMoves. */
     private static void dfsCollectLegalCompleteMoves(PlayerSide side, Move prefix, Piece[] root, List<Move> out) {
         int len = prefix.getSteps().size();
         if (len >= 1 && len <= 4 && tryValidateSequentialSteps(side, copyMove(prefix), true, root).isPresent()) {
@@ -118,10 +128,13 @@ public final class GridMoveRules {
             if (tryValidateSequentialSteps(side, copyMove(extended), false, root).isEmpty()) {
                 continue;
             }
+          /* DFS sběr tahů. Použití: enumerateLegalCompleteMoves. */
             dfsCollectLegalCompleteMoves(side, extended, root, out);
         }
     }
 
+    /* Early exit: any legal completion from {@code prefix} on {@code root}. */
+    /* DFS existence tahu. Použití: existsLegalTurn. */
     private static boolean dfsAnyLegalTurn(PlayerSide side, Move prefix, Piece[] root) {
         int len = prefix.getSteps().size();
         if (len >= 1 && len <= 4 && tryValidateSequentialSteps(side, copyMove(prefix), true, root).isPresent()) {
@@ -150,6 +163,7 @@ public final class GridMoveRules {
         return false;
     }
 
+    /** Balíčky kroků na Piece[]. Použití: DefaultRuleEngine (nepřímo přes vlastní kopii). */
     static List<List<Step>> enumerateStepBundles(Piece[] occ, PlayerSide side) {
         List<List<Step>> out = new ArrayList<>();
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
@@ -174,13 +188,16 @@ public final class GridMoveRules {
                         }
                     }
                 }
+              /* Push balíčky na mřížce. Použití: enumerateStepBundles. */
                 addPushBundles(occ, side, from, p, out);
             }
         }
+      /* Pull-drag balíčky na mřížce. Použití: enumerateStepBundles. */
         addPullDragBundles(occ, side, out);
         return out;
     }
 
+    /* Pull-drag second steps after a slide vacated next to a capturable weaker enemy (flat board). */
     private static void addPullDragBundles(Piece[] occ, PlayerSide side, List<List<Step>> out) {
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
             for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
@@ -219,6 +236,8 @@ public final class GridMoveRules {
         }
     }
 
+    /* Two-step push candidates from {@code strong} at {@code strongPos} on flat {@code occ}. */
+    /* Push balíčky na mřížce. Použití: enumerateStepBundles. */
     private static void addPushBundles(
             Piece[] occ, PlayerSide side, Position strongPos, Piece strong, List<List<Step>> out) {
         if (strong.getSide() != side || isFrozenOccupancy(occ, index(strongPos))) {
@@ -247,7 +266,9 @@ public final class GridMoveRules {
                 Piece[] t = cloneCells(occ);
                 List<Step> buf = new ArrayList<>();
                 if (canPushDisplaceOnOcc(t, side, d, buf)) {
+                  /* Jeden krok na Piece[]. Použití: tryApply*. */
                     applyOneStepOnOccupancy(t, d);
+                  /* Pasti na Piece[]. Použití: tryValidateSequentialSteps. */
                     resolveTrapsOnOccupancy(t);
                     if (canPushAdvanceOnOcc(t, side, a, weakPos, strongPos)) {
                         out.add(List.of(copyStep(d), copyStep(a)));
@@ -257,6 +278,8 @@ public final class GridMoveRules {
         }
     }
 
+    /* Simulates full/partial turn on a cell clone; returns final cells or empty if illegal (CPU + enumeration). */
+    /* Validace kroků na Piece[]. Použití: DFS generátory. */
     private static Optional<Piece[]> tryValidateSequentialSteps(
             PlayerSide side, Move move, boolean requireFullTurn, Piece[] initialCells) {
         List<Step> steps = move.getSteps();
@@ -286,13 +309,17 @@ public final class GridMoveRules {
         return Optional.of(occ);
     }
 
+    /* Applies slide plus optional pull-drag on mutable {@code occ}; returns next step index or empty. */
+    /* Slide+pull na mřížce. Použití: tryValidateSequentialSteps. */
     private static Optional<Integer> tryApplySlideWithOptionalPullDrag(
             Piece[] occ, PlayerSide side, List<Step> steps, int slideIndex, int stepCount) {
         Step slide = steps.get(slideIndex);
         if (!canSlideOnOcc(occ, side, slide)) {
             return Optional.empty();
         }
+      /* Jeden krok na Piece[]. Použití: tryApply*. */
         applyOneStepOnOccupancy(occ, slide);
+      /* Pasti na Piece[]. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         int next = slideIndex + 1;
         if (next < stepCount && kindOf(steps.get(next)) == StepKind.PULL_DRAG_WEAKER) {
@@ -300,20 +327,26 @@ public final class GridMoveRules {
             if (!canPullDragOnOcc(occ, side, drag, slide.getFrom(), slide.getTo())) {
                 return Optional.empty();
             }
+          /* Jeden krok na Piece[]. Použití: tryApply*. */
             applyOneStepOnOccupancy(occ, drag);
+          /* Pasti na Piece[]. Použití: tryValidateSequentialSteps. */
             resolveTrapsOnOccupancy(occ);
             next++;
         }
         return Optional.of(next);
     }
 
+    /* Push displace + advance pair on {@code occ}; returns index after both steps or empty. */
+    /* Push pár na mřížce. Použití: tryValidateSequentialSteps. */
     private static Optional<Integer> tryApplyPushPair(
             Piece[] occ, PlayerSide side, List<Step> steps, int displaceIndex, int stepCount) {
         Step displace = steps.get(displaceIndex);
         if (!canPushDisplaceOnOcc(occ, side, displace, steps.subList(0, displaceIndex))) {
             return Optional.empty();
         }
+      /* Jeden krok na Piece[]. Použití: tryApply*. */
         applyOneStepOnOccupancy(occ, displace);
+      /* Pasti na Piece[]. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         int advanceIndex = displaceIndex + 1;
         if (advanceIndex >= stepCount) {
@@ -326,11 +359,15 @@ public final class GridMoveRules {
         if (!canPushAdvanceOnOcc(occ, side, advance, displace.getFrom(), null)) {
             return Optional.empty();
         }
+      /* Jeden krok na Piece[]. Použití: tryApply*. */
         applyOneStepOnOccupancy(occ, advance);
+      /* Pasti na Piece[]. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         return Optional.of(advanceIndex + 1);
     }
 
+    /* Pull vacate + drag pair on {@code occ}; returns index after both steps or empty. */
+    /* Pull pár na mřížce. Použití: tryValidateSequentialSteps. */
     private static Optional<Integer> tryApplyPullPair(
             Piece[] occ, PlayerSide side, List<Step> steps, int vacateIndex, int stepCount) {
         Step vacate = steps.get(vacateIndex);
@@ -338,7 +375,9 @@ public final class GridMoveRules {
             return Optional.empty();
         }
         Position strongOld = vacate.getFrom();
+      /* Jeden krok na Piece[]. Použití: tryApply*. */
         applyOneStepOnOccupancy(occ, vacate);
+      /* Pasti na Piece[]. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         int dragIndex = vacateIndex + 1;
         if (dragIndex >= stepCount) {
@@ -351,11 +390,15 @@ public final class GridMoveRules {
         if (!canPullDragOnOcc(occ, side, drag, strongOld, vacate.getTo())) {
             return Optional.empty();
         }
+      /* Jeden krok na Piece[]. Použití: tryApply*. */
         applyOneStepOnOccupancy(occ, drag);
+      /* Pasti na Piece[]. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         return Optional.of(dragIndex + 1);
     }
 
+    /* Slide legality on {@code Piece[64]} (mirrors {@link DefaultRuleEngine} map rules). */
+    /* Legálnost slide na Piece[]. Použití: enumerateStepBundles. */
     private static boolean canSlideOnOcc(Piece[] occ, PlayerSide side, Step step) {
         Position from = step.getFrom();
         Position to = step.getTo();
@@ -379,6 +422,8 @@ public final class GridMoveRules {
         return moving.getType() != PieceType.RABBIT || !isRabbitBackward(moving.getSide(), from, to);
     }
 
+    /* Push displace legality on flat occupancy (stronger neighbor unfrozen). */
+    /* Push displace na Piece[]. */
     private static boolean canPushDisplaceOnOcc(Piece[] occ, PlayerSide side, Step step, List<Step> ignored) {
         Position weakFrom = step.getFrom();
         Position weakTo = step.getTo();
@@ -399,6 +444,8 @@ public final class GridMoveRules {
         return !isFrozenOccupancy(occ, index(strongSquare));
     }
 
+    /* Second half of push: strong piece enters {@code weakOld} if empty. */
+    /* Push advance na Piece[]. */
     private static boolean canPushAdvanceOnOcc(
             Piece[] occ, PlayerSide side, Step step, Position weakOld, Position ignoredStrongOld) {
         Position from = step.getFrom();
@@ -416,6 +463,8 @@ public final class GridMoveRules {
         return occ[index(to)] == null;
     }
 
+    /* Pull vacate: own stronger slides to empty square from non-frozen departure. */
+    /* Pull vacate na Piece[]. */
     private static boolean canPullVacateOnOcc(Piece[] occ, PlayerSide side, Step step, List<Step> ignored) {
         Position from = step.getFrom();
         Position to = step.getTo();
@@ -433,6 +482,8 @@ public final class GridMoveRules {
         return occ[index(to)] == null;
     }
 
+    /* Pull drag: weaker enters square the strong vacated; strength check vs piece at {@code strongNew}. */
+    /* Pull drag na Piece[]. */
     private static boolean canPullDragOnOcc(
             Piece[] occ, PlayerSide side, Step step, Position strongOld, Position strongNew) {
         Position from = step.getFrom();
@@ -457,6 +508,11 @@ public final class GridMoveRules {
         return PieceStrength.isStrictlyStronger(strong.getType(), weak.getType());
     }
 
+    /**
+     * Frozen if no friendly orth neighbor and at least one strictly stronger enemy orth neighbor (flat board).
+     * Used by movegen and {@link SearchGrid}-style logic.
+     */
+    /** Zmrazení na indexu mřížky. Použití: enumerateStepBundles, SearchGrid. */
     static boolean isFrozenOccupancy(Piece[] occ, int squareIndex) {
         Piece p = occ[squareIndex];
         if (p == null) {
@@ -512,6 +568,8 @@ public final class GridMoveRules {
         return strongerEnemy;
     }
 
+    /* Orthogonally adjacent stronger friendly for push/pull on {@code occ}. */
+    /* Silnější soused pro push. Použití: canPushDisplaceOnOcc. */
     private static Position findStrongOrthNeighbor(Piece[] occ, PlayerSide side, Position weakPos, Piece weak) {
         for (Position n : orthogonalNeighbors(weakPos)) {
             Piece q = occ[index(n)];
@@ -522,6 +580,8 @@ public final class GridMoveRules {
         return null;
     }
 
+    /* Clears unsupported trap squares on {@code occ} after a step (no capture bookkeeping). */
+    /* Pasti na Piece[]. Použití: tryValidateSequentialSteps. */
     private static void resolveTrapsOnOccupancy(Piece[] occ) {
         for (int trapIdx : TRAP_INDICES) {
             Piece victim = occ[trapIdx];
@@ -534,6 +594,8 @@ public final class GridMoveRules {
         }
     }
 
+    /* Trap support on flat grid: any same-side piece orthogonally adjacent to {@code squareIndex}. */
+    /* Vlastní soused na mřížce. Použití: resolveTrapsOnOccupancy. */
     private static boolean hasOrthogonalFriendlyOcc(Piece[] occ, PlayerSide side, int squareIndex) {
         int f = squareIndex % BoardConstants.BOARD_SIZE;
         int r = squareIndex / BoardConstants.BOARD_SIZE;
@@ -564,6 +626,8 @@ public final class GridMoveRules {
         return false;
     }
 
+    /* Moves piece between cell indices on the search array (shared with {@link SearchGrid} semantics). */
+    /* Jeden krok na Piece[]. Použití: tryApply*. */
     private static void applyOneStepOnOccupancy(Piece[] occ, Step step) {
         int from = index(step.getFrom());
         int to = index(step.getTo());
@@ -574,6 +638,8 @@ public final class GridMoveRules {
         }
     }
 
+    /* In-bounds orthogonal neighbors of {@code pos} for step generation. */
+    /* Sousedé pole. Použití: generování tahů. */
     private static List<Position> orthogonalNeighbors(Position pos) {
         List<Position> list = new ArrayList<>(4);
         int f = pos.getFileIndex();
@@ -593,12 +659,16 @@ public final class GridMoveRules {
         return list;
     }
 
+    /* Manhattan distance 1 on the board. */
+    /* Ortogonální sousedství. Použití: can* metody. */
     private static boolean isOrthogonalNeighbor(Position a, Position b) {
         int df = Math.abs(a.getFileIndex() - b.getFileIndex());
         int dr = Math.abs(a.getRankIndex() - b.getRankIndex());
         return df + dr == 1;
     }
 
+    /* Rabbit backward move check in model rank coordinates. */
+    /* Králík pozpátku. Použití: canSlideOnOcc. */
     private static boolean isRabbitBackward(PlayerSide side, Position from, Position to) {
         int fromR = from.getRankIndex();
         int toR = to.getRankIndex();
@@ -607,7 +677,7 @@ public final class GridMoveRules {
             case SILVER -> toR > fromR;
         };
     }
-
+    /** Index pole v poli 64. Použití: celá třída GridMoveRules. */
     static int index(Position p) {
         return index(p.getFileIndex(), p.getRankIndex());
     }
@@ -616,10 +686,14 @@ public final class GridMoveRules {
         return rank * BoardConstants.BOARD_SIZE + file;
     }
 
+    /* Shallow array clone before mutating occupancy in validation (piece references preserved). */
+    /* Kopie pole figur. Použití: tryValidate, enumerate. */
     private static Piece[] cloneCells(Piece[] cells) {
         return cells.clone();
     }
 
+    /* Maps standard trap squares to linear indices for {@link #resolveTrapsOnOccupancy}. */
+    /* Indexy pastí. Použití: resolveTrapsOnOccupancy. */
     private static int[] trapIndices() {
         Position[] traps = BoardConstants.trapSquares();
         int[] out = new int[traps.length];
@@ -629,6 +703,8 @@ public final class GridMoveRules {
         return out;
     }
 
+    /* Deep copy of steps for DFS branches on {@code Piece[64]}. */
+    /* Kopie Move. Použití: DFS. */
     private static Move copyMove(Move src) {
         Move m = new Move();
         for (Step s : src.getSteps()) {
@@ -637,6 +713,8 @@ public final class GridMoveRules {
         return m;
     }
 
+    /* Step copy for flat-board simulation (positions + kind). */
+    /* Kopie Step. Použití: copyMove. */
     private static Step copyStep(Step s) {
         Step t = new Step();
         t.setFrom(s.getFrom());

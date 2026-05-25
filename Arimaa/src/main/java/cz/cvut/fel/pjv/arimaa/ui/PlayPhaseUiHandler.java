@@ -29,6 +29,7 @@ final class PlayPhaseUiHandler {
 
     private static final Logger log = LoggerFactory.getLogger(PlayPhaseUiHandler.class);
 
+    /* One Tab ring stop: either a pull weak square or a concrete push-first option. */
     private record PullPushTabEntry(Position pullPos, PushFirstOption pushOpt) {
         static PullPushTabEntry pull(Position p) {
             return new PullPushTabEntry(Objects.requireNonNull(p), null);
@@ -49,6 +50,7 @@ final class PlayPhaseUiHandler {
         this.main = main;
     }
 
+    /* Sort key for on-screen row (bottom-up for mover) then file left-to-right. */
     private int comparePositionVisual(Position a, Position b, Game g) {
         int ra = main.visualRowFromModelRank(a.getRankIndex(), g);
         int rb = main.visualRowFromModelRank(b.getRankIndex(), g);
@@ -60,6 +62,7 @@ final class PlayPhaseUiHandler {
                 main.visualColFromModelFile(a.getFileIndex(), g), main.visualColFromModelFile(b.getFileIndex(), g));
     }
 
+    /* Tab order along keyboard “snake”: from mover’s home edge when mover is not visually at bottom, else visual order. */
     private int comparePositionKeyboardCycle(Position a, Position b, Game g) {
         if (moverVisualBottom(g)) {
             return comparePositionVisual(a, b, g);
@@ -74,6 +77,7 @@ final class PlayPhaseUiHandler {
                 main.visualColFromModelFile(b.getFileIndex(), g), main.visualColFromModelFile(a.getFileIndex(), g));
     }
 
+    /* True when the side to move’s home ranks appear toward the bottom of the view (orientation helper). */
     private boolean moverVisualBottom(Game g) {
         PlayerSide m = g.getSideToMove();
         if (m == PlayerSide.GOLD) {
@@ -82,6 +86,7 @@ final class PlayPhaseUiHandler {
         return !main.boardOrientation.boardGoldVisualBottom(g);
     }
 
+    /* All own pieces on the board sorted for Ctrl+Tab / Tab cycling (type then home-ward geometry). */
     private List<Position> ownPiecesInPlayTabOrder(Game g) {
         PlayerSide side = g.getSideToMove();
         List<Position> all = new ArrayList<>();
@@ -101,6 +106,7 @@ final class PlayPhaseUiHandler {
         return all;
     }
 
+    /* Tie-break for two own cells: piece strength, rank toward home, then visual column/row order. */
     private int compareOwnPiecesTabOrder(Position a, Position b, Game g, PlayerSide side) {
         Piece pa = main.effectivePieceAt(g, a);
         Piece pb = main.effectivePieceAt(g, b);
@@ -143,6 +149,7 @@ final class PlayPhaseUiHandler {
         selectNextOwnPieceForPlayKeyboard(g, reverse, "Ctrl+Tab");
     }
 
+    /* Ctrl+Tab: cycles nextFrom among own pieces in tab order and refreshes status/hand highlights. */
     private void selectNextOwnPieceForPlayKeyboard(Game g, boolean reverse, String keyboardLabel) {
         List<Position> own = ownPiecesInPlayTabOrder(g);
         if (own.isEmpty()) {
@@ -163,10 +170,8 @@ final class PlayPhaseUiHandler {
         main.refreshAll();
     }
 
-    /**
-     * Pull squares first (sorted), then each legal push option (same first-step cell kept as separate stops if several
-     * weaker pieces can be displaced there); push entries whose first-step cell is also a pull target are skipped (pull
-     * wins).
+    /*
+     * Pull weak squares first, then push options whose first step is not also a pull cell (pull wins Tab order).
      */
     private List<PullPushTabEntry> buildUnifiedPullPushTabRing(PlayTargetBundle tabTargets, Game g) {
         Set<Position> pulls = tabTargets.pullWeakSquares();
@@ -192,6 +197,7 @@ final class PlayPhaseUiHandler {
         return ring;
     }
 
+    /* Writes keyboard pull/push focus fields from one unified Tab ring entry. */
     private void applyPullPushTabEntry(PullPushTabEntry entry) {
         Objects.requireNonNull(entry, "entry");
         if (entry.isPull()) {
@@ -206,6 +212,7 @@ final class PlayPhaseUiHandler {
         }
     }
 
+    /* Czech status hint when Tab lands on pull vs push segment of the unified ring. */
     private void setStatusForPullPushTabFocus(boolean pull) {
         if (pull) {
             main.setStatus(
@@ -261,6 +268,7 @@ final class PlayPhaseUiHandler {
         main.refreshAll();
     }
 
+    /* True when keyboard push focus matches some legal PushFirstOption in the current target bundle. */
     private boolean keyboardPushDraftMatches(PlayTargetBundle targets) {
         if (main.playDraft.keyboardPushFocus == null) {
             return false;
@@ -296,6 +304,7 @@ final class PlayPhaseUiHandler {
         }
     }
 
+    /* Status after selecting own piece: mentions pull squares when any exist (Czech). */
     private void setStatusOwnPieceSelected(Game g, String keyboardLabelOrNull) {
         String head =
                 keyboardLabelOrNull == null
@@ -334,6 +343,7 @@ final class PlayPhaseUiHandler {
         handlePlayBoardActivation(chosen.firstStepTo().getFileIndex(), chosen.firstStepTo().getRankIndex());
     }
 
+    /* Push-first options sorted for keyboard activation (first step, then weaker-from cell). */
     private List<PushFirstOption> sortedPushFirstOptions(PlayTargetBundle tabTargets, Game g) {
         List<PushFirstOption> out = new ArrayList<>(tabTargets.pushFirstOptions());
         out.sort((a, b) -> {
@@ -346,6 +356,7 @@ final class PlayPhaseUiHandler {
         return out;
     }
 
+    /* Picks push option matching keyboard focus, else first sorted option (Space on push). */
     private static PushFirstOption resolveChosenPushOption(List<PushFirstOption> opts, PlayTurnDraftState draft) {
         Position f = draft.keyboardPushFocus;
         Position w = draft.keyboardPushWeakFrom;

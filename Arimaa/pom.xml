@@ -79,6 +79,16 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- Victory MP4 clips from module Arimaa/assets/ → classpath assets/ (shaded into fat JAR). -->
+            <resource>
+                <directory>assets</directory>
+                <targetPath>assets</targetPath>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

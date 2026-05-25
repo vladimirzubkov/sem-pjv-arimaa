@@ -79,6 +79,7 @@ public final class PlayHalfTurn {
         return Step.copyOf(s);
     }
 
+    /** Deep-copies step list into a new {@link Move} (history, CPU search, validation copies). */
     public static Move copyMove(Move src) {
         Move m = new Move();
         for (Step s : src.getSteps()) {

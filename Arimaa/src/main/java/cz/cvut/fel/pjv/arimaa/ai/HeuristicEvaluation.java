@@ -22,6 +22,7 @@ public final class HeuristicEvaluation {
 
     private HeuristicEvaluation() {}
 
+    /** Piece weights for static evaluation; used by {@link #evaluateForRoot} and tests. */
     static int pieceMaterial(PieceType type) {
         return switch (type) {
             case ELEPHANT -> 600;
@@ -47,10 +48,12 @@ public final class HeuristicEvaluation {
                 game.getState(), game.getMatchWinner(), game.getBoard(), game.isRanksMirroredForHomeCheck(), root);
     }
 
+    /** Same heuristic as {@link #evaluateForRoot(Game, PlayerSide)} on a flat {@link SearchGrid} (CPU search). */
     static double evaluateForRoot(SearchGrid grid, PlayerSide root, boolean ranksMirrored) {
         return evaluateForRoot(grid.state, grid.matchWinner, grid.cells, ranksMirrored, root);
     }
 
+    /* Core static eval over {@code Piece[64]}; shared by {@link #evaluateForRoot(SearchGrid, PlayerSide, boolean)}. */
     private static double evaluateForRoot(
             GameState state,
             PlayerSide matchWinner,
@@ -67,6 +70,7 @@ public final class HeuristicEvaluation {
             return 0.0;
         }
         double score = 0.0;
+        // Flat cell scan: same material/rabbit/development terms as the Board overload, fewer allocations.
         for (int idx = 0; idx < SearchGrid.CELL_COUNT; idx++) {
             Piece p = cells[idx];
             if (p == null) {
@@ -84,6 +88,7 @@ public final class HeuristicEvaluation {
         return score;
     }
 
+    /* Core static eval over a live {@link Board}; used by {@link #evaluateForRoot(Game, PlayerSide)}. */
     private static double evaluateForRoot(
             GameState state,
             PlayerSide matchWinner,
@@ -119,6 +124,7 @@ public final class HeuristicEvaluation {
         return score;
     }
 
+    /* Encourages strong pieces to leave home rows; slight home penalty for elephants/camel/horse/dog/cat. */
     private static double developmentValue(Piece p, int rankIndex, boolean ranksMirrored) {
         if (HomeTerritory.contains(p.getSide(), rankIndex, ranksMirrored)) {
             return switch (p.getType()) {

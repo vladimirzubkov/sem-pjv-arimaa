@@ -33,6 +33,7 @@ public final class DefaultRuleEngine implements RuleEngine {
     private static final Logger log = LoggerFactory.getLogger(DefaultRuleEngine.class);
 
     @Override
+    /** Provede celý PLAY tah včetně pastí a přepnutí strany. Použití: {@link Game#applyMove}. */
     public void applyMove(Game game, Move move) {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(move, "move");
@@ -42,18 +43,23 @@ public final class DefaultRuleEngine implements RuleEngine {
         PlayerSide mover = game.getSideToMove();
         if (move.getSteps().isEmpty()) {
             log.info("applyMove: pass (no steps)");
+          /* Po mutaci desky: konec hry nebo přepnutí strany a imobilizace. Použití: applyMove. */
             finishPlayTurnAfterBoardMutation(game, mover);
             return;
         }
         log.info("applyMove: mover={} stepCount={}", mover, move.getSteps().size());
         log.debug("applyMove detail: {}", describeMove(move));
+      /* Validuje kroky a vrátí obsazení nebo hodí výjimku. Použití: applyMove. */
         validateSequentialSteps(game, move, true, null);
+      /** Aplikuje kroky na desku (volající musí validovat). Použití: applyMove, trapCapturesIfPrefixApplied. */
         applyMoveToBoard(game.getBoard(), move, game::recordTrapRemoval);
         Board board = game.getBoard();
         log.debug(
                 "after applyMoveToBoard: goldRabbits={} silverRabbits={}",
+              /* Počet králíků strany. Použití: evaluateTerminalWithReason, log. */
                 countRabbits(board, PlayerSide.GOLD),
                 countRabbits(board, PlayerSide.SILVER));
+      /* Po mutaci desky: konec hry nebo přepnutí strany a imobilizace. Použití: applyMove. */
         finishPlayTurnAfterBoardMutation(game, mover);
     }
 
@@ -77,6 +83,7 @@ public final class DefaultRuleEngine implements RuleEngine {
     }
 
     @Override
+    /** Aplikuje legální prefix bez ukončení tahu. Použití: {@link Game#applyPlayPrefix}. */
     public void applyPlayPrefix(Game game, Move prefix) {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(prefix, "prefix");
@@ -85,7 +92,9 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         PlayerSide mover = game.getSideToMove();
         log.info("applyPlayPrefix: mover={} stepCount={}", mover, prefix.getSteps().size());
+      /* Validuje kroky a vrátí obsazení nebo hodí výjimku. Použití: applyMove. */
         validateSequentialSteps(game, prefix, false, null);
+      /** Aplikuje kroky na desku (volající musí validovat). Použití: applyMove, trapCapturesIfPrefixApplied. */
         applyMoveToBoard(game.getBoard(), prefix, game::recordTrapRemoval);
         Board board = game.getBoard();
         TerminalEvaluation terminal = evaluateTerminalWithReason(board);
@@ -101,13 +110,16 @@ public final class DefaultRuleEngine implements RuleEngine {
      *
      * @param onTrapVictim invoked for each piece removed by a trap before the square is cleared; may be {@code null}
      */
+    /** Aplikuje kroky na desku (volající musí validovat). Použití: applyMove, trapCapturesIfPrefixApplied. */
     static void applyMoveToBoard(Board board, Move move, Consumer<Piece> onTrapVictim) {
         List<Step> steps = move.getSteps();
         for (int i = 0; i < steps.size(); i++) {
             Step s = steps.get(i);
             StepKind k = kindOf(s);
             if (k == StepKind.SLIDE) {
+              /* Jeden krok na {@link Board}. Použití: applyMoveToBoard, notace. */
                 applyOneStep(board, s);
+              /* Pasti na {@link Board} s callbackem oběti. Použití: applyMoveToBoard, notace. */
                 resolveTraps(board, onTrapVictim);
                 if (i + 1 < steps.size() && kindOf(steps.get(i + 1)) == StepKind.PULL_DRAG_WEAKER) {
                     i++;
@@ -116,6 +128,7 @@ public final class DefaultRuleEngine implements RuleEngine {
                 }
             } else if (k == StepKind.PUSH_DISPLACE_WEAKER) {
                 applyOneStep(board, s);
+              /* Pasti na {@link Board} s callbackem oběti. Použití: applyMoveToBoard, notace. */
                 resolveTraps(board, onTrapVictim);
                 i++;
                 applyOneStep(board, steps.get(i));
@@ -124,6 +137,7 @@ public final class DefaultRuleEngine implements RuleEngine {
                 applyOneStep(board, s);
                 resolveTraps(board, onTrapVictim);
                 i++;
+              /* Jeden krok na {@link Board}. Použití: applyMoveToBoard, notace. */
                 applyOneStep(board, steps.get(i));
                 resolveTraps(board, onTrapVictim);
             }
@@ -136,7 +150,7 @@ public final class DefaultRuleEngine implements RuleEngine {
      */
     public record TrapCapturePreview(List<PieceType> byGold, List<PieceType> bySilver) {
     }
-
+    /** Náhled obětí v pasti po prefixu na kopii desky. Použití: {@link PlayTurnHistory#viewPrefixRemovesPieceViaTrap}, AI. */
     public static TrapCapturePreview trapCapturesIfPrefixApplied(Game game, Move prefix) {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(prefix, "prefix");
@@ -149,6 +163,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         Board scratch = game.getBoard().copy();
         List<PieceType> byGold = new ArrayList<>();
         List<PieceType> bySilver = new ArrayList<>();
+      /** Aplikuje kroky na desku (volající musí validovat). Použití: applyMove, trapCapturesIfPrefixApplied. */
         applyMoveToBoard(scratch, prefix, victim -> {
             if (victim.getSide() == PlayerSide.SILVER) {
                 byGold.add(victim.getType());
@@ -158,7 +173,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         });
         return new TrapCapturePreview(List.copyOf(byGold), List.copyOf(bySilver));
     }
-
+    /** Zda je prefix legální bez výjimky. Použití: UI draft, {@link PlayDraftUiCoordinator}. */
     public static boolean isValidPlayPrefix(Game game, Move move) {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(move, "move");
@@ -179,6 +194,7 @@ public final class DefaultRuleEngine implements RuleEngine {
      * @throws GamePhaseException if {@code game} is not in {@link GameState#PLAY}
      * @throws IllegalMoveException if {@code prefix} is illegal
      */
+    /** Obsazení po legálním prefixu. Použití: {@link PlayPhaseUiHandler}, testy. */
     public static Map<Position, Piece> simulatePlayPrefix(Game game, Move prefix) {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(prefix, "prefix");
@@ -187,8 +203,10 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         Map<Position, Piece> root = snapshotOccupancy(game.getBoard());
         if (prefix.getSteps().isEmpty()) {
+            /* Kopie mapy obsazení. Použití: validace, enumerateStepBundles. */
             return copyOcc(root);
         }
+        /* Ne-hodící validace kroků pro generování tahů. Použití: isValidPlayPrefix, simulatePlayPrefix. */
         return tryValidateSequentialSteps(game, copyMove(prefix), false, root)
                 .orElseThrow(
                         () -> {
@@ -200,6 +218,7 @@ public final class DefaultRuleEngine implements RuleEngine {
     /**
      * Whether {@code side} has at least one legal full turn (1–4 steps) from {@code game}'s current board.
      */
+    /** Zda má strana na tahu alespoň jeden legální tah. Použití: AI, konec hry. */
     public static boolean existsLegalTurn(Game game) {
         Objects.requireNonNull(game, "game");
         if (game.getState() != GameState.PLAY) {
@@ -214,6 +233,7 @@ public final class DefaultRuleEngine implements RuleEngine {
      *
      * @return mutable list (may be large); empty if not in PLAY
      */
+    /** Všechny legální plné tahy (1–4 kroky). Použití: AI, testy. */
     public static List<Move> enumerateLegalCompleteMoves(Game game) {
         Objects.requireNonNull(game, "game");
         if (game.getState() != GameState.PLAY) {
@@ -228,6 +248,7 @@ public final class DefaultRuleEngine implements RuleEngine {
      * prefix before accepting a complete turn, so multi-step turns are not skipped whenever a one-step completion
      * exists. Not uniformly random over all legal turns. Empty if not in {@link GameState#PLAY} or no legal turn exists.
      */
+    /** Náhodný legální tah (DFS se shuffle). Použití: CPU level 0, GreedyComputerMove. */
     public static Optional<Move> sampleRandomLegalCompleteMove(Game game, Random rnd) {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(rnd, "rnd");
@@ -237,7 +258,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         return GridMoveRules.sampleRandomLegalCompleteMove(
                 GridMoveRules.snapshotFromBoard(game.getBoard()), game.getSideToMove(), rnd);
     }
-
+    /* DFS výběr náhodného tahu na mapě obsazení. Použití: sampleRandomLegalCompleteMove (nepoužito — delegace na GridMoveRules). */
     private static Optional<Move> dfsSampleRandomLegalCompleteMove(Game game, Move prefix, Map<Position, Piece> root, Random rnd) {
         int len = prefix.getSteps().size();
         if (len > 4) {
@@ -250,6 +271,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             return Optional.empty();
         }
         Optional<Map<Position, Piece>> occAfterOpt =
+              /* Ne-hodící validace kroků pro generování tahů. Použití: isValidPlayPrefix, simulatePlayPrefix. */
                 tryValidateSequentialSteps(game, copyMove(prefix), false, root);
         if (occAfterOpt.isEmpty()) {
             return Optional.empty();
@@ -275,7 +297,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return Optional.empty();
     }
-
+    /* DFS sběr všech tahů. Použití: enumerateLegalCompleteMoves (nepoužito). */
     private static void dfsCollectLegalCompleteMoves(Game game, Move prefix, Map<Position, Piece> root, List<Move> out) {
         int len = prefix.getSteps().size();
         if (len >= 1 && len <= 4 && tryValidateSequentialSteps(game, copyMove(prefix), true, root).isPresent()) {
@@ -285,6 +307,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             return;
         }
         Optional<Map<Position, Piece>> occAfterOpt =
+              /* Ne-hodící validace kroků pro generování tahů. Použití: isValidPlayPrefix, simulatePlayPrefix. */
                 tryValidateSequentialSteps(game, copyMove(prefix), false, root);
         if (occAfterOpt.isEmpty()) {
             return;
@@ -298,10 +321,11 @@ public final class DefaultRuleEngine implements RuleEngine {
             if (tryValidateSequentialSteps(game, copyMove(extended), false, root).isEmpty()) {
                 continue;
             }
+          /* DFS sběr všech tahů. Použití: enumerateLegalCompleteMoves (nepoužito). */
             dfsCollectLegalCompleteMoves(game, extended, root, out);
         }
     }
-
+    /* DFS existence tahu. Použití: existsLegalTurn (nepoužito). */
     private static boolean dfsAnyLegalTurn(Game game, Move prefix, Map<Position, Piece> root) {
         int len = prefix.getSteps().size();
         if (len >= 1 && len <= 4 && tryValidateSequentialSteps(game, copyMove(prefix), true, root).isPresent()) {
@@ -311,6 +335,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             return false;
         }
         Optional<Map<Position, Piece>> occAfterOpt =
+              /* Ne-hodící validace kroků pro generování tahů. Použití: isValidPlayPrefix, simulatePlayPrefix. */
                 tryValidateSequentialSteps(game, copyMove(prefix), false, root);
         if (occAfterOpt.isEmpty()) {
             return false;
@@ -334,6 +359,7 @@ public final class DefaultRuleEngine implements RuleEngine {
     /**
      * Enumerates single-slide bundles, two-step push bundles, and single-step pull-drag continuations.
      */
+    /** Seznam možných balíčků kroků z pozice. Použití: {@link PlayPhaseUiHandler}, generování tahů. */
     public static List<List<Step>> enumerateStepBundles(Map<Position, Piece> occ, PlayerSide side) {
         List<List<Step>> out = new ArrayList<>();
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
@@ -357,9 +383,11 @@ public final class DefaultRuleEngine implements RuleEngine {
                         }
                     }
                 }
+              /* Generuje dvoukrokové push balíčky. Použití: enumerateStepBundles. */
                 addPushBundles(occ, side, from, p, out);
             }
         }
+      /* Doplňuje pull-drag pokračování po slide. Použití: enumerateStepBundles. */
         addPullDragBundles(occ, side, out);
         return out;
     }
@@ -368,6 +396,7 @@ public final class DefaultRuleEngine implements RuleEngine {
      * Single-step {@link StepKind#PULL_DRAG_WEAKER} continuations (after a prior slide vacated next to a weaker piece).
      * Used by {@link #existsLegalTurn}; interactive pull completion uses the same validation.
      */
+    /* Doplňuje pull-drag pokračování po slide. Použití: enumerateStepBundles. */
     private static void addPullDragBundles(Map<Position, Piece> occ, PlayerSide side, List<List<Step>> out) {
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
             for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
@@ -407,7 +436,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             }
         }
     }
-
+    /* Generuje dvoukrokové push balíčky. Použití: enumerateStepBundles. */
     private static void addPushBundles(Map<Position, Piece> occ, PlayerSide side, Position strongPos, Piece strong, List<List<Step>> out) {
         if (strong.getSide() != side || isFrozenOccupancy(occ, strongPos)) {
             return;
@@ -435,7 +464,9 @@ public final class DefaultRuleEngine implements RuleEngine {
                 Map<Position, Piece> t = copyOcc(occ);
                 List<Step> buf = new ArrayList<>();
                 if (canPushDisplaceOnOcc(t, side, d, buf)) {
+                  /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
                     applyOneStepOnOccupancy(t, d);
+                  /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
                     resolveTrapsOnOccupancy(t);
                     if (canPushAdvanceOnOcc(t, side, a, weakPos, strongPos)) {
                         out.add(List.of(copyStep(d), copyStep(a)));
@@ -444,18 +475,21 @@ public final class DefaultRuleEngine implements RuleEngine {
             }
         }
     }
-
+    /* Validuje kroky a vrátí obsazení nebo hodí výjimku. Použití: applyMove. */
     private static Map<Position, Piece> validateSequentialSteps(
             Game game, Move move, boolean requireFullTurn, Map<Position, Piece> initialOcc) {
+        /* Ne-hodící validace kroků pro generování tahů. Použití: isValidPlayPrefix, simulatePlayPrefix. */
         return tryValidateSequentialSteps(game, move, requireFullTurn, initialOcc)
                 .orElseThrow(
                         () ->
+                              /* Validace s konkrétní IllegalMoveException. Použití: validateSequentialSteps. */
                                 validateSequentialStepsWithMessage(game, move, requireFullTurn, initialOcc));
     }
 
     /**
      * Non-throwing validation for move generation and search (expected illegal prefixes return empty).
      */
+    /* Ne-hodící validace kroků pro generování tahů. Použití: isValidPlayPrefix, simulatePlayPrefix. */
     private static Optional<Map<Position, Piece>> tryValidateSequentialSteps(
             Game game, Move move, boolean requireFullTurn, Map<Position, Piece> initialOcc) {
         List<Step> steps = move.getSteps();
@@ -486,7 +520,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         return Optional.of(occ);
     }
 
-    /** Slide, optionally followed by pull-drag on the vacated square (same turn). */
+    /* Slide + volitelný pull-drag na mapě. Použití: tryValidateSequentialSteps. */
     private static Optional<Integer> tryApplySlideWithOptionalPullDrag(
             Map<Position, Piece> occ,
             PlayerSide side,
@@ -497,7 +531,9 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (!canSlideOnOcc(occ, side, slide)) {
             return Optional.empty();
         }
+      /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
         applyOneStepOnOccupancy(occ, slide);
+      /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         int next = slideIndex + 1;
         if (next < stepCount && kindOf(steps.get(next)) == StepKind.PULL_DRAG_WEAKER) {
@@ -505,14 +541,16 @@ public final class DefaultRuleEngine implements RuleEngine {
             if (!canPullDragOnOcc(occ, side, drag, slide.getFrom(), slide.getTo())) {
                 return Optional.empty();
             }
+          /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
             applyOneStepOnOccupancy(occ, drag);
+          /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
             resolveTrapsOnOccupancy(occ);
             next++;
         }
         return Optional.of(next);
     }
 
-    /** Push displace then advance onto the vacated square. */
+    /* Push pár na mapě. Použití: tryValidateSequentialSteps. */
     private static Optional<Integer> tryApplyPushPair(
             Map<Position, Piece> occ,
             PlayerSide side,
@@ -523,7 +561,9 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (!canPushDisplaceOnOcc(occ, side, displace, steps.subList(0, displaceIndex))) {
             return Optional.empty();
         }
+      /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
         applyOneStepOnOccupancy(occ, displace);
+      /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         int advanceIndex = displaceIndex + 1;
         if (advanceIndex >= stepCount) {
@@ -536,12 +576,14 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (!canPushAdvanceOnOcc(occ, side, advance, displace.getFrom(), null)) {
             return Optional.empty();
         }
+      /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
         applyOneStepOnOccupancy(occ, advance);
+      /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         return Optional.of(advanceIndex + 1);
     }
 
-    /** Pull vacate then drag the weaker piece onto the vacated square. */
+    /* Pull pár na mapě. Použití: tryValidateSequentialSteps. */
     private static Optional<Integer> tryApplyPullPair(
             Map<Position, Piece> occ,
             PlayerSide side,
@@ -553,7 +595,9 @@ public final class DefaultRuleEngine implements RuleEngine {
             return Optional.empty();
         }
         Position strongOld = vacate.getFrom();
+      /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
         applyOneStepOnOccupancy(occ, vacate);
+      /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         int dragIndex = vacateIndex + 1;
         if (dragIndex >= stepCount) {
@@ -566,12 +610,14 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (!canPullDragOnOcc(occ, side, drag, strongOld, vacate.getTo())) {
             return Optional.empty();
         }
+      /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
         applyOneStepOnOccupancy(occ, drag);
+      /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         return Optional.of(dragIndex + 1);
     }
 
-    /** Throws {@link IllegalMoveException} with a specific message (UI / applyMove). */
+    /* Validace s konkrétní IllegalMoveException. Použití: validateSequentialSteps. */
     private static IllegalMoveException validateSequentialStepsWithMessage(
             Game game, Move move, boolean requireFullTurn, Map<Position, Piece> initialOcc) {
         List<Step> steps = move.getSteps();
@@ -603,7 +649,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         throw new IllegalStateException("unreachable");
     }
-
+    /* Slide (+ pull) s výjimkou. Použití: validateSequentialStepsWithMessage. */
     private static int applySlideWithOptionalPullDragOrThrow(
             Map<Position, Piece> occ,
             PlayerSide side,
@@ -611,12 +657,16 @@ public final class DefaultRuleEngine implements RuleEngine {
             int slideIndex,
             int stepCount) {
         Step slide = steps.get(slideIndex);
+      /* Slide validace s výjimkou. Použití: applySlideWithOptionalPullDragOrThrow. */
         validateSlideOnOcc(occ, side, slide);
+      /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
         applyOneStepOnOccupancy(occ, slide);
+      /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         int next = slideIndex + 1;
         if (next < stepCount && kindOf(steps.get(next)) == StepKind.PULL_DRAG_WEAKER) {
             Step drag = steps.get(next);
+          /* Pull drag s výjimkou. Použití: applyPullPairOrThrow. */
             validatePullDragOnOcc(occ, side, drag, slide.getFrom(), slide.getTo());
             applyOneStepOnOccupancy(occ, drag);
             resolveTrapsOnOccupancy(occ);
@@ -624,7 +674,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return next;
     }
-
+    /* Push pár s výjimkou. Použití: validateSequentialStepsWithMessage. */
     private static int applyPushPairOrThrow(
             Map<Position, Piece> occ,
             PlayerSide side,
@@ -632,8 +682,11 @@ public final class DefaultRuleEngine implements RuleEngine {
             int displaceIndex,
             int stepCount) {
         Step displace = steps.get(displaceIndex);
+      /* Push displace s výjimkou. Použití: applyPushPairOrThrow. */
         validatePushDisplaceOnOcc(occ, side, displace, steps.subList(0, displaceIndex));
+      /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
         applyOneStepOnOccupancy(occ, displace);
+      /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         int advanceIndex = displaceIndex + 1;
         if (advanceIndex >= stepCount) {
@@ -643,12 +696,15 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (kindOf(advance) != StepKind.PUSH_ADVANCE_STRONGER) {
             throw new IllegalMoveException("Push must be followed by PUSH_ADVANCE_STRONGER");
         }
+      /* Push advance s výjimkou. Použití: applyPushPairOrThrow. */
         validatePushAdvanceOnOcc(occ, side, advance, displace.getFrom(), null);
+      /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
         applyOneStepOnOccupancy(occ, advance);
+      /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         return advanceIndex + 1;
     }
-
+    /* Pull pár s výjimkou. Použití: validateSequentialStepsWithMessage. */
     private static int applyPullPairOrThrow(
             Map<Position, Piece> occ,
             PlayerSide side,
@@ -656,9 +712,12 @@ public final class DefaultRuleEngine implements RuleEngine {
             int vacateIndex,
             int stepCount) {
         Step vacate = steps.get(vacateIndex);
+      /* Pull vacate s výjimkou. Použití: applyPullPairOrThrow. */
         validatePullVacateOnOcc(occ, side, vacate, steps.subList(0, vacateIndex));
         Position strongOld = vacate.getFrom();
+      /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
         applyOneStepOnOccupancy(occ, vacate);
+      /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         int dragIndex = vacateIndex + 1;
         if (dragIndex >= stepCount) {
@@ -668,12 +727,15 @@ public final class DefaultRuleEngine implements RuleEngine {
         if (kindOf(drag) != StepKind.PULL_DRAG_WEAKER) {
             throw new IllegalMoveException("Pull must be followed by PULL_DRAG_WEAKER");
         }
+      /* Pull drag s výjimkou. Použití: applyPullPairOrThrow. */
         validatePullDragOnOcc(occ, side, drag, strongOld, vacate.getTo());
+      /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
         applyOneStepOnOccupancy(occ, drag);
+      /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
         resolveTrapsOnOccupancy(occ);
         return dragIndex + 1;
     }
-
+    /* Debug řetězec tahu. Použití: applyMove log. */
     private static String describeMove(Move move) {
         return move.getSteps().stream()
                 .map(s -> "%s %s->%s".formatted(kindOf(s), s.getFrom(), s.getTo()))
@@ -682,7 +744,7 @@ public final class DefaultRuleEngine implements RuleEngine {
 
     private record TerminalEvaluation(PlayerSide winner, String reason) {
     }
-
+    /* Vyhodnotí vítěze (cíl, králíci). Použití: finishPlayTurnAfterBoardMutation. */
     private static TerminalEvaluation evaluateTerminalWithReason(Board board) {
         if (hasRabbitOnRank(board, PlayerSide.GOLD, BoardConstants.BOARD_SIZE - 1)) {
             return new TerminalEvaluation(PlayerSide.GOLD, "gold_rabbit_goal_rank");
@@ -700,7 +762,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         // occupy the top rank in the opening; detecting illegal *push* onto the goal row needs per-turn context.
         return new TerminalEvaluation(null, "none");
     }
-
+    /* Legálnost slide na mapě obsazení. Použití: tryApplySlide, enumerateStepBundles. */
     private static boolean canSlideOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step) {
         Position from = step.getFrom();
         Position to = step.getTo();
@@ -722,7 +784,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return moving.getType() != PieceType.RABBIT || !isRabbitBackward(moving.getSide(), from, to);
     }
-
+    /* Slide validace s výjimkou. Použití: applySlideWithOptionalPullDragOrThrow. */
     private static void validateSlideOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step) {
         Position from = step.getFrom();
         Position to = step.getTo();
@@ -745,7 +807,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             throw new IllegalMoveException("Rabbit cannot move backward");
         }
     }
-
+    /* První krok push na mapě. Použití: tryApplyPushPair, addPushBundles. */
     private static boolean canPushDisplaceOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step, List<Step> ignored) {
         Position weakFrom = step.getFrom();
         Position weakTo = step.getTo();
@@ -765,7 +827,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return !isFrozenOccupancy(occ, strongSquare);
     }
-
+    /* Push displace s výjimkou. Použití: applyPushPairOrThrow. */
     private static void validatePushDisplaceOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step, List<Step> ignored) {
         Position weakFrom = step.getFrom();
         Position weakTo = step.getTo();
@@ -787,7 +849,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             throw new IllegalMoveException("Frozen piece cannot push");
         }
     }
-
+    /* Druhý krok push na mapě. Použití: tryApplyPushPair. */
     private static boolean canPushAdvanceOnOcc(
             Map<Position, Piece> occ, PlayerSide side, Step step, Position weakOld, Position ignoredStrongOld) {
         Position from = step.getFrom();
@@ -804,7 +866,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return occ.get(to) == null;
     }
-
+    /* Push advance s výjimkou. Použití: applyPushPairOrThrow. */
     private static void validatePushAdvanceOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step, Position weakOld, Position ignoredStrongOld) {
         Position from = step.getFrom();
         Position to = step.getTo();
@@ -822,7 +884,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             throw new IllegalMoveException("Push advance destination must be empty");
         }
     }
-
+    /* Pull vacate na mapě. Použití: tryApplyPullPair. */
     private static boolean canPullVacateOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step, List<Step> ignored) {
         Position from = step.getFrom();
         Position to = step.getTo();
@@ -838,7 +900,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return occ.get(to) == null;
     }
-
+    /* Pull vacate s výjimkou. Použití: applyPullPairOrThrow. */
     private static void validatePullVacateOnOcc(Map<Position, Piece> occ, PlayerSide side, Step step, List<Step> ignored) {
         Position from = step.getFrom();
         Position to = step.getTo();
@@ -856,7 +918,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             throw new IllegalMoveException("Pull vacate target must be empty");
         }
     }
-
+    /* Pull drag na mapě. Použití: tryApplyPullPair, addPullDragBundles. */
     private static boolean canPullDragOnOcc(
             Map<Position, Piece> occ, PlayerSide side, Step step, Position strongOld, Position strongNew) {
         Position from = step.getFrom();
@@ -880,7 +942,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return PieceStrength.isStrictlyStronger(strong.getType(), weak.getType());
     }
-
+    /* Pull drag s výjimkou. Použití: applyPullPairOrThrow. */
     private static void validatePullDragOnOcc(
             Map<Position, Piece> occ, PlayerSide side, Step step, Position strongOld, Position strongNew) {
         Position from = step.getFrom();
@@ -906,7 +968,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             throw new IllegalMoveException("Pull requires stronger piece");
         }
     }
-
+    /* Silnější vlastní soused slabšího pro push/pull. Použití: canPushDisplaceOnOcc. */
     private static Position findStrongOrthNeighbor(Map<Position, Piece> occ, PlayerSide side, Position weakPos, Piece weak) {
         for (Position n : orthogonalNeighbors(weakPos)) {
             Piece q = occ.get(n);
@@ -916,13 +978,14 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return null;
     }
-
+    /** Druh kroku; null → SLIDE. Použití: celý engine, {@link SearchGrid}, notace. */
     public static StepKind kindOf(Step s) {
         StepKind k = s.getKind();
         return k == null ? StepKind.SLIDE : k;
     }
-
+    /** Zmrazení figurky na desce. Použití: {@link BoardGridView}, testy. */
     public static boolean isFrozen(Board board, Position pos) {
+        /** Zmrazení dle mapy obsazení. Použití: enumerateStepBundles, GridMoveRules. */
         return isFrozenOccupancy(snapshotOccupancy(board), pos);
     }
 
@@ -946,7 +1009,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return strongerEnemy;
     }
-
+    /* Čtyři ortogonální sousedy pole. Použití: zmrazení, generování tahů. */
     private static List<Position> orthogonalNeighbors(Position pos) {
         List<Position> list = new ArrayList<>(4);
         int f = pos.getFileIndex();
@@ -965,7 +1028,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return list;
     }
-
+    /* Odstraní oběti pastí na mapě. Použití: tryValidateSequentialSteps. */
     private static void resolveTrapsOnOccupancy(Map<Position, Piece> occ) {
         for (Position trap : BoardConstants.trapSquares()) {
             Piece victim = occ.get(trap);
@@ -977,7 +1040,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             }
         }
     }
-
+    /* Sousední vlastní na mapě (past). Použití: resolveTrapsOnOccupancy. */
     private static boolean hasOrthogonalFriendlyOcc(Map<Position, Piece> occ, PlayerSide side, Position pos) {
         for (Position n : orthogonalNeighbors(pos)) {
             Piece p = occ.get(n);
@@ -987,7 +1050,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return false;
     }
-
+    /* Pasti na {@link Board} s callbackem oběti. Použití: applyMoveToBoard, notace. */
     private static void resolveTraps(Board board, Consumer<Piece> onTrapVictim) {
         for (Position trap : BoardConstants.trapSquares()) {
             Piece victim = board.getPiece(trap);
@@ -1007,6 +1070,7 @@ public final class DefaultRuleEngine implements RuleEngine {
      * Arimaa game notation body (space-separated tokens) for a completed legal turn — slides, trap removals ({@code …​x}),
      * push/pull pairs — matching trap resolution order in {@link #applyMoveToBoard}.
      */
+    /** Tělo notace tahu včetně pastí. Použití: {@link ArimaaNotation}. */
     public static String buildArimaaNotationBody(Board before, Move move) {
         Objects.requireNonNull(before, "before");
         Objects.requireNonNull(move, "move");
@@ -1017,8 +1081,11 @@ public final class DefaultRuleEngine implements RuleEngine {
             Step s = steps.get(i);
             StepKind k = kindOf(s);
             if (k == StepKind.SLIDE) {
+              /* Přidá token kroku do StringBuilder. Použití: buildArimaaNotationBody. */
                 appendStepNotation(sb, board, s);
+              /* Jeden krok na {@link Board}. Použití: applyMoveToBoard, notace. */
                 applyOneStep(board, s);
+              /* Přidá tokeny pastí po kroku. Použití: buildArimaaNotationBody. */
                 appendTrapNotation(sb, board);
                 if (i + 1 < steps.size() && kindOf(steps.get(i + 1)) == StepKind.PULL_DRAG_WEAKER) {
                     i++;
@@ -1028,6 +1095,7 @@ public final class DefaultRuleEngine implements RuleEngine {
                     appendTrapNotation(sb, board);
                 }
             } else if (k == StepKind.PUSH_DISPLACE_WEAKER) {
+              /* Přidá token kroku do StringBuilder. Použití: buildArimaaNotationBody. */
                 appendStepNotation(sb, board, s);
                 applyOneStep(board, s);
                 appendTrapNotation(sb, board);
@@ -1037,6 +1105,7 @@ public final class DefaultRuleEngine implements RuleEngine {
                 applyOneStep(board, s2);
                 appendTrapNotation(sb, board);
             } else if (k == StepKind.PULL_VACATE_STRONGER) {
+              /* Přidá token kroku do StringBuilder. Použití: buildArimaaNotationBody. */
                 appendStepNotation(sb, board, s);
                 applyOneStep(board, s);
                 appendTrapNotation(sb, board);
@@ -1049,7 +1118,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return sb.toString().trim();
     }
-
+    /* Přidá token kroku do StringBuilder. Použití: buildArimaaNotationBody. */
     private static void appendStepNotation(StringBuilder sb, Board board, Step step) {
         Piece p = board.getPiece(step.getFrom());
         if (p == null) {
@@ -1062,8 +1131,9 @@ public final class DefaultRuleEngine implements RuleEngine {
                 .append(step.getFrom().toAlgebraic())
                 .append(directionLetter(step.getFrom(), step.getTo()));
     }
-
+    /* Přidá tokeny pastí po kroku. Použití: buildArimaaNotationBody. */
     private static void appendTrapNotation(StringBuilder sb, Board board) {
+      /* Pasti na {@link Board} s callbackem oběti. Použití: applyMoveToBoard, notace. */
         resolveTraps(board, victim -> {
             if (sb.length() > 0) {
                 sb.append(' ');
@@ -1075,7 +1145,7 @@ public final class DefaultRuleEngine implements RuleEngine {
             sb.append(pieceNotationLetter(victim)).append(at.toAlgebraic()).append('x');
         });
     }
-
+    /* Písmeno figurky pro notaci. Použití: appendStepNotation. */
     private static String pieceNotationLetter(Piece p) {
         char c = switch (p.getType()) {
             case ELEPHANT -> 'E';
@@ -1087,7 +1157,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         };
         return String.valueOf(p.getSide() == PlayerSide.GOLD ? c : Character.toLowerCase(c));
     }
-
+    /* Směr n/e/s/w mezi poli. Použití: appendStepNotation. */
     private static char directionLetter(Position from, Position to) {
         int df = to.getFileIndex() - from.getFileIndex();
         int dr = to.getRankIndex() - from.getRankIndex();
@@ -1105,7 +1175,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         throw new IllegalArgumentException("notation: non-orthogonal step");
     }
-
+    /* Sousední vlastní na desce. Použití: resolveTraps. */
     private static boolean hasOrthogonalFriendly(Board board, PlayerSide side, Position pos) {
         for (Position n : orthogonalNeighbors(pos)) {
             Piece p = board.getPiece(n);
@@ -1115,7 +1185,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return false;
     }
-
+    /* Králík strany na dané řadě. Použití: evaluateTerminalWithReason. */
     private static boolean hasRabbitOnRank(Board board, PlayerSide side, int rankIndex) {
         for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
             Piece p = board.getPiece(Position.of(f, rankIndex));
@@ -1125,7 +1195,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return false;
     }
-
+    /* Počet králíků strany. Použití: evaluateTerminalWithReason, log. */
     private static int countRabbits(Board board, PlayerSide side) {
         int n = 0;
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
@@ -1138,7 +1208,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return n;
     }
-
+    /* Mapa obsazení z desky. Použití: validace, simulatePlayPrefix. */
     private static Map<Position, Piece> snapshotOccupancy(Board board) {
         Map<Position, Piece> occ = new HashMap<>();
         for (int r = 0; r < BoardConstants.BOARD_SIZE; r++) {
@@ -1152,11 +1222,11 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return occ;
     }
-
+    /* Kopie mapy obsazení. Použití: validace, enumerateStepBundles. */
     private static Map<Position, Piece> copyOcc(Map<Position, Piece> occ) {
         return new HashMap<>(occ);
     }
-
+    /* Jeden krok na mapě. Použití: tryValidateSequentialSteps. */
     private static void applyOneStepOnOccupancy(Map<Position, Piece> occ, Step step) {
         Piece moving = occ.remove(step.getFrom());
         if (moving != null) {
@@ -1169,13 +1239,13 @@ public final class DefaultRuleEngine implements RuleEngine {
         board.setPiece(step.getFrom(), null);
         board.setPiece(step.getTo(), moving);
     }
-
+    /* Zda jsou pole ortogonální sousedé. Použití: slide/push/pull pravidla. */
     private static boolean isOrthogonalNeighbor(Position a, Position b) {
         int df = Math.abs(a.getFileIndex() - b.getFileIndex());
         int dr = Math.abs(a.getRankIndex() - b.getRankIndex());
         return df + dr == 1;
     }
-
+    /* Zda králík jde pozpátku. Použití: canSlideOnOcc. */
     private static boolean isRabbitBackward(PlayerSide side, Position from, Position to) {
         int fromR = from.getRankIndex();
         int toR = to.getRankIndex();
@@ -1184,11 +1254,11 @@ public final class DefaultRuleEngine implements RuleEngine {
             case SILVER -> toR > fromR;
         };
     }
-
+    /* Protistrana. Použití: finishPlayTurnAfterBoardMutation. */
     private static PlayerSide opponent(PlayerSide side) {
         return side == PlayerSide.GOLD ? PlayerSide.SILVER : PlayerSide.GOLD;
     }
-
+    /* Kopie {@link Move}. Použití: DFS generování tahů. */
     private static Move copyMove(Move src) {
         Move m = new Move();
         for (Step s : src.getSteps()) {
@@ -1196,7 +1266,7 @@ public final class DefaultRuleEngine implements RuleEngine {
         }
         return m;
     }
-
+    /* Kopie {@link Step}. Použití: copyMove, applyMoveToBoard. */
     private static Step copyStep(Step s) {
         Step t = new Step();
         t.setFrom(s.getFrom());

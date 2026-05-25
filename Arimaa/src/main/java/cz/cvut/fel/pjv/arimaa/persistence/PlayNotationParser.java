@@ -26,6 +26,7 @@ public final class PlayNotationParser {
     private PlayNotationParser() {
     }
 
+    /** True for trap-capture tokens like {@code Rc3x} (not real steps; stripped when parsing). */
     static boolean isTrapRemovalNotation(String token) {
         return token != null && TRAP_REMOVAL_TOKEN.matcher(token).matches();
     }
@@ -79,6 +80,7 @@ public final class PlayNotationParser {
         return new ParsedLine(move, earlyPass);
     }
 
+    /** Splits notation body on whitespace into move/trap/pass tokens. */
     static ArrayList<String> tokenize(String body) {
         if (body.isEmpty()) {
             return new ArrayList<>();
@@ -174,6 +176,7 @@ public final class PlayNotationParser {
         return move;
     }
 
+    /* Deep copy of accumulated steps while aligning saved tokens to legal bundles. */
     private static Move copyMove(Move src) {
         Move m = new Move();
         for (Step s : src.getSteps()) {
@@ -182,6 +185,7 @@ public final class PlayNotationParser {
         return m;
     }
 
+    /* Step copy for parser trials (positions + kind). */
     private static Step copyStep(Step s) {
         Step t = new Step();
         t.setFrom(s.getFrom());

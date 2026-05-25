@@ -82,6 +82,7 @@ final class FigureSkinDirectoryDiscovery {
         return List.copyOf(out);
     }
 
+    /* Adds immediate child folder names of RESOURCE_ROOT when resources are on a file: URL. */
     private static void collectFromFileSystem(URL url, Set<String> names) throws Exception {
         Path base = Paths.get(url.toURI());
         if (!Files.isDirectory(base)) {
@@ -95,6 +96,7 @@ final class FigureSkinDirectoryDiscovery {
         }
     }
 
+    /* Scans JAR entries under RESOURCE_ROOT prefix for first-level skin directory names. */
     private static void collectFromJar(URL url, Set<String> names) throws java.io.IOException {
         URLConnection conn = url.openConnection();
         if (!(conn instanceof JarURLConnection jarConn)) {
@@ -127,6 +129,7 @@ final class FigureSkinDirectoryDiscovery {
         }
     }
 
+    /* Index of target in list ignoring case (moves FALLBACK_SKIN_NAME to front of menu list). */
     private static int indexOfIgnoreCase(List<String> list, String target) {
         for (int i = 0; i < list.size(); i++) {
             if (target.equalsIgnoreCase(list.get(i))) {

@@ -21,14 +21,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
 /**
  * Optional victory clip from {@code assets/gold-victory.mp4} or {@code assets/silver-victory.mp4}, played as an overlay
  * on the 8×8 cell area only ({@link #installOnCellArea}), scaled with the playing field (coordinates stay visible).
+ *
+ * <p>Resolution order: (1) {@code assets/} next to the running fat JAR if present; (2) same files embedded in the JAR
+ * (built from module {@code assets/} at package time). External files override bundled clips without repackaging.
  *
  * <p>Recommended format: <strong>H.264 video + AAC audio</strong> in MP4. <strong>MP3 audio inside MP4</strong> often
  * triggers {@code ERROR_MEDIA_INVALID} with JavaFX Media (GStreamer) on Windows.
@@ -73,12 +74,12 @@ final class PlayVictoryMediaSfx {
             return;
         }
         String name = winner == PlayerSide.GOLD ? "gold-victory.mp4" : "silver-victory.mp4";
-        Optional<Path> sourcePath = resolveVictoryMediaPath(name);
-        if (sourcePath.isEmpty()) {
+        Optional<PlaybackTarget> target = resolveVictoryPlaybackTarget(name);
+        if (target.isEmpty()) {
             return;
         }
-        PlaybackTarget target = preparePlaybackTarget(sourcePath.get());
-        Platform.runLater(() -> playOnBoardOverlay(alertOwner, target.playbackUri(), target.tempCopy()));
+        PlaybackTarget t = target.get();
+        Platform.runLater(() -> playOnBoardOverlay(alertOwner, t.playbackUri(), t.tempCopy()));
     }
 
     /** Stops playback and hides the board overlay (e.g. new game). */
@@ -109,35 +110,25 @@ final class PlayVictoryMediaSfx {
         return false;
     }
 
+    /* URI string plus optional temp file to delete after playback (non-ASCII paths / embedded extract). */
     private record PlaybackTarget(String playbackUri, Path tempCopy) {}
 
-    private static Optional<Path> resolveVictoryMediaPath(String fileName) {
-        List<Path> candidates = new ArrayList<>();
+    /**
+     * Jar-adjacent {@code assets/<file>} overrides clips embedded from {@code Arimaa/assets/} at build time.
+     */
+    private static Optional<PlaybackTarget> resolveVictoryPlaybackTarget(String fileName) {
         Path jarAdjacent = tryJarAdjacentAsset(fileName);
         if (jarAdjacent != null) {
-            candidates.add(jarAdjacent);
-        }
-        String userDir = System.getProperty("user.dir", ".");
-        candidates.add(Path.of(userDir, ASSETS_DIR, fileName));
-        candidates.add(Path.of(userDir, "target", ASSETS_DIR, fileName));
-        candidates.add(Path.of(ASSETS_DIR, fileName));
-        Path moduleRoot = tryResolveMavenModuleRoot();
-        if (moduleRoot != null) {
-            candidates.add(moduleRoot.resolve(ASSETS_DIR).resolve(fileName));
-            candidates.add(moduleRoot.resolve("target").resolve(ASSETS_DIR).resolve(fileName));
-        }
-        for (Path candidate : candidates) {
-            Path abs = candidate.toAbsolutePath().normalize();
+            Path abs = jarAdjacent.toAbsolutePath().normalize();
             if (isReadableMediaFile(abs)) {
-                return Optional.of(abs);
+                log.debug("victory media: jar-adjacent {}", abs);
+                return Optional.of(preparePlaybackTarget(abs));
             }
         }
-        log.warn(
-                "victory media: soubor {} nenalezen (zkuste assets vedle .jar nebo v pracovním adresáři).",
-                fileName);
-        return Optional.empty();
+        return materializeEmbeddedPlaybackTarget(fileName);
     }
 
+    /* Space handler: pause/resume the victory MediaPlayer when overlay is visible. */
     private static void toggleVictoryPauseResume() {
         MediaPlayer player = activePlayer;
         if (player == null) {
@@ -151,6 +142,7 @@ final class PlayVictoryMediaSfx {
         }
     }
 
+    /* Returns file URI or temp-file URI when path contains non-ASCII (JavaFX Media quirk on Windows). */
     private static PlaybackTarget preparePlaybackTarget(Path sourceAbs) {
         Path abs = sourceAbs.toAbsolutePath().normalize();
         if (!pathHasNonAscii(abs)) {
@@ -166,10 +158,33 @@ final class PlayVictoryMediaSfx {
         }
     }
 
+    /* Copies bundled classpath resource to a temp file (JavaFX Media needs a real file URI). */
+    private static Optional<PlaybackTarget> materializeEmbeddedPlaybackTarget(String fileName) {
+        String resourcePath = ASSETS_DIR + "/" + fileName;
+        ClassLoader loader = PlayVictoryMediaSfx.class.getClassLoader();
+        try (InputStream in = loader.getResourceAsStream(resourcePath)) {
+            if (in == null) {
+                log.warn(
+                        "victory media: embedded {} missing (rebuild with Arimaa/assets/ or place assets/ next to JAR).",
+                        resourcePath);
+                return Optional.empty();
+            }
+            Path tmp = Files.createTempFile("arimaa-victory-", ".mp4");
+            Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING);
+            log.debug("victory media: embedded {} → {}", resourcePath, tmp);
+            return Optional.of(new PlaybackTarget(tmp.toUri().toString(), tmp));
+        } catch (Exception ex) {
+            log.warn("victory media: embedded {} failed: {}", resourcePath, ex.toString());
+            return Optional.empty();
+        }
+    }
+
+    /* True if the path string has code points above ASCII (triggers temp copy for Media). */
     private static boolean pathHasNonAscii(Path path) {
         return path.toString().chars().anyMatch(ch -> ch > 127);
     }
 
+    /* Quick readability probe: regular file and at least one byte readable. */
     private static boolean isReadableMediaFile(Path file) {
         if (!Files.isRegularFile(file)) {
             return false;
@@ -182,6 +197,7 @@ final class PlayVictoryMediaSfx {
         }
     }
 
+    /* assets/ next to the running JAR (distribution override). */
     private static Path tryJarAdjacentAsset(String fileName) {
         try {
             var codeSource = PlayVictoryMediaSfx.class.getProtectionDomain().getCodeSource();
@@ -207,41 +223,7 @@ final class PlayVictoryMediaSfx {
         }
     }
 
-    private static Path tryResolveMavenModuleRoot() {
-        try {
-            var codeSource = PlayVictoryMediaSfx.class.getProtectionDomain().getCodeSource();
-            if (codeSource == null || codeSource.getLocation() == null) {
-                return null;
-            }
-            Path location = Paths.get(codeSource.getLocation().toURI());
-            if (Files.isRegularFile(location)) {
-                Path targetDir = location.getParent();
-                if (targetDir != null && "target".equals(targetDir.getFileName().toString())) {
-                    Path mod = targetDir.getParent();
-                    if (mod != null && Files.isDirectory(mod.resolve("src"))) {
-                        return mod;
-                    }
-                }
-                return null;
-            }
-            if (Files.isDirectory(location)) {
-                Path leaf = location.getFileName();
-                if (leaf != null && "classes".equals(leaf.toString())) {
-                    Path targetDir = location.getParent();
-                    if (targetDir != null && "target".equals(targetDir.getFileName().toString())) {
-                        Path mod = targetDir.getParent();
-                        if (mod != null && Files.isDirectory(mod.resolve("src"))) {
-                            return mod;
-                        }
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-            // ignore
-        }
-        return null;
-    }
-
+    /* FX thread: shows overlay, wires end/error handlers, plays Media (dismissOnFxThread clears prior state). */
     private static void playOnBoardOverlay(Stage alertOwner, String uri, Path tempCopy) {
         dismissOnFxThread();
         try {
@@ -292,6 +274,7 @@ final class PlayVictoryMediaSfx {
         }
     }
 
+    /* Hides overlay, detaches MediaView, stops/disposes player, deletes temp copy if any. */
     private static void dismissOnFxThread() {
         if (overlayRoot != null) {
             overlayRoot.setVisible(false);
@@ -314,6 +297,7 @@ final class PlayVictoryMediaSfx {
         }
     }
 
+    /* Warning dialog when GStreamer cannot decode the victory clip (codec hints in Czech). */
     private static void showVictoryDecodeErrorAlert(Stage owner, MediaException err) {
         Alert alert = new Alert(Alert.AlertType.WARNING);
         if (owner != null) {
@@ -332,6 +316,7 @@ final class PlayVictoryMediaSfx {
         alert.showAndWait();
     }
 
+    /* Best-effort stop/dispose so native player resources are released before a new clip. */
     private static void disposeVictoryPlayer(MediaPlayer player) {
         if (player == null) {
             return;

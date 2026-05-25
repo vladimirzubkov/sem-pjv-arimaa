@@ -94,6 +94,7 @@ public final class FigureSvgRasterCache {
         cache.clear();
     }
 
+    /* Resource file stem (e.g. gCamel) matching asset names in the skin directory. */
     private static String resourceStem(PlayerSide side, PieceType type) {
         String p = side == PlayerSide.GOLD ? "g" : "s";
         String piece = switch (type) {
@@ -107,6 +108,7 @@ public final class FigureSvgRasterCache {
         return p + piece;
     }
 
+    /* Loads stem from active skin, then from FALLBACK_SKIN_NAME if missing (computeIfAbsent target). */
     private Image loadFigure(String stem, double maxSide) {
         String primary = prefixForSkin(skinDirectoryName);
         Image img = loadFromDirectory(primary, stem, maxSide);
@@ -124,6 +126,7 @@ public final class FigureSvgRasterCache {
         return null;
     }
 
+    /* Tries stem.svg via Batik, then raster extensions under the given classpath prefix. */
     private static Image loadFromDirectory(String prefix, String stem, double maxSide) {
         String svgPath = prefix + stem + ".svg";
         URL svgUrl = FigureSvgRasterCache.class.getResource(svgPath);
@@ -145,6 +148,7 @@ public final class FigureSvgRasterCache {
         return null;
     }
 
+    /* Renders SVG to an in-memory PNG at super-sampled size, then wraps as JavaFX Image. */
     private static Image rasterizeSvgFromUrl(URL url, double maxSide) {
         try (InputStream in = url.openStream()) {
             PNGTranscoder t = new PNGTranscoder();
@@ -171,6 +175,7 @@ public final class FigureSvgRasterCache {
         }
     }
 
+    /* Loads a bitmap resource with supersampling and smoothing for board scaling. */
     private static Image loadRaster(URL url, double maxSide) {
         try (InputStream in = url.openStream()) {
             double w = maxSide * RASTER_SUPER_SAMPLING;

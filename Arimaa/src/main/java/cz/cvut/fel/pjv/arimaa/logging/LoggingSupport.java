@@ -118,6 +118,7 @@ public final class LoggingSupport {
         return dir.resolve(DEFAULT_LOG_FILE_NAME).toAbsolutePath().normalize();
     }
 
+    /* Prefers Maven module dir next to {@code src}; falls back to {@code user.dir} for default log placement. */
     private static Path resolveDefaultLogDirectory() {
         Path moduleRoot = tryResolveMavenModuleRoot();
         if (moduleRoot != null) {
@@ -126,9 +127,7 @@ public final class LoggingSupport {
         return Path.of(System.getProperty("user.dir"));
     }
 
-    /**
-     * Finds {@code …/Arimaa} when classpath is {@code …/Arimaa/target/classes} or a jar in {@code …/Arimaa/target/}.
-     */
+    /* Locates Maven module root from classpath (target/classes or target/*.jar) for default log path. */
     private static Path tryResolveMavenModuleRoot() {
         try {
             var codeSource = LoggingSupport.class.getProtectionDomain().getCodeSource();
@@ -276,6 +275,7 @@ public final class LoggingSupport {
         };
     }
 
+    /* Parses --log-level= from raw main args; used only by {@link #bootstrapFromArgs}. */
     private static Level parseLogLevelFromArgs(String[] args) {
         if (args == null) {
             return null;
@@ -294,6 +294,7 @@ public final class LoggingSupport {
         return null;
     }
 
+    /* Parses --log-file= from raw main args; used only by {@link #bootstrapFromArgs}. */
     private static String parseLogFileFromArgs(String[] args) {
         if (args == null) {
             return null;

@@ -36,6 +36,9 @@ public final class AlphaBetaComputerMove {
 
     private AlphaBetaComputerMove() {}
 
+    /**
+     * Alpha-beta search over full turns with a wall-clock cap; used by {@link ComputerPlayMove} for level-2 CPU.
+     */
     public static Move chooseMove(Game game, Random random) {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(random, "random");
@@ -64,6 +67,7 @@ public final class AlphaBetaComputerMove {
         moves.sort(maximizing ? BY_LEN_MAX : BY_LEN_MIN);
     }
 
+    /* Evaluates each root child move, keeps ties, respects {@link SearchBudget} early exit. */
     private static Move searchRootAtDepth(
             SearchSession session,
             List<Move> moves,
@@ -99,6 +103,7 @@ public final class AlphaBetaComputerMove {
         return tied.get(random.nextInt(tied.size()));
     }
 
+    /* Recursive full-turn minimax from {@code session}'s side to move; returns score from {@code root}'s view. */
     private static double minimax(
             SearchSession session,
             int depthRemaining,

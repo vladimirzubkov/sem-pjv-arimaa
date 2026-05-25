@@ -145,16 +145,19 @@ public final class SetupPresets {
         };
     }
 
+    /* Validates multiset + home ranks then returns Gold slots unchanged (preset helpers). */
     private static List<Slot> sealGold(List<Slot> slots) {
         requireValidGoldHomeOfficialMultiset(slots);
         return slots;
     }
 
+    /* Same as {@link #sealGold} for Silver home ranks (ranks 6–7). */
     private static List<Slot> sealSilver(List<Slot> slots) {
         requireValidSilverHomeOfficialMultiset(slots);
         return slots;
     }
 
+    /* Shared checker: sixteen unique cells on chosen home ranks and official Arimaa multiset. */
     private static boolean validateLayout(List<Slot> slots, boolean goldHome, boolean silverHome) {
         if (slots == null || slots.size() != 16) {
             return false;
@@ -184,6 +187,7 @@ public final class SetupPresets {
                 && c.getOrDefault(PieceType.RABBIT, 0) == 8;
     }
 
+    /* Counts each {@link PieceType} in a slot list (includes zeros for missing types). */
     private static EnumMap<PieceType, Integer> countTypes(List<Slot> slots) {
         EnumMap<PieceType, Integer> m = new EnumMap<>(PieceType.class);
         for (PieceType t : PieceType.values()) {
@@ -195,6 +199,7 @@ public final class SetupPresets {
         return m;
     }
 
+    /* Standard chess-style back rank ordering (files a–h) for Gold presets. */
     private static PieceType[] chessBackRankGoldStyle() {
         return new PieceType[] {
                 PieceType.HORSE, PieceType.CAT, PieceType.DOG, PieceType.CAMEL,
@@ -202,6 +207,7 @@ public final class SetupPresets {
         };
     }
 
+    /* Appends eight {@link Slot}s for one rank from a file-ordered piece array. */
     private static void addRankSlots(List<Slot> slots, int rankIndex, PieceType[] filesAtoH) {
         for (int f = 0; f < BoardConstants.BOARD_SIZE; f++) {
             slots.add(new Slot(Position.of(f, rankIndex), filesAtoH[f]));

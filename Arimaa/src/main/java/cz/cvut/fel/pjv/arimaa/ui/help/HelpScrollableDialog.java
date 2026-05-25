@@ -20,6 +20,7 @@ public final class HelpScrollableDialog {
 
     private HelpScrollableDialog() {}
 
+    /* Removes ScrollPane chrome so wrapped Label reads like plain text on the dialog background. */
     private static void styleFramelessScroll(ScrollPane scroll) {
         scroll.setStyle(
                 "-fx-background-color: transparent; -fx-background: transparent; "

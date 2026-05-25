@@ -9,11 +9,15 @@ final class SearchBudget {
     private int tickCounter;
     private boolean expired;
 
+    /** Caps search time at least 200 ms; used by greedy and alpha-beta CPU levels. */
     SearchBudget(long maxMs) {
         long ms = Math.max(200L, maxMs);
         this.deadlineNs = System.nanoTime() + ms * 1_000_000L;
     }
 
+    /**
+     * Cheap periodic wall-clock check (masked counter); used inside move search loops to abort before UI stalls.
+     */
     boolean isExpired() {
         if (expired) {
             return true;

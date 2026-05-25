@@ -30,10 +30,15 @@ public final class ArimaaSaveLoadSupport {
 
     private final MainController ui;
 
+    /** Binds save/load dialogs to the main window controller (file chooser + status updates). */
     public ArimaaSaveLoadSupport(MainController ui) {
         this.ui = ui;
     }
 
+    /**
+     * Writes current game via {@link GameSerializer} (includes trailing PLAY draft line when present);
+     * invoked from the File menu.
+     */
     public void saveGameToFile() {
         if (ui.gameController == null || ui.stage == null) {
             return;
@@ -78,6 +83,7 @@ public final class ArimaaSaveLoadSupport {
         }
     }
 
+    /** Loads a .txt snapshot + moves into {@link MainController#gameController} and refreshes PLAY UI state. */
     public void loadGameFromFile() {
         if (ui.gameController == null || ui.stage == null) {
             return;

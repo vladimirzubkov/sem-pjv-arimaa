@@ -29,6 +29,9 @@ public final class RandomTrapAvoidingMoveChooser {
         return mover == PlayerSide.GOLD ? !p.bySilver().isEmpty() : !p.byGold().isEmpty();
     }
 
+    /**
+     * Samples trap-safe legal turns first, then any legal turn; used by {@link ComputerPlayMove} for level-0 CPU.
+     */
     public static Move chooseMove(Game game, Random random) {
         Objects.requireNonNull(game, "game");
         Objects.requireNonNull(random, "random");

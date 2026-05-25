@@ -83,11 +83,15 @@ public class GameController {
         }
     }
 
+    /**
+     * Loads a saved .txt game into this controller (setup memento + notation lines); used from UI file open.
+     */
     public GameSerializer.LoadOutcome loadFromTxtGame(GameMemento setup, List<String> moveLines) {
         GameSerializer gs = new GameSerializer();
         return gs.loadIntoController(this, new GameSerializer.ParsedTxtGame(setup, moveLines));
     }
 
+    /** Convenience: records SETUP mutation with no PLAY notation (see overload). */
     public void recordAfterMutation() {
         recordAfterMutation(null);
     }
@@ -130,12 +134,16 @@ public class GameController {
         }
     }
 
+    /**
+     * Restores the in-memory draft to the start of the trailing half-turn before submit (PLAY UI / network sync).
+     */
     public void restoreTrailingDraftTurnStartForSubmit() {
         if (game != null && playHistory.isBootstrapped()) {
             playHistory.restoreTrailingDraftTurnStart(game);
         }
     }
 
+    /** Committed notation lines in order for the side panel / export when PLAY history is active. */
     public List<String> notationLinesVisible() {
         if (game != null && playHistory.isBootstrapped()) {
             return playHistory.committedNotationLinesInOrder();
@@ -143,6 +151,7 @@ public class GameController {
         return List.of();
     }
 
+    /** Next move prefix (e.g. {@code 1g}) for draft notation line under the current committed history. */
     public String nextPlayNotationPrefix() {
         if (game != null && playHistory.isBootstrapped()) {
             return playHistory.nextPlayNotationPrefix();
@@ -150,6 +159,7 @@ public class GameController {
         return "1g";
     }
 
+    /** Whether undo is available: SETUP timeline or PLAY half-turn step back on the scrubber. */
     public boolean canUndo() {
         if (game == null) {
             return false;
@@ -160,6 +170,7 @@ public class GameController {
         return playHistory.isBootstrapped() && playHistory.canStepViewBack();
     }
 
+    /** Whether redo is available in the current phase (SETUP stack or PLAY draft within half-turn). */
     public boolean canRedo() {
         if (game == null) {
             return false;
@@ -170,6 +181,7 @@ public class GameController {
         return playHistory.isBootstrapped() && playHistory.canStepViewForwardWithinHalf();
     }
 
+    /** Undoes one SETUP snapshot or steps PLAY history back one view step and reapplies it to {@link #game}. */
     public boolean undo() {
         if (game == null) {
             return false;
@@ -185,6 +197,7 @@ public class GameController {
         return true;
     }
 
+    /** Redoes SETUP or advances PLAY draft within the current half-turn, then reapplies the view to {@link #game}. */
     public boolean redo() {
         if (game == null) {
             return false;
@@ -200,6 +213,9 @@ public class GameController {
         return true;
     }
 
+    /**
+     * Applies a human turn through {@link Game#applyMove}; used by UI and tests. Returns {@code false} on rule errors.
+     */
     public boolean submitHumanMove(Move move) {
         if (game == null || move == null) {
             return false;

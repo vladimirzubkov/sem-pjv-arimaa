@@ -129,12 +129,7 @@ public class Board {
         return b;
     }
 
-    /**
-     * Checks if the given rank and file indices are within the bounds of the board.
-     * @param rankIndex the rank index to check
-     * @param fileIndex the file index to check
-     * @return {@code true} if the given rank and file indices are within the bounds of the board
-     */
+    /* Bounds check for rank/file before array access in {@link #getPiece} / {@link #setPiece}. */
     private static boolean isInsideBoard(int rankIndex, int fileIndex) {
     return rankIndex >= 0 && rankIndex < BoardConstants.BOARD_SIZE
             && fileIndex >= 0 && fileIndex < BoardConstants.BOARD_SIZE;

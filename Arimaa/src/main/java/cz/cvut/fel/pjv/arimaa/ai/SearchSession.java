@@ -28,6 +28,7 @@ public final class SearchSession {
         this.ranksMirroredForHomeCheck = ranksMirroredForHomeCheck;
     }
 
+    /** Wraps a live {@link Game} in a mutable search grid sharing piece references (CPU move search). */
     public static SearchSession fromGame(Game game) {
         Objects.requireNonNull(game, "game");
         return new SearchSession(SearchGrid.fromGame(game), game.isRanksMirroredForHomeCheck());
@@ -67,6 +68,7 @@ public final class SearchSession {
         }
     }
 
+    /** All legal full turns from the search grid (CPU greedy / alpha-beta); delegates to {@link GridMoveRules}. */
     public List<Move> enumerateLegalMoves() {
         if (grid.state != GameState.PLAY) {
             return List.of();
@@ -74,6 +76,7 @@ public final class SearchSession {
         return GridMoveRules.enumerateLegalCompleteMoves(grid.cells, grid.sideToMove);
     }
 
+    /** One random legal full turn on the grid; used by {@link GreedyComputerMove} sampling loops. */
     public Optional<Move> sampleRandomLegalMove(Random random) {
         Objects.requireNonNull(random, "random");
         if (grid.state != GameState.PLAY) {
@@ -103,6 +106,7 @@ public final class SearchSession {
         game.setMatchWinner(grid.matchWinner);
     }
 
+    /* Updates side to move, terminal state, and immobilization loss after steps are applied on the grid. */
     private void finishTurnAfterSteps(PlayerSide mover) {
         PlayerSide terminal = grid.evaluateTerminalWinner();
         if (terminal != null) {

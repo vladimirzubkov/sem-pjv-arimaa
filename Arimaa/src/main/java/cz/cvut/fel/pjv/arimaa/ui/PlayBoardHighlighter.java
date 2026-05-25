@@ -139,10 +139,7 @@ final class PlayBoardHighlighter {
         }
     }
 
-    /**
-     * Cell of the pushed weaker piece for the thin focus ring: explicit draft pair, or the only weaker matching this
-     * destination.
-     */
+    /* Weaker-from cell for the thin push focus ring: explicit draft pair or unambiguous single option. */
     private static Position pushFocusWeakerCell(PlayTurnDraftState draft, PlayTargetBundle targets) {
         if (draft.keyboardPushFocus == null) {
             return null;
@@ -167,6 +164,7 @@ final class PlayBoardHighlighter {
         return null;
     }
 
+    /* Clears push focus when targets change; drops weaker-from if it no longer matches a legal PushFirstOption. */
     private static void reconcilePushKeyboardFocus(PlayTurnDraftState draft, PlayTargetBundle targets) {
         if (draft.keyboardPushFocus == null) {
             draft.keyboardPushWeakFrom = null;
@@ -188,6 +186,7 @@ final class PlayBoardHighlighter {
         }
     }
 
+    /* Base square color before highlight tints (gradient trap fill vs stored baseFill). */
     private static Color cellBaseFill(BoardGridView.CellData d) {
         Paint p = d.background().getFill();
         return p instanceof Color c ? c : d.baseFill();

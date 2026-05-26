@@ -33,4 +33,7 @@ public interface NetworkGameBridge {
     PlayerControllerKind getSilverPlayerKind();
 
     boolean isApplyingNetworkSnapshot();
+
+    /** Clears client-side „waiting for host snapshot“ after {@code error} or disconnect. */
+    void clearNetworkClientAwaitingHostSync();
 }

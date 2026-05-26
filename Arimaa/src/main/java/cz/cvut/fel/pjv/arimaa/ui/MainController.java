@@ -31,6 +31,7 @@ import cz.cvut.fel.pjv.arimaa.util.BoardConstants;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
+import javafx.util.Duration;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.application.Platform;
@@ -208,6 +209,11 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
 
     /** When true, {@link #applyNetworkSnapshotSaveText} is rebuilding state — host must not echo snapshots. */
     private boolean applyingNetworkSnapshot;
+    /**
+     * Client: after {@link #sendNetworkClientIntent} until the next {@code state_snapshot} (or wire {@code error}).
+     * Blocks duplicate intents and CPU re-scheduling while the board still shows a stale local copy.
+     */
+    private boolean networkClientAwaitingHostSync;
     /** Lazily created; {@link #clearNetworkSessionAfterDisconnect} leaves the instance but role is {@link NetworkRole#NONE}. */
     private ArimaaNetworkCoordinator arimaaNetworkCoordinator;
     ToggleGroup goldPlayerMenuGroup;
@@ -491,10 +497,10 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                 return;
             }
             if (isNetworkClient()) {
-                arimaaNetwork()
-                        .sendIntent(
-                                new WireMessages.IntentMessage(
-                                        IntentKind.PLAY_ACTIVATE, null, modelFile, modelRank, null));
+                sendNetworkClientIntent(
+                        new WireMessages.IntentMessage(
+                                IntentKind.PLAY_ACTIVATE, null, modelFile, modelRank, null),
+                        null);
                 return;
             }
             playPhase.handlePlayBoardActivation(modelFile, modelRank);
@@ -507,10 +513,10 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             return;
         }
         if (isNetworkClient()) {
-            arimaaNetwork()
-                    .sendIntent(
-                            new WireMessages.IntentMessage(
-                                    IntentKind.SETUP_BOARD_CLICK, null, modelFile, modelRank, null));
+            sendNetworkClientIntent(
+                    new WireMessages.IntentMessage(
+                            IntentKind.SETUP_BOARD_CLICK, null, modelFile, modelRank, null),
+                    null);
             return;
         }
         setupPhase.onBoardCellClick(modelFile, modelRank);
@@ -522,7 +528,8 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             return;
         }
         if (isNetworkClient()) {
-            arimaaNetwork().sendIntent(new WireMessages.IntentMessage(IntentKind.SETUP_PICK, type, null, null, null));
+            sendNetworkClientIntent(
+                    new WireMessages.IntentMessage(IntentKind.SETUP_PICK, type, null, null, null), null);
             return;
         }
         setupPhase.onPickReserve(type);
@@ -534,7 +541,8 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             return;
         }
         if (isNetworkClient()) {
-            arimaaNetwork().sendIntent(new WireMessages.IntentMessage(IntentKind.SETUP_CANCEL_HAND, null, null, null, null));
+            sendNetworkClientIntent(
+                    new WireMessages.IntentMessage(IntentKind.SETUP_CANCEL_HAND, null, null, null, null), null);
             return;
         }
         if (g != null) {
@@ -1142,6 +1150,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
     }
 
     public void clearNetworkSessionAfterDisconnect() {
+        networkClientAwaitingHostSync = false;
         goldPlayerKind = PlayerControllerKind.HUMAN;
         silverPlayerKind = PlayerControllerKind.COMPUTER_LEVEL_1;
         networkPeerGoldKind = null;
@@ -1301,6 +1310,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         try {
             GameSerializer ser = new GameSerializer();
             GameSerializer.ParsedTxtGame p = ser.parse(text);
+            cancelComputerPlayForHistoryScrub();
             clearPlayTurnUi();
             gameController.loadFromTxtGame(p.playStartSnapshot(), p.moveLines());
             syncPlayPartialFromHistory();
@@ -1334,11 +1344,23 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         } catch (RuntimeException ex) {
             log.warn("network snapshot load failed", ex);
             setStatus("Síť — nelze načíst stav: %s".formatted(ex.getMessage()));
+            if (isNetworkClient()) {
+                networkClientAwaitingHostSync = false;
+                computerActionPending = false;
+            }
         } finally {
             applyingNetworkSnapshot = false;
             if (isNetworkClient()) {
                 computerActionPending = false;
+                networkClientAwaitingHostSync = false;
             }
+        }
+        /*
+         * refreshAll() runs inside try while applyingNetworkSnapshot is true, so scheduleComputerTurnIfNeeded
+         * returns early there. After snapshot load, client must queue Silver CPU in PLAY explicitly.
+         */
+        if (isNetworkClient()) {
+            scheduleComputerTurnIfNeeded();
         }
     }
 
@@ -1606,7 +1628,17 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         if (g == null || stage == null) {
             return;
         }
+        if (applyingNetworkSnapshot) {
+            return;
+        }
+        if (isNetworkClient() && networkClientAwaitingHostSync) {
+            return;
+        }
         if (computerActionPending) {
+            return;
+        }
+        Timeline activeCpuTimeline = computerPlayTurnTimeline;
+        if (activeCpuTimeline != null && activeCpuTimeline.getStatus() == Animation.Status.RUNNING) {
             return;
         }
         if (!shouldOfferComputerStep(g)) {
@@ -1671,13 +1703,6 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                         return;
                     }
                     Game gNow = game();
-                    if (isNetworkClient()
-                            && gNow != null
-                            && gNow.getSideToMove() == PlayerSide.SILVER
-                            && isComputerControlled(PlayerSide.SILVER)) {
-                        submitNetworkClientSilverCpuPlayTurn(chosen);
-                        return;
-                    }
                     beginComputerPlayAnimation(chosen);
                 });
             } catch (IllegalStateException ex) {
@@ -1721,14 +1746,48 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         return isComputerControlled(side);
     }
 
-    /* True when the side that should act next (setup or PLAY) is controlled by a CPU kind. */
+    /*
+     * Whether to schedule local CPU work. In network games only the host runs setup CPU and Gold CPU; Silver CPU on
+     * the client sends {@code PLAY_SUBMIT_NOTATION} after the step-delay slider (host must not spin on Silver).
+     */
     private boolean shouldOfferComputerStep(Game g) {
+        if (isNetworkClient()) {
+            if (g.getState() == GameState.SETUP_GOLD || g.getState() == GameState.SETUP_SILVER) {
+                return false;
+            }
+            if (g.getState() == GameState.PLAY && g.getSideToMove() == PlayerSide.GOLD) {
+                return false;
+            }
+            return g.getState() == GameState.PLAY
+                    && g.getSideToMove() == PlayerSide.SILVER
+                    && seatActsAsComputer(PlayerSide.SILVER);
+        }
+        /*
+         * In PLAY, Silver CPU moves arrive as client intents — host must not spin scheduleComputerTurn. In SETUP,
+         * Silver CPU rozestavení runs only on the host (authoritative).
+         */
+        if (isNetworkHost()
+                && networkPeerSilverKind != null
+                && networkPeerSilverKind.isComputer()
+                && g.getState() == GameState.PLAY
+                && g.getSideToMove() == PlayerSide.SILVER) {
+            return false;
+        }
         return switch (g.getState()) {
             case SETUP_GOLD -> seatActsAsComputer(PlayerSide.GOLD);
             case SETUP_SILVER -> seatActsAsComputer(PlayerSide.SILVER);
             case PLAY -> seatActsAsComputer(g.getSideToMove());
             default -> false;
         };
+    }
+
+    private boolean automateSideToMove(Game g) {
+        if (g == null) {
+            return false;
+        }
+        return isNetworkSessionActive()
+                ? seatActsAsComputer(g.getSideToMove())
+                : isComputerControlled(g.getSideToMove());
     }
 
     /* Stops the per-step CPU animation Timeline and drops the reference (history scrub / disconnect). */
@@ -1854,6 +1913,25 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             gameController.enterPlayPhaseBootstrap();
         }
         notifyPlayChessClockEnterPlay();
+        hostBroadcastSnapshotIfNeeded();
+    }
+
+    /**
+     * Sends one Silver intent to the host and waits for the authoritative {@code state_snapshot}. Ignored while a
+     * previous intent is still pending (prevents duplicate CPU turns and click races).
+     */
+    private void sendNetworkClientIntent(WireMessages.IntentMessage intent, String waitingStatus) {
+        if (!isNetworkClient() || networkClientAwaitingHostSync) {
+            return;
+        }
+        networkClientAwaitingHostSync = true;
+        arimaaNetwork().sendIntent(intent);
+        setStatus(waitingStatus != null ? waitingStatus : "Síť — čekám na server…");
+    }
+
+    @Override
+    public void clearNetworkClientAwaitingHostSync() {
+        networkClientAwaitingHostSync = false;
     }
 
     /* Client sends host a full notation line for Silver CPU turn (intent PLAY_SUBMIT_NOTATION). */
@@ -1867,10 +1945,10 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             String prefix = gameController.nextPlayNotationPrefix();
             Move submit = PlayDraftNotationSupport.copyMove(chosen);
             String notationLine = ArimaaNotation.formatFullTurn(g.getBoard(), submit, prefix);
-            arimaaNetwork()
-                    .sendIntent(
-                            new WireMessages.IntentMessage(
-                                    IntentKind.PLAY_SUBMIT_NOTATION, null, null, null, null, notationLine));
+            sendNetworkClientIntent(
+                    new WireMessages.IntentMessage(
+                            IntentKind.PLAY_SUBMIT_NOTATION, null, null, null, null, notationLine),
+                    "Síť — odesílám tah počítače…");
         } finally {
             computerActionPending = false;
         }
@@ -1884,7 +1962,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         if (g == null
                 || gameController == null
                 || g.getState() != GameState.PLAY
-                || !isComputerControlled(g.getSideToMove())) {
+                || !automateSideToMove(g)) {
             computerActionPending = false;
             refreshAll();
             return;
@@ -1959,6 +2037,10 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                 return;
             }
             PlayerSide mover = g.getSideToMove();
+            if (isNetworkClient() && mover == PlayerSide.SILVER && seatActsAsComputer(PlayerSide.SILVER)) {
+                submitNetworkClientSilverCpuPlayTurn(full);
+                return;
+            }
             gameController.restoreTrailingDraftTurnStartForSubmit();
             Move submit = PlayDraftNotationSupport.copyMove(full);
             String prefix = gameController.nextPlayNotationPrefix();
@@ -2208,7 +2290,8 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             return;
         }
         if (isNetworkClient()) {
-            arimaaNetwork().sendIntent(new WireMessages.IntentMessage(IntentKind.SETUP_RANDOM, null, null, null, null));
+            sendNetworkClientIntent(
+                    new WireMessages.IntentMessage(IntentKind.SETUP_RANDOM, null, null, null, null), null);
             return;
         }
         setupPhase.performRandomSetupPlacementAction();
@@ -2222,9 +2305,8 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         }
         if (isNetworkClient()) {
             int preset = setupPhase.consumeNextChessPresetIndexForNetwork();
-            arimaaNetwork()
-                    .sendIntent(
-                            new WireMessages.IntentMessage(IntentKind.SETUP_CHESS, null, null, null, preset));
+            sendNetworkClientIntent(
+                    new WireMessages.IntentMessage(IntentKind.SETUP_CHESS, null, null, null, preset), null);
             return;
         }
         setupPhase.applyChessMappedSetupFromUi();
@@ -2237,7 +2319,8 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             return;
         }
         if (isNetworkClient()) {
-            arimaaNetwork().sendIntent(new WireMessages.IntentMessage(IntentKind.SETUP_COMPLETE, null, null, null, null));
+            sendNetworkClientIntent(
+                    new WireMessages.IntentMessage(IntentKind.SETUP_COMPLETE, null, null, null, null), null);
             return;
         }
         setupPhase.tryCompleteSetupFromUi();
@@ -2253,11 +2336,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
     boolean tryCancelPlayDraftFromUi() {
         Game g = game();
         if (g != null && isNetworkClient() && isLocalInteractiveTurn(g)) {
-            arimaaNetwork()
-                    .sendIntent(
-                            new WireMessages.IntentMessage(
-                                    IntentKind.PLAY_CANCEL_DRAFT, null, null, null, null));
-            setStatus("Zrušení rozpracovaného tahu (síť)…");
+            sendNetworkClientIntent(
+                    new WireMessages.IntentMessage(IntentKind.PLAY_CANCEL_DRAFT, null, null, null, null),
+                    "Zrušení rozpracovaného tahu (síť)…");
             return true;
         }
         return draftUi.tryCancelPlayDraftFromUi();
@@ -2313,10 +2394,10 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             return;
         }
         if (g != null && g.getState() == GameState.PLAY && isNetworkClient()) {
-            arimaaNetwork()
-                    .sendIntent(
-                            new WireMessages.IntentMessage(
-                                    IntentKind.PLAY_ACTIVATE, null, modelFile, modelRank, null));
+            sendNetworkClientIntent(
+                    new WireMessages.IntentMessage(
+                            IntentKind.PLAY_ACTIVATE, null, modelFile, modelRank, null),
+                    null);
             return;
         }
         playPhase.handlePlayBoardActivation(modelFile, modelRank);
@@ -2328,7 +2409,8 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             return;
         }
         if (isNetworkClient()) {
-            arimaaNetwork().sendIntent(new WireMessages.IntentMessage(IntentKind.PLAY_END_TURN, null, null, null, null));
+            sendNetworkClientIntent(
+                    new WireMessages.IntentMessage(IntentKind.PLAY_END_TURN, null, null, null, null), null);
             return;
         }
         playPhase.tryEndPlayTurn();

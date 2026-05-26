@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.33
+
+- **Síť — synchronizace:** po přechodu **SETUP → PLAY** host vždy pošle **`state_snapshot`** (`onEnteredPlayPhaseFromSetup`); dříve mohl klient zůstat ve fázi rozestavení, zatímco server už hrál.
+- **Síť — klient:** po odeslání **intent** čeká na snapshot (`networkClientAwaitingHostSync`) — blokuje duplicitní kliky a druhý CPU tah; při **`error`** z hostitele nebo po načtení snapshotu se čekání zruší; stav „čekám na server“.
+- **Síť — CPU (oprava dle logů):** klient nespouští rozestavení ani Gold CPU (jen host); host necykluje `scheduleComputerTurn` na Silver CPU protihráče (tah přijde jako intent z klienta); Silver CPU na klientovi používá stejnou **krokovou animaci** jako host (`Timeline`), pak odešle intent — slider pauzy mezi kroky platí pro Silver na klientovi; **Gold CPU** animuje host podle **svého** slideru.
+- **Síť — CPU rozestavení (regrese 0.9.33):** blokace Silver CPU na hostu platí jen pro **PLAY**, ne pro **SETUP_SILVER** — jinak hra po Gold CPU nikdy nepřejde do PLAY při počítačovém Silver.
+- **Síť — desync v PLAY:** klient nespouští druhý CPU tah během `state_snapshot` / běžící animace; před načtením snapshotu se zruší lokální CPU timeline; po odeslání Silver intentu se `computerActionPending` drží do odpovědi hostitele.
+- **Síť — Silver CPU na klientovi:** po načtení `state_snapshot` se znovu zavolá `scheduleComputerTurnIfNeeded` (během `refreshAll` je ještě `applyingNetworkSnapshot`, jinak Silver v PLAY nezačne).
+- **Verze v UI (O programu):** popis v `pom.xml` sjednocen na **0.9.33** (číslo verze z git tagu při buildu beze změny).
+
 ## 0.9.32
 
 - **Výherní video:** klipy z **`Arimaa/assets/`** se při buildu vkládají do JAR (`pom.xml` resources); override z **`assets/` vedle spuštěného JAR** má přednost před vloženými soubory.

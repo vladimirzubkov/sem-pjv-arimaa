@@ -389,7 +389,11 @@ public final class ArimaaNetworkCoordinator {
                 }
                 case "error" -> {
                     WireMessages.ErrorMessage err = NetworkJson.readError(p.node());
-                    fx.runOnUiThread(() -> bridge.setStatus("Síť — chyba: %s".formatted(err.message())));
+                    fx.runOnUiThread(
+                            () -> {
+                                bridge.clearNetworkClientAwaitingHostSync();
+                                bridge.setStatus("Síť — chyba: %s".formatted(err.message()));
+                            });
                 }
                 case "ping" -> sendLine(NetworkJson.pongLine());
                 case "seat_control" -> {
@@ -474,7 +478,10 @@ public final class ArimaaNetworkCoordinator {
      * Pushes current save text to the client after model changes (host only; skipped until handshake + first snapshot).
      */
     public void broadcastSnapshotFromHostMainThread() {
-        if (role != NetworkRole.HOST || peerOut == null || bridge.isApplyingNetworkSnapshot()) {
+        if (role != NetworkRole.HOST || peerOut == null) {
+            return;
+        }
+        if (bridge.isApplyingNetworkSnapshot()) {
             return;
         }
         if (!hostHandshakeComplete) {

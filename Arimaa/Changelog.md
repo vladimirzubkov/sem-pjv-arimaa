@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.34
+
+- **Síť — PLAY_SUBMIT_NOTATION:** host přijímá krátké tahy s příponou `... pass` (dříve odmítal → desync / `error` u Silver CPU).
+- **Síť — state_snapshot:** při chybě načtení se obnoví předchozí stav (rollback); CPU se plánuje jen po úspěšném loadu.
+- **Síť — Silver CPU:** `computerActionPending` drží do `state_snapshot` / `error`; při odmítnutí intentu se lokální draft vyčistí a CPU může znovu.
+- **Síť — PLAY_END_TURN:** host vrací skutečný úspěch/neúspěch (ne vždy `true`).
+- **Síť — historie:** host neprochází „Historie tahů“ / Page Up-Down během živé síťové partie (neposílá historický pohled klientovi).
+- **Undo/Redo:** během tahu počítače se animace/výběr přeruší (bez race s commit/broadcast).
+- **Verze:** popis v `pom.xml` **0.9.34**.
+- **Síť — klient:** při Connection refused / timeout opakuje TCP connect až **~10 s** (stavový řádek s číslem pokusu), dokud host nezačne naslouchat.
+
 ## 0.9.33
 
 - **Síť — synchronizace:** po přechodu **SETUP → PLAY** host vždy pošle **`state_snapshot`** (`onEnteredPlayPhaseFromSetup`); dříve mohl klient zůstat ve fázi rozestavení, zatímco server už hrál.

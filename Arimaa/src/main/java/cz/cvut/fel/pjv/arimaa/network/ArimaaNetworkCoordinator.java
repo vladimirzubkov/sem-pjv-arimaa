@@ -10,8 +10,11 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.net.ConnectException;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
@@ -30,6 +33,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class ArimaaNetworkCoordinator {
 
     private static final Logger log = LoggerFactory.getLogger(ArimaaNetworkCoordinator.class);
+
+    /** How long the client keeps retrying TCP connect when the host is not listening yet. */
+    private static final long CLIENT_CONNECT_RETRY_WINDOW_MS = 10_000L;
+    /** Pause between refused / timed-out connect attempts. */
+    private static final long CLIENT_CONNECT_RETRY_DELAY_MS = 500L;
+    /** Per-attempt TCP connect timeout (so a dead host does not block the whole window on one try). */
+    private static final int CLIENT_CONNECT_TIMEOUT_MS = 2_000;
 
     private final NetworkGameBridge bridge;
     private final FxExecutor fx;
@@ -224,7 +234,7 @@ public final class ArimaaNetworkCoordinator {
                         () -> {
                             try {
                                 log.info("network client connecting to {}:{} …", host, port);
-                                Socket s = new Socket(host, port);
+                                Socket s = openClientSocketWithRetry(host, port);
                                 configureSocket(s);
                                 log.info(
                                         "network client TCP connected (local {} → remote {})",
@@ -508,6 +518,59 @@ public final class ArimaaNetworkCoordinator {
         sendLine(NetworkJson.byeLine());
         stopSocketsAndTasks();
         fx.runOnUiThread(bridge::clearNetworkSessionAfterDisconnect);
+    }
+
+    /**
+     * Opens a TCP socket to {@code host:port}, retrying connection-refused / connect-timeout for up to
+     * {@link #CLIENT_CONNECT_RETRY_WINDOW_MS} so the client can join while the host is still starting.
+     */
+    private Socket openClientSocketWithRetry(String host, int port) throws IOException, InterruptedException {
+        long deadlineNanos =
+                System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(CLIENT_CONNECT_RETRY_WINDOW_MS);
+        int attempt = 0;
+        IOException lastFailure = null;
+        while (!stopped.get()) {
+            attempt++;
+            try {
+                Socket s = new Socket();
+                s.connect(new InetSocketAddress(host, port), CLIENT_CONNECT_TIMEOUT_MS);
+                if (attempt > 1) {
+                    log.info("network client connected on attempt {}", attempt);
+                }
+                return s;
+            } catch (ConnectException | SocketTimeoutException ex) {
+                lastFailure = ex;
+                long remainingMs = TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime());
+                if (remainingMs <= 0) {
+                    break;
+                }
+                final int attemptNo = attempt;
+                final long remainSec = Math.max(1L, (remainingMs + 999L) / 1000L);
+                fx.runOnUiThread(
+                        () ->
+                                bridge.setStatus(
+                                        "Síť — host ještě neodpovídá, zkouším znovu… (pokus %d, ještě ~%d s)"
+                                                .formatted(attemptNo, remainSec)));
+                log.info(
+                        "network client connect attempt {} to {}:{} failed ({}), retrying ({} ms left)…",
+                        attempt,
+                        host,
+                        port,
+                        ex.toString(),
+                        remainingMs);
+                long sleepMs = Math.min(CLIENT_CONNECT_RETRY_DELAY_MS, Math.max(0L, remainingMs));
+                if (sleepMs > 0) {
+                    Thread.sleep(sleepMs);
+                }
+            }
+        }
+        if (stopped.get()) {
+            throw new IOException("Připojení zrušeno.");
+        }
+        if (lastFailure != null) {
+            throw lastFailure;
+        }
+        throw new ConnectException("Nelze se připojit k hostiteli.");
     }
 
     /* Low-latency mode for small JSON lines over localhost/LAN. */

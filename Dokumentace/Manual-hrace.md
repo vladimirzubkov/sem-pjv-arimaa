@@ -182,12 +182,20 @@ Protokol: **NDJSON** přes **UTF-8**, synchronizace stavu autoritativně u **hos
 
 3. **Port:** stejný jako u hostitele (výchozí **7788**).
 
-4. Klient hraje za **Silver** — nastavení **Nastavení → Silver hráč** (člověk / počítač / síť se u klienta netýká „síťového peer“ pro vlastní sedadlo ve stejném smyslu jako druhá strana).
+4. Klient hraje za **Silver** — nastavení **Nastavení → Silver hráč** (člověk / počítač). Gold na druhé straně ovládá hostitel.
+
+**Host ještě neběží:** pokud server ještě nenaslouchá, klient **opakuje připojení asi 10 sekund** a ve stavovém řádku ukazuje číslo pokusu. Až po vypršení okna se zobrazí chyba připojení (zkontrolujte IP z dialogu Hostovat a firewall).
 
 Ukázka hry po síti — všimněte si zrcadlení desky pro hráče.
 <img src="img/hra_po_siti.png" alt="hra_po_siti" width="1000" />
 
-### 8.3 Odpojení
+### 8.3 Co očekávat při hře
+
+- Po každém dokončeném tahu (nebo kroku Silvera odeslaném na server) klient dostane **aktuální stav** od hostitele. Dokud čeká na odpověď, další kliky / druhý tah CPU jsou blokované („čekám na server“ / odesílání tahu).
+- **Počítač za Silver** hraje na klientovi (vidíte kroky podle slideru pauzy); hotový tah odešle na hostitele. **Počítač za Gold** hraje na hostiteli.
+- V síťové hře **neprocházejte historii tahů** tak, abyste na druhé straně „odmotávali“ partii — prohlížení historie je při aktivní síti na hostiteli omezené; klient historii neskáče Page Up/Down.
+
+### 8.4 Odpojení
 
 **Síť → Odpojit** ukončí lokální relaci; druhá strana může obdržet chybu spojení. Položka je aktivní po úspěšném hostování nebo připojení.
 
@@ -205,7 +213,7 @@ Ukázka hry po síti — všimněte si zrcadlení desky pro hráče.
 
 Menu **Nápověda** — **Pravidla**, **Ovládání**, **O počítačovém soupeři**, dialog **O programu**.
 
-Verze uvedená v aplikaci odpovídá `HelpCzechTexts.FALLBACK_APP_VERSION` / manifestu (aktuálně směrováno na vývojovou verzi 0.9.30).
+Verze uvedená v aplikaci odpovídá git tagu / `AppVersion` (aktuálně vývojová řada **0.9.34** na větvi `CP3-ext`; viz `Arimaa/Changelog.md`).
 
 ---
 

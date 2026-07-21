@@ -13,7 +13,14 @@ actor "Hráč Gold\n(host)" as Gh
 Gh -> Mh : menu Síť → Hostovat (port)
 Mh -> Nh : startHost(port)\n(ServerSocket.accept)
 Cs -> Mh : menu Síť → Připojit (host, port)
-Mh -> Nc : startClient(host, port)\n(Socket)
+Mh -> Nc : startClient(host, port)
+note right of Nc
+  TCP connect s opakováním
+  až ~10 s (Connect refused /
+  timeout), dokud host
+  nezačne acceptovat.
+end note
+Nc -> Tcp : Socket.connect …
 
 == Handshake (pořadí řádků) ==
 Nc -> Tcp : řádek **hello**\n(protocolVersion, silverSeatControl)

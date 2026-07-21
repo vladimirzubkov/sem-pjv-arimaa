@@ -947,6 +947,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         if (g == null || gameController == null) {
             return;
         }
+        if (abortUndoRedoDuringComputerPlay("Zpět")) {
+            return;
+        }
         if (MainUiLayoutPhase.isSetup(g)) {
             if (gameController.undo()) {
                 setStatus("Zpět — vrácen předchozí stav.");
@@ -960,7 +963,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                 setStatus("Nelze vrátit krok — v rozpracovaném tahu padla figura do pasti (Nastavení).");
                 return;
             }
-            if (isTrailingDraftAtLiveEnd() && gameController.getPlayHistory().trailingUncommittedStepCount() > 0) {
+                    if (isTrailingDraftAtLiveEnd() && gameController.getPlayHistory().trailingUncommittedStepCount() > 0) {
                 Step popped = gameController.getPlayHistory().popLastStepCopyFromTrailingDraft();
                 if (popped != null) {
                     draftUi.draftRedoSteps.push(popped);
@@ -972,6 +975,11 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                     hostBroadcastSnapshotIfNeeded();
                     return;
                 }
+            }
+            /* During síťová hra do not scrub committed history (would push a non-live view to the peer). */
+            if (isNetworkSessionActive()) {
+                setStatus("Začátek tahu — v síťové hře nelze procházet historii.");
+                return;
             }
             if (gameController.undo()) {
                 draftUi.draftRedoSteps.clear();
@@ -988,6 +996,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
     void performRedo() {
         Game g = game();
         if (g == null || gameController == null) {
+            return;
+        }
+        if (abortUndoRedoDuringComputerPlay("Vpřed")) {
             return;
         }
         if (MainUiLayoutPhase.isSetup(g)) {
@@ -1009,6 +1020,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             setStatus("Vpřed — krok obnoven.");
             refreshAll();
             hostBroadcastSnapshotIfNeeded();
+            return;
+        }
+        if (isNetworkSessionActive()) {
             return;
         }
         if (gameController.redo()) {
@@ -1305,8 +1319,14 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             return;
         }
         applyingNetworkSnapshot = true;
-        GameState stateBefore =
-                game() != null ? game().getState() : null;
+        boolean loadOk = false;
+        GameState stateBefore = game() != null ? game().getState() : null;
+        String rollbackText = null;
+        try {
+            rollbackText = buildNetworkSnapshotSaveText();
+        } catch (RuntimeException ex) {
+            log.debug("network snapshot: could not capture rollback text", ex);
+        }
         try {
             GameSerializer ser = new GameSerializer();
             GameSerializer.ParsedTxtGame p = ser.parse(text);
@@ -1341,26 +1361,46 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             if (isNetworkClient() && !newlyGameOver) {
                 setStatus("Síť — stav synchronizován.");
             }
+            loadOk = true;
         } catch (RuntimeException ex) {
             log.warn("network snapshot load failed", ex);
             setStatus("Síť — nelze načíst stav: %s".formatted(ex.getMessage()));
+            restoreNetworkSnapshotRollback(rollbackText);
             if (isNetworkClient()) {
                 networkClientAwaitingHostSync = false;
                 computerActionPending = false;
             }
         } finally {
             applyingNetworkSnapshot = false;
-            if (isNetworkClient()) {
+            if (isNetworkClient() && loadOk) {
                 computerActionPending = false;
                 networkClientAwaitingHostSync = false;
             }
         }
         /*
          * refreshAll() runs inside try while applyingNetworkSnapshot is true, so scheduleComputerTurnIfNeeded
-         * returns early there. After snapshot load, client must queue Silver CPU in PLAY explicitly.
+         * returns early there. After a successful snapshot load, client must queue Silver CPU in PLAY explicitly.
+         * Never schedule CPU after a failed load (board may still be the rollback / last good state only).
          */
-        if (isNetworkClient()) {
+        if (isNetworkClient() && loadOk) {
             scheduleComputerTurnIfNeeded();
+        }
+    }
+
+    /** Best-effort restore after a failed {@link #applyNetworkSnapshotSaveText}; ignores nested load errors. */
+    private void restoreNetworkSnapshotRollback(String rollbackText) {
+        if (rollbackText == null || rollbackText.isBlank() || gameController == null) {
+            return;
+        }
+        try {
+            GameSerializer ser = new GameSerializer();
+            GameSerializer.ParsedTxtGame p = ser.parse(rollbackText);
+            clearPlayTurnUi();
+            gameController.loadFromTxtGame(p.playStartSnapshot(), p.moveLines());
+            syncPlayPartialFromHistory();
+            refreshAll();
+        } catch (RuntimeException rollbackEx) {
+            log.warn("network snapshot rollback failed", rollbackEx);
         }
     }
 
@@ -1457,8 +1497,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                             if (g.getState() != GameState.PLAY) {
                                 yield false;
                             }
-                            playPhase.tryEndPlayTurn();
-                            yield true;
+                            yield playPhase.tryEndPlayTurn();
                         }
                         case PLAY_CANCEL_DRAFT -> {
                             if (g.getState() != GameState.PLAY) {
@@ -1475,10 +1514,11 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                             try {
                                 PlayNotationParser.ParsedLine pl =
                                         PlayNotationParser.parseLine(g, in.notationLine().trim());
-                                if (pl.hasEarlyPassSuffix()) {
+                                /* Short turns use "... pass" (same as file load / ArimaaNotation.formatFullTurn). */
+                                Move submit = PlayDraftNotationSupport.copyMove(pl.move());
+                                if (submit.getSteps().isEmpty()) {
                                     yield false;
                                 }
-                                Move submit = PlayDraftNotationSupport.copyMove(pl.move());
                                 gameController.restoreTrailingDraftTurnStartForSubmit();
                                 PlayerSide mover = g.getSideToMove();
                                 int trapsBeforeSfx = PlayProceduralSfx.totalTrapCaptures(g);
@@ -1573,7 +1613,8 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         dialog.setHeaderText(
                 "Klient — Silver (vy), server Gold. Člověk/počítač pro Silver nastavte v menu Nastavení → Silver hráč.\n\n"
                         + "Host zadejte přesně z dialogu Hostovat na druhém PC (192.168.x.x v LAN). "
-                        + "localhost jen při hře na jednom počítači.");
+                        + "localhost jen při hře na jednom počítači.\n"
+                        + "Pokud server ještě neběží, klient zkouší připojení až ~10 s.");
         DialogPane pane = dialog.getDialogPane();
         pane.getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
@@ -1600,7 +1641,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                 return;
             }
             String host = hostField.getText().trim();
-            setStatus("Síť — připojuji se k %s:%d…".formatted(host, port));
+            setStatus("Síť — připojuji se k %s:%d (až ~10 s opakování)…".formatted(host, port));
             arimaaNetwork().startClient(host, port);
             syncNetworkMenuState();
         } catch (NumberFormatException ex) {
@@ -1932,6 +1973,31 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
     @Override
     public void clearNetworkClientAwaitingHostSync() {
         networkClientAwaitingHostSync = false;
+        boolean wasCpuTurn = computerActionPending;
+        computerActionPending = false;
+        stopComputerPlayTurnTimelineIfAny();
+        computerPlayInvalidateGen.incrementAndGet();
+        /*
+         * Silver CPU animates locally before the host sees the turn — on reject, clear the local draft so the board
+         * matches the host. Human steps already live on the host via PLAY_ACTIVATE snapshots; do not wipe those.
+         */
+        if (wasCpuTurn
+                && gameController != null
+                && gameController.getPlayHistory().isBootstrapped()) {
+            try {
+                gameController.restoreTrailingDraftTurnStartForSubmit();
+                gameController.getPlayHistory().replaceTrailingDraftStepsFromMove(new Move());
+                gameController.applyPlayHistoryViewToGame();
+                syncPlayPartialFromHistory();
+                clearPlayTurnUi();
+            } catch (RuntimeException ex) {
+                log.debug("clearNetworkClientAwaitingHostSync: draft reset failed", ex);
+            }
+        }
+        refreshAll();
+        if (wasCpuTurn) {
+            scheduleComputerTurnIfNeeded();
+        }
     }
 
     /* Client sends host a full notation line for Silver CPU turn (intent PLAY_SUBMIT_NOTATION). */
@@ -1939,18 +2005,26 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         try {
             Game g = game();
             if (g == null || gameController == null) {
+                computerActionPending = false;
                 return;
             }
             gameController.restoreTrailingDraftTurnStartForSubmit();
             String prefix = gameController.nextPlayNotationPrefix();
             Move submit = PlayDraftNotationSupport.copyMove(chosen);
             String notationLine = ArimaaNotation.formatFullTurn(g.getBoard(), submit, prefix);
+            /* Keep computerActionPending until state_snapshot or wire error (clearNetworkClientAwaitingHostSync). */
             sendNetworkClientIntent(
                     new WireMessages.IntentMessage(
                             IntentKind.PLAY_SUBMIT_NOTATION, null, null, null, null, notationLine),
                     "Síť — odesílám tah počítače…");
-        } finally {
+            if (!networkClientAwaitingHostSync) {
+                /* send was ignored (already awaiting) — release pending */
+                computerActionPending = false;
+            }
+        } catch (RuntimeException ex) {
+            log.warn("submitNetworkClientSilverCpuPlayTurn failed", ex);
             computerActionPending = false;
+            networkClientAwaitingHostSync = false;
         }
         refreshAll();
     }
@@ -2031,6 +2105,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
 
     /* After animated CPU steps: submit turn, append notation/history, broadcast in network games, refresh UI. */
     private void finishComputerPlayCommit(Move full) {
+        boolean holdPendingForHostAck = false;
         try {
             Game g = game();
             if (g == null || gameController == null) {
@@ -2039,6 +2114,7 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             PlayerSide mover = g.getSideToMove();
             if (isNetworkClient() && mover == PlayerSide.SILVER && seatActsAsComputer(PlayerSide.SILVER)) {
                 submitNetworkClientSilverCpuPlayTurn(full);
+                holdPendingForHostAck = networkClientAwaitingHostSync;
                 return;
             }
             gameController.restoreTrailingDraftTurnStartForSubmit();
@@ -2068,7 +2144,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
             appendHistory(new GameHistoryEvent.TurnCommitted(notationLine));
         } finally {
             stopComputerPlayTurnTimelineIfAny();
-            computerActionPending = false;
+            if (!holdPendingForHostAck) {
+                computerActionPending = false;
+            }
         }
         refreshAll();
         hostBroadcastSnapshotIfNeeded();
@@ -2089,6 +2167,10 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
     /** Applies „Historie tahů“ line selection: view prefix, board, draft sync, refresh (mouse or {@link #navigateNotationHistoryByPage}). */
     void applyNotationHistoryListSelection(int idx) {
         if (idx < 0 || gameController == null || isComputerPlayPending() || isNetworkClient()) {
+            return;
+        }
+        /* Host must not scrub live network play — broadcasting a historical view desyncs the client mid-turn. */
+        if (isNetworkSessionActive()) {
             return;
         }
         Game g = game();
@@ -2115,7 +2197,11 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
 
     /** Page Down ({@code directionSign > 0}) / Page Up: previous or next line in „Historie tahů“. */
     void navigateNotationHistoryByPage(int directionSign) {
-        if (directionSign == 0 || gameController == null || !gameController.getPlayHistory().isBootstrapped() || isNetworkClient()) {
+        if (directionSign == 0
+                || gameController == null
+                || !gameController.getPlayHistory().isBootstrapped()
+                || isNetworkClient()
+                || isNetworkSessionActive()) {
             return;
         }
         Game g = game();
@@ -2413,8 +2499,26 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
                     new WireMessages.IntentMessage(IntentKind.PLAY_END_TURN, null, null, null, null), null);
             return;
         }
-        playPhase.tryEndPlayTurn();
-        hostBroadcastSnapshotIfNeeded();
+        if (playPhase.tryEndPlayTurn()) {
+            hostBroadcastSnapshotIfNeeded();
+        }
+    }
+
+    /**
+     * Cancels in-flight CPU when the user tries Undo/Redo; avoids committing a search/timeline after the board moved.
+     *
+     * @return {@code true} if undo/redo should abort (CPU was interrupted)
+     */
+    private boolean abortUndoRedoDuringComputerPlay(String actionLabel) {
+        Timeline active = computerPlayTurnTimeline;
+        boolean animating = active != null && active.getStatus() == Animation.Status.RUNNING;
+        if (!computerActionPending && !animating) {
+            return false;
+        }
+        cancelComputerPlayForHistoryScrub();
+        setStatus("%s — přerušen tah počítače.".formatted(actionLabel));
+        refreshAll();
+        return true;
     }
 
     static String labelForReserveButton(PieceType type, int count) {

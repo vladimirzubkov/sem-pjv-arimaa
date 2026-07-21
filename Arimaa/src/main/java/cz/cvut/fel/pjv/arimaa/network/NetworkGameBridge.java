@@ -34,6 +34,9 @@ public interface NetworkGameBridge {
 
     boolean isApplyingNetworkSnapshot();
 
-    /** Clears client-side „waiting for host snapshot“ after {@code error} or disconnect. */
+    /**
+     * Clears client-side „waiting for host snapshot“ after {@code error} or disconnect; restores a clean trailing
+     * draft when an intent was rejected so CPU/UI can recover without a half-applied local animation.
+     */
     void clearNetworkClientAwaitingHostSync();
 }

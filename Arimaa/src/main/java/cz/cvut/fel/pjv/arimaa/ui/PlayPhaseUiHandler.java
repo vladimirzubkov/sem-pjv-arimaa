@@ -490,15 +490,20 @@ final class PlayPhaseUiHandler {
         main.setStatus("Neplatný krok.");
     }
 
-    void tryEndPlayTurn() {
+    /**
+     * Commits the current draft as a full turn.
+     *
+     * @return {@code true} if the turn was accepted and recorded
+     */
+    boolean tryEndPlayTurn() {
         Game g = main.game();
         if (g == null || g.getState() != GameState.PLAY || main.gameController == null) {
-            return;
+            return false;
         }
         main.reconcilePlayPartialWithHistoryView();
         if (main.playDraft.partial.getSteps().isEmpty()) {
             main.setStatus("Přidejte aspoň jeden krok.");
-            return;
+            return false;
         }
         main.gameController.restoreTrailingDraftTurnStartForSubmit();
         String prefix = main.gameController.nextPlayNotationPrefix();
@@ -511,7 +516,7 @@ final class PlayPhaseUiHandler {
             main.setStatus("Tah není platný.");
             main.gameController.applyPlayHistoryViewToGame();
             main.refreshAll();
-            return;
+            return false;
         }
         /* SFX already played on each draft step; avoid repeating trap wail on turn submit. */
         main.gameController.recordCommittedPlayTurn(submit, notationLine);
@@ -529,5 +534,6 @@ final class PlayPhaseUiHandler {
         }
         main.appendHistory(new GameHistoryEvent.TurnCommitted(notationLine));
         main.refreshAll();
+        return true;
     }
 }

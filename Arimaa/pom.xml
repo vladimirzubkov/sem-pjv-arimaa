@@ -9,7 +9,7 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>Arimaa</name>
-    <description>Semestrální projekt – hra Arimaa (JavaFX). Verze 0.9.33.</description>
+    <description>Semestrální projekt – hra Arimaa (JavaFX). Verze 0.9.34.</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

@@ -20,7 +20,7 @@ Následující tabulka obsahuje seznam povinných požadavků na semestrální p
 | # | Požadavek | Status <span style="color:#2e7d32">✓</span> = Splněno | Podrobnosti / Komentář |
 |---|-----------|--------|------------------------|
 | 1 | Java ≥ 21, projekt pod **Maven** | <span style="color:#2e7d32">✓</span> | Projekt používá Java 21 (`maven.compiler.release` 21). Sestavení probíhá přes `pom.xml`. |
-| 2 | Průběžné commity na **GitLab**, rozumná historie | <span style="color:#2e7d32">✓</span> | Vývoj probíhal průběžně, commity jsou uspořádány, pro oddělení práce využívána větev `CP3` a tagy. |
+| 2 | Průběžné commity na **GitLab**, rozumná historie | <span style="color:#2e7d32">✓</span> | Vývoj probíhal průběžně; oddělení práce větev `CP3` / `CP3-ext` a tagy verzí (`0.9.x`). |
 | 3 | **JavaFX** GUI; netriviální část **bez Scene Builderu** | <span style="color:#2e7d32">✓</span> | Vůbec nebyl použit Scene Builder / FXML. Všechny komponenty (např. `BoardGridView`) a logika jsou tvořeny dynamicky v Javě. |
 | 4 | **Vlákna** mimo triviální `Timer`; u JavaFX typicky **Task** / **Service** | <span style="color:#2e7d32">✓</span> | Použito pro síťovou komunikaci (TCP server/klient běží na pozadí), pro výpočet tahů AI a pro odpočítávání herních hodin (`PlayChessClockTicker`). |
 | 5 | **Unit testy** nebo funkční testy (JUnit) | <span style="color:#2e7d32">✓</span> | JUnit 5. Testy pokrývají herní model, serializaci, parsování notace, algoritmy AI i validaci pravidel (např. `PlayStepValidationTest`). |
@@ -56,3 +56,18 @@ mvn -f Arimaa/pom.xml javafx:run
 **Hlavní třída:** `cz.cvut.fel.pjv.arimaa.ArimaaApp`
 
 Další pokyny ohledně spuštění (nastavení logování) naleznete v [Uživatelském manuálu](Dokumentace/Manual-hrace.md).
+
+## Aktuální vývojová verze (větev `CP3-ext`)
+
+**Tag / verze:** **0.9.34** (viz `Arimaa/Changelog.md`, popis v `Arimaa/pom.xml`; číslo v dialogu **O programu** bere `AppVersion` z git tagu při buildu).
+
+### Síťová hra — stabilizace 0.9.33–0.9.34
+
+- **Host = Gold**, **klient = Silver**; kanonický stav na hostiteli, klient dostává `state_snapshot` (stejný textový formát jako uložená partie).
+- **CPU v síti:** Gold CPU běží na hostu; Silver CPU na klientovi (animace kroků → intent `PLAY_SUBMIT_NOTATION`). Host nepřepočítává Silver PLAY lokálně.
+- **Krátké tahy** s příponou `... pass` host přijímá (dříve odmítal → desynchronizace u Silver CPU).
+- **Klient** po odeslání intentu čeká na snapshot; při chybě loadu se stav vrací (rollback) a CPU se nespouští z polorozbité desky.
+- **Připojení klienta:** pokud host ještě nenaslouchá, TCP connect se opakuje až **~10 s** (stavový řádek s číslem pokusu).
+- Během živé síťové partie host neprochází „Historie tahů“ tak, aby na klienta poslal historický pohled.
+
+Podrobnosti pro hráče: [Manuál §8](Dokumentace/Manual-hrace.md). Protokol a třídy: [Technická dokumentace §3.7](Dokumentace/Technicka-dokumentace.md).

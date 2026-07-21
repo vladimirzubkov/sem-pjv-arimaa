@@ -1,6 +1,6 @@
 # Technická dokumentace
 
-**Vývojová verze textu:** **0.9.30** (srovnej `HelpCzechTexts.FALLBACK_APP_VERSION` v aplikaci).
+**Vývojová verze textu:** **0.9.34** (větev `CP3-ext`; číslo v UI z `AppVersion` / git tagu, popis v `Arimaa/pom.xml` a `Arimaa/Changelog.md`).
 
 Tento dokument slouží jako průvodce vnitřní architekturou aplikace Arimaa. Popisuje hlavní koncepty, toky řízení, použitý vizuální framework (JavaFX) a zvolené strategie implementace.
 
@@ -140,6 +140,8 @@ Kompletní vizuální část (JavaFX). Návrh nepoužívá FXML, všechny kompon
 ### 3.7. Síťová hra (`cz.cvut.fel.pjv.arimaa.network`)
 Pro hraní mezi dvěma vzdálenými počítači.
 
+**Model autority:** hostitel = **Gold**, klient = **Silver**. Host mutuje kanonický `Game` a po úspěšném intentu / lokálním tahu vysílá `state_snapshot` (`saveText` = serializace jako u uložené partie). Klient po odeslání `intent` nastaví `networkClientAwaitingHostSync` a čeká na snapshot (nebo `error`).
+
 **Diagram sekvence (handshake, intent Silvera, broadcast `state_snapshot`)**
 
 Následující diagram je zjednodušený: skutečné volání probíhá přes `FxExecutor` / JavaFX vlákno (`Platform.runLater`), IO smyčky hostitele a klienta jsou v `readHostLoop` / `readClientLoop`. Zdroj: [`puml/sequence-network.puml`](puml/sequence-network.puml).
@@ -149,11 +151,15 @@ Následující diagram je zjednodušený: skutečné volání probíhá přes `F
 - **`ArimaaNetworkCoordinator`**
   - *Charakteristika*: běží v samostatném vlákně a spravuje TCP sokety.
   - *Odpovědnost*: asynchronně přijímá NDJSON zprávy a předává je do modelu přes `NetworkGameBridge` (oddělení síťového I/O od domény a od JavaFX).
+  - *Připojení klienta (0.9.34):* `openClientSocketWithRetry` — při `ConnectException` / connect timeout opakuje TCP connect až ~10 s (pauza 0,5 s, timeout pokusu 2 s), aby klient mohl startovat dřív než host dokončí **Hostovat**.
 - **`NetworkGameBridge`**
-  - *Odpovědnost*: mapuje wire zprávy na operace s `Game` / UI notifikace tak, aby koordinátor nemusel znát detaily ovládacích prvků.
-- **`WireMessages`**
-  - *Charakteristika*: třída obsahující komunikační objekty (DTOs) pro NDJSON (Newline Delimited JSON) protokol (např. Hello, StateSnapshot, Intent, Bye).
-
+  - *Odpovědnost*: mapuje wire zprávy na operace s `Game` / UI notifikace tak, aby koordinátor nemusel znát detaily ovládacích prvků. Implementace: `MainController`.
+  - *Snapshot (0.9.34):* `applyNetworkSnapshotSaveText` při chybě parsování/replay notace obnoví předchozí text (rollback) a **neplánuje** CPU; úspěšný load na klientovi teprve uvolní `networkClientAwaitingHostSync` / `computerActionPending` a volá `scheduleComputerTurnIfNeeded`.
+- **`WireMessages` / `IntentKind`**
+  - *Charakteristika*: DTO pro NDJSON (Hello, Welcome, StateSnapshot, Intent, Error, Ping/Pong, SeatControl, Bye).
+  - *PLAY:* klient posílá mimo jiné `PLAY_ACTIVATE`, `PLAY_END_TURN`, `PLAY_CANCEL_DRAFT`, **`PLAY_SUBMIT_NOTATION`** (celý řádek notace — typicky Silver CPU po animaci). Host u `PLAY_SUBMIT_NOTATION` přijímá i krátké tahy s `... pass` (stejně jako načtení souboru).
+- **CPU v síti (0.9.33+):** Gold CPU jen na hostu; Silver CPU jen na klientovi. Host v PLAY **nesmí** točit `scheduleComputerTurn` pro peer Silver. Po odeslání Silver intentu zůstává `computerActionPending` do odpovědi hostitele.
+- **Ochrana proti desync UI:** během živé síťové partie host neprochází „Historie tahů“ / Page Up–Down tak, aby vyslal historický pohled; Undo/Redo při běžícím tahu CPU animaci přeruší.
 ### 3.8. Persistence (`cz.cvut.fel.pjv.arimaa.persistence`)
 Třídy pro uložení a načtení stavu hry.
 

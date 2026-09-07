@@ -1,6 +1,6 @@
-# Arimaa — B0B36PJV semester project (CTU FEL)
+# Arimaa — B0B36PJV semester project
 
-Desktop implementation of the **Arimaa** board game for the *Programování v Javě* course (B0B36PJV) at CTU FEL.
+Desktop implementation of the **Arimaa** board game for the *Programování v Javě* course (B0B36PJV).
 
 **Stack:** Java 21, Maven, JavaFX, JUnit 5, SLF4J/Logback.
 
@@ -14,7 +14,7 @@ mvn -f Arimaa/pom.xml javafx:run
 
 # Semestrální práce B0B36PJV — Arimaa
 
-Tento projekt obsahuje implementaci logické deskové hry **Arimaa** pro předmět B0B36PJV (Programování v Javě) na ČVUT FEL.
+Tento projekt obsahuje implementaci logické deskové hry **Arimaa** pro předmět B0B36PJV (Programování v Javě).
 
 Aplikace je vytvořena v jazyce Java (verze 21) s grafickým uživatelským rozhraním v JavaFX. 
 Architektura je navržena dle MVC návrhového vzoru. Byla implementována plná pravidla hry, včetně tahání, tlačení, mrznutí a pastí. 

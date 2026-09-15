@@ -13,6 +13,7 @@ import cz.cvut.fel.pjv.arimaa.model.enums.StepKind;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ArimaaNotationTest {
@@ -65,5 +66,42 @@ class ArimaaNotationTest {
         m.getSteps().add(s);
         String line = ArimaaNotation.formatPartialTurnLine(b, m, "1g");
         assertEquals("1g Ra2n", line);
+    }
+
+    @Test
+    void formatPartialTurnLineForPersist_fourSteps_hasDraftMarker() {
+        Board b = new Board();
+        b.setPiece(Position.fromAlgebraic("a2"), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        b.setPiece(Position.fromAlgebraic("b2"), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        b.setPiece(Position.fromAlgebraic("c2"), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        b.setPiece(Position.fromAlgebraic("d2"), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        Move m = new Move();
+        addSlide(m, "a2", "a3");
+        addSlide(m, "b2", "b3");
+        addSlide(m, "c2", "c3");
+        addSlide(m, "d2", "d3");
+        String line = ArimaaNotation.formatPartialTurnLineForPersist(b, m, "1g");
+        assertTrue(line.contains(ArimaaNotation.UNCOMMITTED_DRAFT_MARKER), line);
+        assertTrue(line.startsWith("1g "));
+        String preview = ArimaaNotation.formatPartialTurnLine(b, m, "1g");
+        assertFalse(preview.contains("draft"), preview);
+    }
+
+    @Test
+    void formatPartialTurnLineForPersist_oneStep_noDraftMarker() {
+        Board b = new Board();
+        b.setPiece(Position.fromAlgebraic("a2"), new Piece(PieceType.RABBIT, PlayerSide.GOLD));
+        Move m = new Move();
+        addSlide(m, "a2", "a3");
+        String line = ArimaaNotation.formatPartialTurnLineForPersist(b, m, "1g");
+        assertEquals("1g Ra2n", line);
+    }
+
+    private static void addSlide(Move m, String from, String to) {
+        Step s = new Step();
+        s.setKind(StepKind.SLIDE);
+        s.setFrom(Position.fromAlgebraic(from));
+        s.setTo(Position.fromAlgebraic(to));
+        m.getSteps().add(s);
     }
 }

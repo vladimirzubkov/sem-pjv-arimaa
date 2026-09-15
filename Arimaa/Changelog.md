@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.35
+
+- **Síť / uložení — 4krokový draft:** dokud hráč nestiskne **Konec tahu**, 4 vyčerpané kroky zůstávají rozpracovaným tahem. Snapshot/soubor značí takový řádek příponou `... draft`, jinak se při načtení bral jako dokončený tah, `sideToMove` se přepnul a Silver CPU na klientovi dokola animoval a posílal intent, dokud hostitel tah neuzavřel.
+
 ## 0.9.34
 
 - **Síť — PLAY_SUBMIT_NOTATION:** host přijímá krátké tahy s příponou `... pass` (dříve odmítal → desync / `error` u Silver CPU).

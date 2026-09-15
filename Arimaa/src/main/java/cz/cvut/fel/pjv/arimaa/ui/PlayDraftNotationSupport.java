@@ -41,6 +41,27 @@ public final class PlayDraftNotationSupport {
     }
 
     /**
+     * Notation line for save / network snapshot of the trailing uncommitted PLAY draft, or {@code null} if there is
+     * none. Four-step drafts include {@link ArimaaNotation#UNCOMMITTED_DRAFT_MARKER}.
+     */
+    public static String trailingDraftPersistLineOrNull(PlayTurnHistory ph, String prefix) {
+        if (ph == null || !ph.isBootstrapped()) {
+            return null;
+        }
+        var halves = ph.halfTurnsUnmodifiable();
+        PlayHalfTurn tail = halves.get(halves.size() - 1);
+        if (tail.committed() || tail.steps().isEmpty()) {
+            return null;
+        }
+        Game probe = probeGameFromMemento(tail.startSnap());
+        Move m = new Move();
+        for (Step s : tail.steps()) {
+            m.getSteps().add(copyStep(s));
+        }
+        return ArimaaNotation.formatPartialTurnLineForPersist(probe.getBoard(), m, prefix);
+    }
+
+    /**
      * Square where the side to move's active piece stands after the given prefix (same convention as when adding steps).
      */
     public static Position playNextFromAfterPrefixSteps(List<Step> steps) {

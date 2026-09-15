@@ -414,7 +414,8 @@ public final class PlayTurnHistory {
 
     /**
      * Rebuilds history from a loaded file: replay full lines on {@code game}, append a draft half-turn when the file
-     * ended mid-move.
+     * ended mid-move (last line with fewer than 4 steps and no {@code ... pass}, or a 4-step line with
+     * {@code ... draft}).
      */
     public void rebuildFromLoadedGame(Game game, GameMemento playStart, List<String> moveLines) {
         clear();
@@ -428,7 +429,16 @@ public final class PlayTurnHistory {
             PlayNotationParser.ParsedLine pl = PlayNotationParser.parseLine(game, raw);
             Move mv = pl.move();
             boolean earlyPass = pl.hasEarlyPassSuffix();
-            boolean isDraft = last && !earlyPass && mv.getSteps().size() < 4;
+            /*
+             * A last line with fewer than 4 steps and no "... pass" is an in-progress draft. A last line with
+             * exactly 4 steps looks identical to a committed full turn, so persist adds "... draft"; without that
+             * marker, reload would applyMove and switch sideToMove — network Silver CPU then starts while Gold has
+             * not pressed End turn yet.
+             */
+            boolean isDraft =
+                    last
+                            && !earlyPass
+                            && (mv.getSteps().size() < 4 || pl.hasUncommittedDraftSuffix());
             if (!last && !earlyPass && mv.getSteps().size() < 4) {
                 throw new IllegalArgumentException(
                         "line " + i + " has fewer than 4 steps without '... pass' but is not the last line: " + raw);

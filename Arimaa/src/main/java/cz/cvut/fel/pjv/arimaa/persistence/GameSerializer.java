@@ -30,6 +30,7 @@ public final class GameSerializer {
     /**
      * Encodes {@link GameController}'s current branch: layout snapshot (initial PLAY posture or entire SETUP state),
      * then every notation line shown in the UI (plus optional {@code draftNotationLineOrNull} as the last line).
+     * Uncommitted 4-step drafts must carry {@code ... draft} (see {@link cz.cvut.fel.pjv.arimaa.util.ArimaaNotation#formatPartialTurnLineForPersist}).
      */
     public String serialize(GameController controller, String draftNotationLineOrNull) {
         GameMemento setup = computePlayBaseSnapshot(controller);

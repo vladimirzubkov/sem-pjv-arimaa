@@ -2,18 +2,12 @@ package cz.cvut.fel.pjv.arimaa.ui;
 
 import cz.cvut.fel.pjv.arimaa.model.Game;
 import cz.cvut.fel.pjv.arimaa.model.enums.GameState;
-import cz.cvut.fel.pjv.arimaa.model.Move;
-import cz.cvut.fel.pjv.arimaa.model.PlayHalfTurn;
-import cz.cvut.fel.pjv.arimaa.model.PlayTurnHistory;
-import cz.cvut.fel.pjv.arimaa.model.Step;
 import cz.cvut.fel.pjv.arimaa.persistence.GameRepository;
 import cz.cvut.fel.pjv.arimaa.persistence.GameSerializer;
-import cz.cvut.fel.pjv.arimaa.util.ArimaaNotation;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.List;
 
 import javafx.stage.FileChooser;
 import javafx.stage.FileChooser.ExtensionFilter;
@@ -58,18 +52,9 @@ public final class ArimaaSaveLoadSupport {
         Game g = ui.game();
         String draft = null;
         if (g != null && g.getState() == GameState.PLAY && ui.gameController.getPlayHistory().isBootstrapped()) {
-            PlayTurnHistory ph = ui.gameController.getPlayHistory();
-            List<PlayHalfTurn> halves = ph.halfTurnsUnmodifiable();
-            PlayHalfTurn tail = halves.get(halves.size() - 1);
-            if (!tail.committed() && !tail.steps().isEmpty()) {
-                Game probe = PlayDraftNotationSupport.probeGameFromMemento(tail.startSnap());
-                String prefix = ui.gameController.nextPlayNotationPrefix();
-                Move m = new Move();
-                for (Step s : tail.steps()) {
-                    m.getSteps().add(PlayDraftNotationSupport.copyStep(s));
-                }
-                draft = ArimaaNotation.formatPartialTurnLine(probe.getBoard(), m, prefix);
-            }
+            draft =
+                    PlayDraftNotationSupport.trailingDraftPersistLineOrNull(
+                            ui.gameController.getPlayHistory(), ui.gameController.nextPlayNotationPrefix());
         }
         GameSerializer ser = new GameSerializer();
         String text = ser.serialize(ui.gameController, draft);

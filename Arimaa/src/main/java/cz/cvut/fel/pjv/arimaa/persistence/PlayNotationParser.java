@@ -6,6 +6,7 @@ import cz.cvut.fel.pjv.arimaa.model.Move;
 import cz.cvut.fel.pjv.arimaa.model.Piece;
 import cz.cvut.fel.pjv.arimaa.model.Position;
 import cz.cvut.fel.pjv.arimaa.model.Step;
+import cz.cvut.fel.pjv.arimaa.util.ArimaaNotation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,9 +61,13 @@ public final class PlayNotationParser {
     }
 
     /**
-     * Parsed move plus whether the line contained an early-pass suffix ({@code ... pass}).
+     * Parsed move plus trailing markers: {@code ... pass} (committed short turn) and {@code ... draft}
+     * (uncommitted 4-step prefix — player has not pressed End turn yet).
      */
-    public record ParsedLine(Move move, boolean hasEarlyPassSuffix) {
+    public record ParsedLine(Move move, boolean hasEarlyPassSuffix, boolean hasUncommittedDraftSuffix) {
+        public ParsedLine(Move move, boolean hasEarlyPassSuffix) {
+            this(move, hasEarlyPassSuffix, false);
+        }
     }
 
     /**
@@ -76,8 +81,9 @@ public final class PlayNotationParser {
         String body = m.group(3).trim();
         ArrayList<String> tokens = tokenize(body);
         boolean earlyPass = stripEarlyPassSuffix(tokens);
+        boolean uncommittedDraft = stripUncommittedDraftSuffix(tokens);
         Move move = parsePlayBody(game, tokens);
-        return new ParsedLine(move, earlyPass);
+        return new ParsedLine(move, earlyPass, uncommittedDraft);
     }
 
     /** Splits notation body on whitespace into move/trap/pass tokens. */
@@ -103,6 +109,21 @@ public final class PlayNotationParser {
     static boolean stripEarlyPassSuffix(ArrayList<String> tokens) {
         int n = tokens.size();
         if (n >= 2 && "...".equals(tokens.get(n - 2)) && "pass".equals(tokens.get(n - 1))) {
+            tokens.remove(n - 1);
+            tokens.remove(n - 2);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Removes trailing {@link ArimaaNotation#UNCOMMITTED_DRAFT_MARKER} ({@code ... draft}) when present.
+     *
+     * @return {@code true} if those markers were removed
+     */
+    static boolean stripUncommittedDraftSuffix(ArrayList<String> tokens) {
+        int n = tokens.size();
+        if (n >= 2 && "...".equals(tokens.get(n - 2)) && "draft".equals(tokens.get(n - 1))) {
             tokens.remove(n - 1);
             tokens.remove(n - 2);
             return true;

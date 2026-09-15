@@ -1297,18 +1297,9 @@ public class MainController implements BoardViewHost, NetworkGameBridge {
         String draft = null;
         Game g = game();
         if (g != null && g.getState() == GameState.PLAY && gameController.getPlayHistory().isBootstrapped()) {
-            PlayTurnHistory ph = gameController.getPlayHistory();
-            var halves = ph.halfTurnsUnmodifiable();
-            PlayHalfTurn tail = halves.get(halves.size() - 1);
-            if (!tail.committed() && !tail.steps().isEmpty()) {
-                Game probe = PlayDraftNotationSupport.probeGameFromMemento(tail.startSnap());
-                String prefix = gameController.nextPlayNotationPrefix();
-                Move m = new Move();
-                for (Step s : tail.steps()) {
-                    m.getSteps().add(PlayDraftNotationSupport.copyStep(s));
-                }
-                draft = ArimaaNotation.formatPartialTurnLine(probe.getBoard(), m, prefix);
-            }
+            draft =
+                    PlayDraftNotationSupport.trailingDraftPersistLineOrNull(
+                            gameController.getPlayHistory(), gameController.nextPlayNotationPrefix());
         }
         return new GameSerializer().serializeForNetwork(gameController, draft);
     }

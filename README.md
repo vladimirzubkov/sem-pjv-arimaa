@@ -2,7 +2,7 @@
 
 Desktop implementation of the **Arimaa** board game for the *Programování v Javě* course (B0B36PJV).
 
-**Stack:** Java 21, Maven, JavaFX, JUnit 5, SLF4J/Logback.
+**Stack:** Java 25, Maven, JavaFX 25, JUnit 5, SLF4J/Logback.
 
 **Highlights:** MVC architecture, full rule engine (push/pull, traps, freezing), Minimax + Alpha-Beta AI, TCP multiplayer over a custom NDJSON protocol, game save/load with official notation, unit tests.
 
@@ -16,7 +16,7 @@ mvn -f Arimaa/pom.xml javafx:run
 
 Tento projekt obsahuje implementaci logické deskové hry **Arimaa** pro předmět B0B36PJV (Programování v Javě).
 
-Aplikace je vytvořena v jazyce Java (verze 21) s grafickým uživatelským rozhraním v JavaFX. 
+Aplikace je vytvořena v jazyce Java (verze 25) s grafickým uživatelským rozhraním v JavaFX. 
 Architektura je navržena dle MVC návrhového vzoru. Byla implementována plná pravidla hry, včetně tahání, tlačení, mrznutí a pastí. 
 Hra podporuje režimy pro dva hráče na jednom počítači, hru proti umělé inteligenci (využívající algoritmus Minimax s Alpha-Beta prořezáváním) a síťovou hru přes TCP s využitím vlastního NDJSON protokolu.
 
@@ -33,7 +33,7 @@ Následující tabulka obsahuje seznam povinných požadavků na semestrální p
 
 | # | Požadavek | Status <span style="color:#2e7d32">✓</span> = Splněno | Podrobnosti / Komentář |
 |---|-----------|--------|------------------------|
-| 1 | Java ≥ 21, projekt pod **Maven** | <span style="color:#2e7d32">✓</span> | Projekt používá Java 21 (`maven.compiler.release` 21). Sestavení probíhá přes `pom.xml`. |
+| 1 | Java ≥ 25, projekt pod **Maven** | <span style="color:#2e7d32">✓</span> | Projekt používá Java 25 (`maven.compiler.release` 25). Sestavení probíhá přes `pom.xml`. |
 | 2 | Průběžné commity na **GitLab**, rozumná historie | <span style="color:#2e7d32">✓</span> | Vývoj probíhal průběžně; oddělení práce větev `CP3` / `CP3-ext` a tagy verzí (`0.9.x`). |
 | 3 | **JavaFX** GUI; netriviální část **bez Scene Builderu** | <span style="color:#2e7d32">✓</span> | Vůbec nebyl použit Scene Builder / FXML. Všechny komponenty (např. `BoardGridView`) a logika jsou tvořeny dynamicky v Javě. |
 | 4 | **Vlákna** mimo triviální `Timer`; u JavaFX typicky **Task** / **Service** | <span style="color:#2e7d32">✓</span> | Použito pro síťovou komunikaci (TCP server/klient běží na pozadí), pro výpočet tahů AI a pro odpočítávání herních hodin (`PlayChessClockTicker`). |

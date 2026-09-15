@@ -42,7 +42,7 @@ mvn -f Arimaa/pom.xml javafx:run
 
 ### 2.2 Linux / macOS — poznámky
 
-- Ujistěte se, že `java` a `mvn` v `PATH` odpovídají JDK 21.
+- Ujistěte se, že `java` a `mvn` v `PATH` odpovídají JDK 25.
 - OpenJFX stáhne Maven jako závislosti; při problémech s nativními knihovnami sestavujte a spouštějte na stejném OS, na kterém distribuci chcete používat (zejména „fat“ JAR ze shade pluginu).
 
 ### 2.3 Spuštění z IDE
